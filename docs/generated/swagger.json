@@ -1,19 +1,19 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "BNPI PMS API",
+    "title": "Bandai PATS API",
     "version": "1.0.0",
-    "description": "Welcome to the BNPI PMS API documentation. This REST API powers BNPI PMS backend services.",
+    "description": "Welcome to the Bandai PATS API documentation. This REST API powers Bandai PATS backend services.",
     "contact": {
-      "name": "BNPI PMS Support",
-      "email": "support@bnpi-pms.example",
-      "url": "https://bnpi-pms.example/support"
+      "name": "Bandai PATS Support",
+      "email": "support@bnpi-pats.example",
+      "url": "https://bnpi-pats.example/support"
     },
     "license": {
       "name": "MIT",
       "url": "https://opensource.org/licenses/MIT"
     },
-    "termsOfService": "https://bnpi-pms.example/terms"
+    "termsOfService": "https://bnpi-pats.example/terms"
   },
   "servers": [
     {
@@ -21,7 +21,7 @@
       "description": "Development server"
     },
     {
-      "url": "https://api.bnpi-pms.example/api",
+      "url": "https://api.bnpi-pats.example/api",
       "description": "Production server"
     }
   ],
@@ -31,7 +31,7 @@
       "description": "Template management operations",
       "externalDocs": {
         "description": "Find out more about templates",
-        "url": "https://bnpi-pms.example/docs/templates"
+        "url": "https://bnpi-pats.example/docs/templates"
       }
     },
     {

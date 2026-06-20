@@ -220,7 +220,7 @@ async function main() {
 	}
 
 	// Get the package root directory (where the package is installed)
-	// When installed via npm, the structure is: node_modules/bnpi-pms-api/
+	// When installed via npm, the structure is: node_modules/bnpi-pats-api/
 	// When running locally, the structure is: dist/scripts/
 	let packageRoot: string;
 
@@ -271,3 +271,4 @@ if (require.main === module) {
 }
 
 export { CodebaseCopier, CopyOptions };
+

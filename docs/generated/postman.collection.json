@@ -16141,10 +16141,10 @@
     ],
     "info": {
         "_postman_id": "93015106-fdb3-4a40-88b3-d51058fc214c",
-        "name": "BNPI PMS API",
+        "name": "Bandai PATS API",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         "description": {
-            "content": "Welcome to the BNPI PMS API documentation. This REST API powers BNPI PMS backend services.\n\nContact Support:\n Name: BNPI PMS Support\n Email: support@bnpi-pms.example",
+            "content": "Welcome to the Bandai PATS API documentation. This REST API powers Bandai PATS backend services.\n\nContact Support:\n Name: Bandai PATS Support\n Email: support@bnpi-pats.example",
             "type": "text/plain"
         }
     }

@@ -1,10 +1,28 @@
-# BNPI PMS API - Project Management System API
+# Bandai PATS API
 
-A production-ready project management and estimation system API built with TypeScript, Express, Prisma (MongoDB), and comprehensive testing suite.
+Backend shell for Bandai Production and Assembly Tracking System.
+
+This repository was cloned from the source API and rebranded as a separate Bandai PATS project. The current codebase still carries inherited project-management, estimation, and employee-sync modules, but it is now the local backend foundation for the manufacturing initiative.
 
 ## 🚀 Overview
 
-The BNPI PMS API provides a complete backend solution for project management, cost estimation, vendor management, payroll tracking, and financial reporting. Built with enterprise-grade architecture patterns and comprehensive validation.
+The Bandai PATS API provides the local backend foundation for the production and assembly tracking program. Built with TypeScript, Express, Prisma (MongoDB), and comprehensive validation, it keeps the inherited modules runnable while the manufacturing API surface is introduced.
+
+## Local Setup
+
+1. Install dependencies:
+
+```bash
+pnpm install
+```
+
+2. Start the API:
+
+```bash
+pnpm dev
+```
+
+3. Open the local API routes in your browser or API client.
 
 ## ✨ Key Features
 
@@ -35,7 +53,7 @@ The BNPI PMS API provides a complete backend solution for project management, co
 ## 🏗️ Project Architecture
 
 ```
-bnpi-pms-api/
+bnpi-pats-api/
 ├── app/                        # Application modules (controllers, routes, repositories)
 │   ├── category/              # Category management
 │   ├── estimation/            # Estimation system
@@ -266,7 +284,7 @@ bnpi-pms-api/
 2. **Environment Configuration**
    Create a `.env` file with the following variables:
    ```env
-   DATABASE_URL="mongodb://localhost:27017/bnpi_pms"
+   DATABASE_URL="mongodb://localhost:27017/bnpi_pats"
    PORT=3000
    JWT_SECRET="your-secret-key"
    ENABLE_TEST_MODE=true
@@ -598,3 +616,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🏷️ Keywords
 
 `project-management`, `estimation-system`, `cost-tracking`, `mongodb`, `prisma`, `typescript`, `express`, `rest-api`, `capex-opex`, `financial-breakdown`, `audit-logging`, `dynamic-fields`, `vendor-management`, `order-processing`, `payroll-tracking`
+

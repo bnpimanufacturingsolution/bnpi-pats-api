@@ -21,12 +21,12 @@ const templateTestsDir = path.join(process.cwd(), "tests");
 function findPackageTemplatesDir(): string {
 	// Try to find the package in node_modules
 	const possiblePaths = [
-		path.join(process.cwd(), "node_modules", "bnpi-pms-api", "templates"),
-		path.join(__dirname, "..", "..", "..", "bnpi-pms-api", "templates"),
+		path.join(process.cwd(), "node_modules", "bnpi-pats-api", "templates"),
+		path.join(__dirname, "..", "..", "..", "bnpi-pats-api", "templates"),
 		path.join(__dirname, "..", "templates"), // For development
 		// Additional fallback paths
-		path.join(process.cwd(), "node_modules", "bnpi-pms-api", "templates", "template"),
-		path.join(__dirname, "..", "..", "..", "..", "bnpi-pms-api", "templates"),
+		path.join(process.cwd(), "node_modules", "bnpi-pats-api", "templates", "template"),
+		path.join(__dirname, "..", "..", "..", "..", "bnpi-pats-api", "templates"),
 	];
 
 	for (const possiblePath of possiblePaths) {
@@ -800,3 +800,4 @@ function main() {
 }
 
 main();
+

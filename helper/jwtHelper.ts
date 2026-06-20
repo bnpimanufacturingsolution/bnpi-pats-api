@@ -41,7 +41,7 @@ export function generateAccessToken(payload: TokenPayload): string {
 		const options: SignOptions = {
 			expiresIn: ACCESS_TOKEN_EXPIRY as never,
 			algorithm: "HS256",
-			issuer: "bnpi-pms-api",
+			issuer: "bnpi-pats-api",
 			audience: "pms-client",
 		};
 		const token = jwt.sign(payload, JWT_SECRET, options);
@@ -76,7 +76,7 @@ export function generateRefreshToken(payload: TokenPayload): string {
 		const options: SignOptions = {
 			expiresIn: REFRESH_TOKEN_EXPIRY as never,
 			algorithm: "HS256",
-			issuer: "bnpi-pms-api",
+			issuer: "bnpi-pats-api",
 			audience: "pms-client",
 		};
 		const token = jwt.sign(refreshPayload, JWT_REFRESH_SECRET, options);
@@ -118,7 +118,7 @@ export function verifyAccessToken(token: string): TokenPayload {
 	try {
 		const decoded = jwt.verify(token, JWT_SECRET, {
 			algorithms: ["HS256"],
-			issuer: "bnpi-pms-api",
+			issuer: "bnpi-pats-api",
 			audience: "pms-client",
 		}) as TokenPayload;
 
@@ -150,7 +150,7 @@ export function verifyRefreshToken(token: string): { userId: string; role: strin
 	try {
 		const decoded = jwt.verify(token, JWT_REFRESH_SECRET, {
 			algorithms: ["HS256"],
-			issuer: "bnpi-pms-api",
+			issuer: "bnpi-pats-api",
 			audience: "pms-client",
 		}) as Record<string, unknown>;
 
@@ -256,3 +256,4 @@ export default {
 	getTokenExpiration,
 	getTimeUntilExpiry,
 };
+

@@ -323,20 +323,20 @@ export const controller = (appInstance?: ExpressApp) => {
 			const swagger = {
 				openapi: "3.1.0",
 				info: {
-					title: "BNPI PMS API",
+					title: "Bandai PATS API",
 					version: "1.0.0",
 					description:
-						"Welcome to the BNPI PMS API documentation. This REST API powers BNPI PMS backend services.",
+						"Welcome to the Bandai PATS API documentation. This REST API powers Bandai PATS backend services.",
 					contact: {
-						name: "BNPI PMS Support",
-						email: "support@bnpi-pms.example",
-						url: "https://bnpi-pms.example/support",
+						name: "Bandai PATS Support",
+						email: "support@bnpi-pats.example",
+						url: "https://bnpi-pats.example/support",
 					},
 					license: {
 						name: "MIT",
 						url: "https://opensource.org/licenses/MIT",
 					},
-					termsOfService: "https://bnpi-pms.example/terms",
+					termsOfService: "https://bnpi-pats.example/terms",
 				},
 				servers: [
 					{
@@ -344,7 +344,7 @@ export const controller = (appInstance?: ExpressApp) => {
 						description: "Development server",
 					},
 					{
-						url: "https://api.bnpi-pms.example/api",
+						url: "https://api.bnpi-pats.example/api",
 						description: "Production server",
 					},
 				],
@@ -560,7 +560,7 @@ export const controller = (appInstance?: ExpressApp) => {
 						description: "Template management operations",
 						externalDocs: {
 							description: "Find out more about templates",
-							url: "https://bnpi-pms.example/docs/templates",
+							url: "https://bnpi-pats.example/docs/templates",
 						},
 					},
 					{
@@ -590,8 +590,8 @@ export const controller = (appInstance?: ExpressApp) => {
 
 			const postman = {
 				info: {
-					name: "BNPI PMS API",
-					description: "API collection for BNPI PMS backend services",
+					name: "Bandai PATS API",
+					description: "API collection for Bandai PATS backend services",
 					schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 					version: "1.0.0",
 				},
@@ -790,3 +790,4 @@ export const controller = (appInstance?: ExpressApp) => {
 
 	return { exportDocs, getSwagger, getPostman, generateIml };
 };
+

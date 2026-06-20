@@ -1,5 +1,5 @@
 {
-	"name": "bnpi-pms-api",
+	"name": "bnpi-pats-api",
 	"version": "1.0.122",
 	"main": "dist/lib-entry.js",
 	"scripts": {
@@ -33,7 +33,7 @@
 	},
 	"author": "1BIS",
 	"license": "MIT",
-	"description": "Backend API for BNPI PMS, built with TypeScript, Express, Prisma (MongoDB), and supporting tools for validation, reporting, and documentation.",
+	"description": "Backend API for Bandai PATS, built with TypeScript, Express, Prisma (MongoDB), and supporting tools for validation, reporting, and documentation.",
 	"keywords": [
 		"typescript",
 		"express",
@@ -126,3 +126,4 @@
 		"yaml": "^2.8.0"
 	}
 }
+
