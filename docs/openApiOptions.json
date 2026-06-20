@@ -1,0 +1,67 @@
+{
+	"failOnErrors": true,
+	"definition": {
+		"openapi": "3.1.0",
+		"info": {
+			"title": "BNPI PMS API",
+			"version": "1.0.0",
+			"description": "Welcome to the BNPI PMS API documentation. This REST API powers BNPI PMS backend services.",
+			"contact": {
+				"name": "BNPI PMS Support",
+				"email": "support@bnpi-pms.example",
+				"url": "https://bnpi-pms.example/support"
+			},
+			"license": {
+				"name": "MIT",
+				"url": "https://opensource.org/licenses/MIT"
+			},
+			"termsOfService": "https://bnpi-pms.example/terms"
+		},
+		"servers": [
+			{
+				"url": "/api",
+				"description": "Development server"
+			},
+			{
+				"url": "https://api.bnpi-pms.example/api",
+				"description": "Production server"
+			}
+		],
+		"tags": [
+			{
+				"name": "Template",
+				"description": "Template management operations",
+				"externalDocs": {
+					"description": "Find out more about templates",
+					"url": "https://bnpi-pms.example/docs/templates"
+				}
+			},
+			{
+				"name": "Documentation",
+				"description": "API documentation endpoints"
+			}
+		],
+		"security": [
+			{
+				"bearerAuth": []
+			}
+		],
+		"components": {
+			"securitySchemes": {
+				"bearerAuth": {
+					"type": "http",
+					"scheme": "bearer",
+					"bearerFormat": "JWT",
+					"description": "JWT Authorization header using the Bearer scheme. Example: 'Authorization: Bearer {token}'"
+				},
+				"apiKey": {
+					"type": "apiKey",
+					"in": "header",
+					"name": "X-API-Key",
+					"description": "API Key for authentication"
+				}
+			}
+		}
+	},
+	"apis": ["./docs/models/*.yaml", "./app/**/*.router.ts", "./dist/**/*.router.js"]
+}

@@ -1,0 +1,120 @@
+enum TransactionStatus {
+  PENDING
+  CLEARED
+  BOUNCED
+  CANCELLED
+  VOIDED
+}
+
+enum TransactionType {
+  INCOMING // Money coming into the project (revenue/payments received)
+  OUTGOING // Money going out of the project (payments/expenses)
+}
+
+enum PaymentMethod {
+  CHECK // Traditional bank check
+  CASH // Cash payment
+  BANK_TRANSFER // Bank transfer/wire
+  ONLINE // Online payment
+  OTHER // Other payment methods
+}
+
+// Discriminator composite types for different payment methods
+type CheckPaymentDetails {
+  bankName      String // Name of the bank
+  accountNumber String // Account number or last 4 digits
+  checkNumber   String // Check number
+  bouncedDate   DateTime? // Date when check bounced (if applicable)
+  bouncedReason String? // Reason for bounce (if applicable)
+}
+
+type CashPaymentDetails {
+  receivedBy String? // Person who received/handled the cash (optional)
+  notes      String? // Additional notes for cash transaction
+}
+
+type BankTransferPaymentDetails {
+  bankName        String // Name of the bank
+  accountNumber   String // Account number or last 4 digits
+  referenceNumber String // Transfer reference number
+  transferType    String? // e.g., "Wire", "ACH", "RTGS"
+}
+
+type OnlinePaymentDetails {
+  referenceNumber String // Transaction reference/confirmation number
+  platform        String? // Payment platform (e.g., "PayPal", "Stripe", "PayMaya")
+  gatewayName     String? // Payment gateway used
+}
+
+model Transaction {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  transactionNumber String   @unique // e.g., "TXN-001" or check number like "CHK-001"
+  transactionDate   DateTime // Date of the transaction
+
+  // Idempotency key for preventing duplicate submissions
+  // Client should generate a unique key (UUID) for each submission attempt
+  idempotencyKey String? @unique
+
+  // Project relationship (required) - the project this transaction belongs to
+  projectId String  @db.ObjectId
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Item relationship (optional) - for OUTGOING transactions linked to specific items
+  itemId String? @db.ObjectId
+  item   Item?   @relation(fields: [itemId], references: [id])
+
+  // PurchaseOrder relationship (optional) - for transactions created from approved POs
+  purchaseOrderId String?        @db.ObjectId
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  // UsageCode relationship (optional) - categorizes the transaction usage
+  usageCodeId String?    @db.ObjectId
+  usageCode   UsageCode? @relation(fields: [usageCodeId], references: [id])
+
+  // Payment schedule linking (optional)
+  paymentScheduleId        String? @db.ObjectId
+  paymentScheduleItemIndex Int? // Which schedule item this transaction pays (0-indexed)
+
+  // Transaction type - distinguishes money flow direction
+  transactionType TransactionType // INCOMING or OUTGOING
+
+  // Payment method (discriminator field)
+  paymentMethod PaymentMethod @default(CHECK)
+
+  // Transaction details
+  payeeName String // Name of the person/company (receiver for OUTGOING, payer for INCOMING)
+  amount    Float // Transaction amount
+
+  // Payment-specific details (discriminated union pattern)
+  // Only ONE of these should be populated based on paymentMethod
+  checkDetails        CheckPaymentDetails? // For CHECK payment method
+  cashDetails         CashPaymentDetails? // For CASH payment method
+  bankTransferDetails BankTransferPaymentDetails? // For BANK_TRANSFER payment method
+  onlineDetails       OnlinePaymentDetails? // For ONLINE payment method
+
+  // Status tracking
+  status      TransactionStatus @default(PENDING)
+  clearedDate DateTime? // Date when transaction was cleared
+
+  // Document attachments
+  documentUrls String[] @default([]) // URLs to check images/receipts/PDFs
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([itemId])
+  @@index([purchaseOrderId])
+  @@index([status])
+  @@index([transactionType])
+  @@index([transactionDate])
+  @@index([paymentMethod])
+  @@index([paymentScheduleId])
+}

@@ -1,0 +1,88 @@
+enum DeliveryOrderStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  PARTIAL
+  REJECTED
+  CANCELLED
+}
+
+enum DeliveryItemCondition {
+  GOOD
+  DAMAGED
+  DEFECTIVE
+  MISSING
+}
+
+// Composite type for delivery order line items
+type DeliveryOrderItem {
+  itemId            String?               @db.ObjectId // Reference to Item (optional)
+  poItemIndex       Int? // Index of the item in PO items array
+  description       String // Item description
+  orderedQuantity   Int // Quantity from PO
+  deliveredQuantity Int // Quantity actually delivered
+  receivedQuantity  Int? // Quantity accepted after inspection
+  condition         DeliveryItemCondition @default(GOOD)
+  remarks           String? // Notes about the delivered item
+}
+
+model DeliveryOrder {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  doNumber String @unique // e.g., "DO-2025-001" or "DR-2025-001"
+
+  // Purchase Order relationship (required)
+  purchaseOrderId String        @db.ObjectId
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+
+  // Vendor relationship (required)
+  vendorId String @db.ObjectId
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  // Dates
+  deliveryDate DateTime  @default(now()) // Actual delivery date
+  receivedDate DateTime? // Date items were received/accepted
+  dispatchDate DateTime? // Date items were dispatched by vendor
+
+  // Delivery details
+  deliveryAddress String? // Where items were delivered
+  trackingNumber  String? // Shipping/tracking reference
+  carrier         String? // Shipping carrier/courier
+
+  // Receiver information
+  receivedBy        String? // Person who received the delivery
+  receiverContact   String? // Contact number of receiver
+  receiverSignature String? // URL to signature image (if captured)
+
+  // Line items
+  items DeliveryOrderItem[]
+
+  // Inspection details
+  inspectedBy     String? // Person who inspected the delivery
+  inspectionDate  DateTime? // Date of inspection
+  inspectionNotes String? // Notes from inspection
+
+  // Status tracking
+  status  DeliveryOrderStatus @default(PENDING)
+  remarks String?
+
+  // Document attachments (delivery receipts, photos, etc.)
+  documentUrls String[] @default([])
+
+  // Relationships
+  invoices Invoice[]
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([purchaseOrderId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([deliveryDate])
+}

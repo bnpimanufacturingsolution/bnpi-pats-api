@@ -1,0 +1,116 @@
+// Employee Model - Syncs with third-party HRIS API with database fallback
+
+model Employee {
+  id             String     @id @default(auto()) @map("_id") @db.ObjectId
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  // External API reference
+  externalId     String? @unique // ID from third-party API (maps to external "id")
+  externalSource String? // Name of the third-party system (e.g., "hris", "bamboohr")
+
+  // Employee Identification
+  employeeId String  @unique // e.g., "EMP-GEN-HRUSER-001"
+  userId     String? // External user ID reference
+  personId   String? // External person ID reference
+  role       String? // e.g., "hris-hr-user", "hris-employee-manager"
+
+  // Personal Info (from user.metadata.employee.personalInfo)
+  firstName   String
+  middleName  String?
+  lastName    String
+  email       String    @unique
+  phone       String?
+  dateOfBirth DateTime?
+  gender      String?
+  nationality String?
+
+  // Employment Details
+  employmentStatus          String? // ACTIVE, INACTIVE, ON_LEAVE, TERMINATED, SUSPENDED
+  employmentType            String? // PROBATIONARY, REGULAR, CONTRACTUAL, PART_TIME
+  employmentHireDate        DateTime?
+  employmentStartDate       DateTime?
+  employmentTerminationDate DateTime?
+  probationEndDate          DateTime?
+
+  // Organization Structure (store IDs and denormalized data)
+  departmentId   String?
+  departmentName String?
+  departmentCode String?
+
+  positionId    String?
+  positionTitle String?
+  positionCode  String?
+
+  levelId   String?
+  levelName String?
+  levelRank Int?
+
+  reportToId    String?
+  reportToName  String?
+  reportToEmail String?
+
+  // Work Details
+  workLocation String? // ONSITE, REMOTE, HYBRID
+  isManager    Boolean @default(false)
+  deviceId     String?
+  deviceEmpId  String?
+
+  // Compensation
+  basicSalary  Float?
+  currency     String? @default("PHP")
+  payFrequency String? // MONTHLY, SEMI_MONTHLY, BI_WEEKLY, WEEKLY
+
+  // Employer Info (JSON - company details)
+  employer Json? // { name, tin, rdoCode, branchCode, address, isVerified, metadata }
+
+  // Schedule (JSON - work schedule with shifts)
+  schedule Json? // { scheduleCode, scheduleName, startDate, endDate, shifts[] }
+
+  // Leave Balances (JSON array)
+  leaveBalances            Json? // [{ leaveType, totalEntitled, used, pending, available, ... }]
+  leaveBalancesLastUpdated DateTime?
+
+  // Documents (JSON array - TIN, SSS, PhilHealth, etc.)
+  documents Json? // [{ name, type, number, issueDate, expiryDate, fileUrl, ext }]
+
+  // Employment History (JSON array)
+  employmentHistory Json? // [{ ... }]
+
+  // User Account Info (JSON - synced user data)
+  userAccount Json? // { userName, email, status, lastLogin, loginMethod, roleId, metadata }
+
+  // Sync Metadata
+  syncStatus      SyncStatus @default(SYNCED)
+  lastSyncAt      DateTime?
+  syncError       String?
+  rawExternalData Json? // Store raw API response for reference
+
+  // Flags
+  isTour    Boolean @default(false)
+  isDeleted Boolean @default(false)
+
+  // Audit Fields
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?  @db.ObjectId
+  updatedBy String?  @db.ObjectId
+
+  // Extensible Metadata
+  metadata Json?
+
+  @@index([workspaceId])
+  @@index([employmentStatus])
+  @@index([departmentId])
+  @@index([syncStatus])
+  @@index([reportToId])
+  @@map("employees")
+}
+
+enum SyncStatus {
+  SYNCED
+  PENDING
+  FAILED
+  LOCAL_ONLY
+}

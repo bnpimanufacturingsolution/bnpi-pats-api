@@ -1,0 +1,259 @@
+import { Request, Response } from "express";
+import { buildErrorResponse } from "../helper/error-handler";
+import { config } from "../config/constant";
+import { Logger } from "winston";
+
+// Constants for pagination
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 1000; // Prevent excessive queries
+const DEFAULT_ORDER = "desc";
+
+interface ValidationResult {
+	isValid: boolean;
+	errorResponse?: object;
+	validatedParams?: {
+		page: number;
+		limit: number;
+		order: "asc" | "desc";
+		fields?: string;
+		sort?: string | object;
+		skip: number;
+		query: string;
+		document: boolean;
+		pagination: boolean;
+		count: boolean;
+		filter?: string;
+		groupBy?: string;
+	};
+}
+
+/**
+ * Validates and parses query parameters for API requests
+ * Supports pagination, filtering, sorting, and field selection
+ */
+export const validateQueryParams = (req: Request, logger: Logger): ValidationResult => {
+	const {
+		page = DEFAULT_PAGE,
+		limit = DEFAULT_LIMIT,
+		order = DEFAULT_ORDER,
+		fields,
+		sort,
+		query,
+		document = "false",
+		pagination = "false",
+		count = "false",
+		filter,
+		groupBy,
+	} = req.query;
+
+	// Validate document
+	if (
+		document !== undefined &&
+		(typeof document !== "string" || !["true", "false"].includes(document))
+	) {
+		logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_DOCUMENT}: ${document}`);
+		return {
+			isValid: false,
+			errorResponse: buildErrorResponse("Document must be 'true' or 'false'", 400),
+		};
+	}
+	const documentValue = document === "true";
+
+	// Validate pagination
+	if (
+		pagination !== undefined &&
+		(typeof pagination !== "string" || !["true", "false"].includes(pagination))
+	) {
+		logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_PAGINATION}: ${pagination}`);
+		return {
+			isValid: false,
+			errorResponse: buildErrorResponse("Pagination must be 'true' or 'false'", 400),
+		};
+	}
+	const paginationValue = pagination === "true";
+
+	// Validate count
+	if (count !== undefined && (typeof count !== "string" || !["true", "false"].includes(count))) {
+		logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_COUNT}: ${count}`);
+		return {
+			isValid: false,
+			errorResponse: buildErrorResponse("Count must be 'true' or 'false'", 400),
+		};
+	}
+	const countValue = count === "true";
+
+	// Rule 1: All three cannot be false
+	if (!documentValue && !paginationValue && !countValue) {
+		logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_COMBINATION}: All flags cannot be false`);
+		return {
+			isValid: false,
+			errorResponse: buildErrorResponse(
+				"At least one of document, pagination, or count must be true",
+				400,
+			),
+		};
+	}
+
+	// Rule 2: Pagination cannot be true if document is false
+	if (paginationValue && !documentValue) {
+		logger.error(
+			`${config.ERROR.QUERY_PARAMS.INVALID_COMBINATION}: Pagination requires document to be true`,
+		);
+		return {
+			isValid: false,
+			errorResponse: buildErrorResponse(
+				"Pagination can only be true when document is also true",
+				400,
+			),
+		};
+	}
+
+	// Validate page
+	const pageNum = Number(page);
+	if (isNaN(pageNum) || pageNum < 1) {
+		logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_PAGE}: ${page}`);
+		return {
+			isValid: false,
+			errorResponse: buildErrorResponse(config.ERROR.QUERY_PARAMS.INVALID_PAGE, 400),
+		};
+	}
+
+	// Validate limit (cap at MAX_LIMIT to prevent excessive queries)
+	let limitNum = Number(limit);
+	if (isNaN(limitNum) || limitNum < 1) {
+		logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_LIMIT}: ${limit}`);
+		return {
+			isValid: false,
+			errorResponse: buildErrorResponse(config.ERROR.QUERY_PARAMS.INVALID_LIMIT, 400),
+		};
+	}
+	// When pagination is disabled and no explicit limit, use MAX_LIMIT
+	if (!paginationValue && limit === DEFAULT_LIMIT) {
+		limitNum = MAX_LIMIT;
+	}
+	// Cap limit to prevent memory issues
+	limitNum = Math.min(limitNum, MAX_LIMIT);
+
+	// Validate order
+	if (order && !["asc", "desc"].includes(order as string)) {
+		logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_ORDER}: ${order}`);
+		return {
+			isValid: false,
+			errorResponse: buildErrorResponse(
+				config.ERROR.QUERY_PARAMS.ORDER_MUST_BE_ASC_OR_DESC,
+				400,
+			),
+		};
+	}
+
+	// Validate fields
+	if (fields && typeof fields !== "string") {
+		logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_POPULATE}: ${fields}`);
+		return {
+			isValid: false,
+			errorResponse: buildErrorResponse(
+				config.ERROR.QUERY_PARAMS.POPULATE_MUST_BE_STRING,
+				400,
+			),
+		};
+	}
+
+	// Validate sort
+	if (sort && typeof sort === "string" && sort.startsWith("{")) {
+		try {
+			JSON.parse(sort);
+		} catch (error) {
+			logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_SORT}: ${sort}`);
+			return {
+				isValid: false,
+				errorResponse: buildErrorResponse(
+					config.ERROR.QUERY_PARAMS.SORT_MUST_BE_STRING,
+					400,
+				),
+			};
+		}
+	}
+
+	// Validate query
+	if (query !== undefined && typeof query !== "string") {
+		logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_QUERY}: ${query}`);
+		return {
+			isValid: false,
+			errorResponse: buildErrorResponse("Query must be a string", 400),
+		};
+	}
+	const queryValue = query !== undefined ? String(query) : "";
+
+	// Validate filter
+	let filterValue: string | undefined;
+	if (filter !== undefined) {
+		if (typeof filter !== "string") {
+			logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_FILTER}: ${filter}`);
+			return {
+				isValid: false,
+				errorResponse: buildErrorResponse(
+					"Filter must be a comma-separated string (key:value,key:value)",
+					400,
+				),
+			};
+		}
+		filterValue = filter;
+	}
+
+	// Validate groupBy: return as a single string (not array)
+	let groupByValue: string | undefined;
+	if (groupBy !== undefined) {
+		if (!documentValue) {
+			logger.error(
+				`${config.ERROR.QUERY_PARAMS.INVALID_COMBINATION}: groupBy requires document=true`,
+			);
+			return {
+				isValid: false,
+				errorResponse: buildErrorResponse(
+					"groupBy can only be used when document is true",
+					400,
+				),
+			};
+		}
+
+		if (typeof groupBy !== "string") {
+			logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_GROUPBY}: ${groupBy}`);
+			return {
+				isValid: false,
+				errorResponse: buildErrorResponse(
+					"groupBy must be a string (e.g., category or category.name)",
+					400,
+				),
+			};
+		}
+
+		const trimmed = groupBy.trim();
+		if (!trimmed) {
+			logger.error(`${config.ERROR.QUERY_PARAMS.INVALID_GROUPBY}: Empty groupBy value`);
+			return {
+				isValid: false,
+				errorResponse: buildErrorResponse("groupBy must not be empty", 400),
+			};
+		}
+		groupByValue = trimmed;
+	}
+
+	return {
+		isValid: true,
+		validatedParams: {
+			page: pageNum,
+			limit: limitNum,
+			order: order as "asc" | "desc",
+			fields: fields as string | undefined,
+			sort: sort as string | undefined,
+			skip: (pageNum - 1) * limitNum,
+			query: queryValue,
+			document: documentValue,
+			pagination: paginationValue,
+			count: countValue,
+			filter: filterValue,
+			groupBy: groupByValue, // <-- now just a string or undefined
+		},
+	};
+};

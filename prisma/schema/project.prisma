@@ -1,0 +1,53 @@
+enum ProjectStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  ON_HOLD
+}
+
+model Project {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  description    String?
+  type           String?
+  code           String
+  notebookNo     String?
+  vatIncEx       String? // VAT INC/EX
+  form2307       Int? // 2307 tax form/certificate number
+  status         ProjectStatus @default(PENDING)
+  workspaceId    String        @db.ObjectId
+  workspace      Workspace?    @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  // Financial fields
+  capital        Float? // Capital/initial funding
+  actualExpenses Float? @default(0) // Actual expenses incurred
+
+  // Timeline fields
+  startDate DateTime? // Project start date
+  endDate   DateTime? // Project end date
+
+  // Metadata (JSON field for flexible data storage)
+  metaData Json? // Contains: progress tracking, custom fields, etc.
+
+  // Categories - array allows projects to have multiple categories
+  categoryIds String[] @default([]) @db.ObjectId
+
+  // Relationships
+  estimations    Estimation[]
+  milestones     Milestone[]
+  transactions   Transaction[]
+  purchaseOrders PurchaseOrder[]
+  invoices       Invoice[]
+  paymentTerms   PaymentTerm[]
+  projectMembers ProjectMember[]
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([code, workspaceId]) // Project code is unique per workspace
+  @@index([status])
+  @@index([workspaceId])
+}

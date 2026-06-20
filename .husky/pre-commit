@@ -1,0 +1,15 @@
+#!/bin/sh
+
+echo "🔍 Running lint..."
+pnpm lint || {
+    echo "❌ Lint failed. Fix errors before committing."
+    exit 1
+}
+
+echo "🧪 Running tests..."
+pnpm test || {
+    echo "❌ Tests failed. Fix failing tests before committing."
+    exit 1
+}
+
+echo "✅ All checks passed!"

@@ -1,0 +1,27 @@
+enum ProjectRole {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model ProjectMember {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  projectId   String      @db.ObjectId
+  project     Project?    @relation(fields: [projectId], references: [id])
+  workspaceId String      @db.ObjectId
+  workspace   Workspace?  @relation(fields: [workspaceId], references: [id])
+  userId      String
+  role        ProjectRole @default(VIEWER)
+
+  displayName String?
+  email       String?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([workspaceId])
+  @@index([userId])
+}

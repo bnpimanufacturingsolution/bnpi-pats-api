@@ -1,0 +1,62 @@
+services:
+    mongo:
+        image: mongo:7
+        container_name: bnpi-pms-mongo
+        ports:
+            - "27017:27017"
+        volumes:
+            - mongodata:/data/db
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+        healthcheck:
+            test: ["CMD", "mongosh", "--quiet", "mongodb://localhost:27017/admin", "--eval", "db.runCommand({ ping: 1 }).ok"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+    redis:
+        image: redis:7.2-alpine
+        container_name: bnpi-pms-redis
+        ports:
+            - "6379:6379"
+        volumes:
+            - redisdata:/data
+        command: ["redis-server", "--appendonly", "yes", "--requirepass", "template"]
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+        healthcheck:
+            test: ["CMD", "redis-cli", "-a", "template", "ping"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: bnpi-pms-api
+        env_file:
+            - .env
+        environment:
+            - DATABASE_URL=mongodb://mongo:27017/bnpi_pms
+            # Override Redis host for Docker networking
+            - REDIS_HOST=redis
+            - REDIS_PASSWORD=template
+            - REDIS_URL=redis://:template@redis:6379
+        ports:
+            - "${PORT:-3000}:${PORT:-3000}"
+        depends_on:
+            mongo:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+
+volumes:
+    mongodata:
+    redisdata:

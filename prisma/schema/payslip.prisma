@@ -1,0 +1,27 @@
+model Payslip {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  payslipNumber String @unique // e.g., "PS-001"
+
+  // Estimation relationship (required)
+  estimationId String     @db.ObjectId
+  estimation   Estimation @relation(fields: [estimationId], references: [id], onDelete: Cascade)
+
+  name String
+
+  amount      Float
+  paymentDate DateTime?
+  notes       String?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([estimationId])
+  @@index([name])
+}

@@ -1,0 +1,27 @@
+enum ItemTypeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model ItemType {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  name          String
+  description   String?
+  icon          String?
+  defaultFields Field[]
+  status        ItemTypeStatus
+
+  items Item[] // Items using this type
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([name])
+}

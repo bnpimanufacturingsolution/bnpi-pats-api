@@ -1,0 +1,52 @@
+enum ItemCondition {
+  GOOD
+  DAMAGED
+  LICENSE
+  NA
+}
+
+enum OrderStatus {
+  PENDING
+  RECEIVED
+  CANCELLED
+  PARTIAL
+}
+
+model Order {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  orderNumber String @unique // e.g., "OR-001"
+
+  // Estimation relationship (required)
+  estimationId String     @db.ObjectId
+  estimation   Estimation @relation(fields: [estimationId], references: [id], onDelete: Cascade)
+
+  vendorId String? @db.ObjectId
+  vendor   Vendor? @relation(fields: [vendorId], references: [id])
+
+  itemName        String
+  quantity        Int
+  deliveryDate    DateTime?
+  receivedBy      String?
+  condition       ItemCondition @default(GOOD)
+  hasWarranty     Boolean       @default(false)
+  warrantyDetails String?
+  status          OrderStatus   @default(PENDING)
+  remarks         String?
+
+  // Relationships
+  items Item[]
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([estimationId])
+  @@index([vendorId])
+  @@index([status])
+}

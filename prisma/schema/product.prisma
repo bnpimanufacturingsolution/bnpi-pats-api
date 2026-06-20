@@ -1,0 +1,169 @@
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ProductMaterialType {
+  RAW_MATERIAL
+  PACKAGING
+  COMPONENT
+  SUBASSEMBLY
+  CONSUMABLE
+}
+
+enum ProductCostBasis {
+  PER_UNIT
+  PER_BATCH
+  PER_HOUR
+  PERCENTAGE
+  FIXED
+}
+
+enum ProductCostScope {
+  PRODUCT
+  STEP
+  MATERIAL
+}
+
+enum ProductCostAssumptionType {
+  MATERIAL_COST
+  LABOR_RATE
+  OVERHEAD
+  PACKAGING
+  LOGISTICS
+  SCRAP
+  CONTINGENCY
+  OTHER
+}
+
+model Product {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  code          String
+  name          String
+  description   String?
+  brand         String?
+  category      String?
+  variant       String?
+  unitOfMeasure String        @default("PCS")
+  revision      String        @default("A")
+  status        ProductStatus @default(ACTIVE)
+  tags          String[]      @default([])
+  metadata      Json?
+
+  productionSteps     ProductProductionStep[]
+  materials           ProductMaterial[]
+  costAssumptions     ProductCostAssumption[]
+  demandLines         DemandLine[]
+  demandEstimateLines DemandEstimateLine[]
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId])
+  @@index([name])
+  @@index([code])
+  @@index([status])
+}
+
+model ProductProductionStep {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  stepOrder        Int
+  name             String
+  description      String?
+  workCenter       String?
+  laborHours       Float?
+  setupMinutes     Int?
+  cycleTimeMinutes Int?
+  outputQuantity   Int     @default(1)
+  isCritical       Boolean @default(false)
+  notes            String?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, stepOrder])
+  @@index([workspaceId])
+  @@index([productId])
+  @@index([workCenter])
+}
+
+model ProductMaterial {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  lineNo                Int
+  materialName          String
+  materialCode          String?
+  materialType          ProductMaterialType @default(RAW_MATERIAL)
+  quantityPerUnit       Float
+  uom                   String
+  scrapRatePercentage   Float               @default(0)
+  isOptional            Boolean             @default(false)
+  preferredSupplierName String?
+  notes                 String?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, lineNo])
+  @@index([workspaceId])
+  @@index([productId])
+  @@index([materialType])
+}
+
+model ProductCostAssumption {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  assumptionName String
+  assumptionType ProductCostAssumptionType
+  basis          ProductCostBasis          @default(PER_UNIT)
+  scope          ProductCostScope          @default(PRODUCT)
+  scopeRef       String?
+  value          Float
+  currency       String                    @default("PHP")
+  effectiveFrom  DateTime?
+  effectiveTo    DateTime?
+  isActive       Boolean                   @default(true)
+  notes          String?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([productId])
+  @@index([assumptionType])
+  @@index([scope])
+  @@index([isActive])
+}

@@ -1,0 +1,631 @@
+[
+  {
+    "id": "GET /api/estimation/{id}",
+    "method": "GET",
+    "url": "/api/estimation/{id}",
+    "summary": "Get estimation by ID",
+    "description": "Retrieve a specific estimation by its unique identifier with optional field selection",
+    "tags": [
+      "Estimation"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Estimation ID (MongoDB ObjectId format)"
+      }
+    ],
+    "queryParams": [
+      {
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Comma-separated list of fields to include (supports nested fields)"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "Estimation retrieved successfully",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Bad request",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Unauthorized",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Estimation not found",
+        "contentTypes": []
+      },
+      "500": {
+        "description": "Internal server error",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "PATCH /api/estimation/{id}",
+    "method": "PATCH",
+    "url": "/api/estimation/{id}",
+    "summary": "Update estimation",
+    "description": "Update estimation data by ID (partial update)",
+    "tags": [
+      "Estimation"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [
+      "application/json"
+    ],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Estimation ID"
+      }
+    ],
+    "queryParams": [],
+    "requestBody": {
+      "required": true,
+      "schema": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "estimatedCost": {
+            "type": "number"
+          },
+          "actualCost": {
+            "type": "number",
+            "nullable": true
+          },
+          "marginPercentage": {
+            "type": "number"
+          },
+          "marginAmount": {
+            "type": "number"
+          },
+          "projectedWithMargin": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "REVISED"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "contentTypes": [
+        "application/json"
+      ]
+    },
+    "responses": {
+      "200": {
+        "description": "Estimation updated successfully",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Bad request",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Unauthorized",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Estimation not found",
+        "contentTypes": []
+      },
+      "500": {
+        "description": "Internal server error",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/estimation/{id}",
+    "method": "DELETE",
+    "url": "/api/estimation/{id}",
+    "summary": "Delete estimation",
+    "description": "Permanently delete an estimation by ID",
+    "tags": [
+      "Estimation"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Estimation ID"
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Estimation deleted successfully",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Bad request",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Unauthorized",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Estimation not found",
+        "contentTypes": []
+      },
+      "500": {
+        "description": "Internal server error",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/estimation",
+    "method": "GET",
+    "url": "/api/estimation",
+    "summary": "Get all estimations",
+    "description": "Retrieve estimations with advanced filtering, pagination, sorting, field selection, and optional grouping",
+    "tags": [
+      "Estimation"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "page",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "description": "Page number for pagination"
+      },
+      {
+        "name": "limit",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
+        },
+        "description": "Number of records per page"
+      },
+      {
+        "name": "order",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ],
+          "default": "desc"
+        },
+        "description": "Sort order"
+      },
+      {
+        "name": "sort",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Field to sort by"
+      },
+      {
+        "name": "fields",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Comma-separated list of fields to include"
+      },
+      {
+        "name": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Search query"
+      },
+      {
+        "name": "filter",
+        "schema": {
+          "type": "string"
+        },
+        "description": "JSON array of filter objects"
+      },
+      {
+        "name": "groupBy",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Group results by field"
+      },
+      {
+        "name": "document",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        },
+        "description": "Include estimation documents"
+      },
+      {
+        "name": "pagination",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        },
+        "description": "Include pagination metadata"
+      },
+      {
+        "name": "count",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        },
+        "description": "Include total count"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "Estimations retrieved successfully",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Bad request",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Unauthorized",
+        "contentTypes": []
+      },
+      "500": {
+        "description": "Internal server error",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": true,
+      "hasSearchParam": true,
+      "hasSortParams": true
+    }
+  },
+  {
+    "id": "POST /api/estimation",
+    "method": "POST",
+    "url": "/api/estimation",
+    "summary": "Create new estimation",
+    "description": "Create a new estimation with the provided data",
+    "tags": [
+      "Estimation"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [
+      "application/json"
+    ],
+    "pathParams": [],
+    "queryParams": [],
+    "requestBody": {
+      "required": true,
+      "schema": {
+        "type": "object",
+        "required": [
+          "estimationNumber",
+          "projectId",
+          "estimatedCost",
+          "marginPercentage",
+          "marginAmount",
+          "projectedWithMargin"
+        ],
+        "properties": {
+          "estimationNumber": {
+            "type": "string",
+            "example": "EST-2025-001"
+          },
+          "projectId": {
+            "type": "string",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "estimatedCost": {
+            "type": "number",
+            "example": 100000
+          },
+          "actualCost": {
+            "type": "number",
+            "nullable": true,
+            "example": 95000
+          },
+          "marginPercentage": {
+            "type": "number",
+            "example": 30
+          },
+          "marginAmount": {
+            "type": "number",
+            "example": 30000
+          },
+          "projectedWithMargin": {
+            "type": "number",
+            "example": 130000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "REVISED"
+            ],
+            "default": "DRAFT"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "contentTypes": [
+        "application/json"
+      ]
+    },
+    "responses": {
+      "201": {
+        "description": "Estimation created successfully",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Bad request",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Unauthorized",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Project not found",
+        "contentTypes": []
+      },
+      "500": {
+        "description": "Internal server error",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/estimation/{id}/approve",
+    "method": "POST",
+    "url": "/api/estimation/{id}/approve",
+    "summary": "Approve estimation",
+    "description": "Approve an estimation and mark it as approved",
+    "tags": [
+      "Estimation"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [
+      "application/json"
+    ],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Estimation ID"
+      }
+    ],
+    "queryParams": [],
+    "requestBody": {
+      "required": true,
+      "schema": {
+        "type": "object",
+        "required": [
+          "approvedBy"
+        ],
+        "properties": {
+          "approvedBy": {
+            "type": "string",
+            "description": "User ID who approved",
+            "example": "user_001"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Optional approval notes"
+          }
+        }
+      },
+      "contentTypes": [
+        "application/json"
+      ]
+    },
+    "responses": {
+      "200": {
+        "description": "Estimation approved successfully",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Bad request or already approved",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Unauthorized",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Estimation not found",
+        "contentTypes": []
+      },
+      "500": {
+        "description": "Internal server error",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/estimation/{id}/reject",
+    "method": "POST",
+    "url": "/api/estimation/{id}/reject",
+    "summary": "Reject estimation",
+    "description": "Reject an estimation with a reason",
+    "tags": [
+      "Estimation"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [
+      "application/json"
+    ],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Estimation ID"
+      }
+    ],
+    "queryParams": [],
+    "requestBody": {
+      "required": true,
+      "schema": {
+        "type": "object",
+        "required": [
+          "notes"
+        ],
+        "properties": {
+          "notes": {
+            "type": "string",
+            "description": "Rejection reason (required)",
+            "example": "Budget exceeds project limits"
+          }
+        }
+      },
+      "contentTypes": [
+        "application/json"
+      ]
+    },
+    "responses": {
+      "200": {
+        "description": "Estimation rejected successfully",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Bad request",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Unauthorized",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Estimation not found",
+        "contentTypes": []
+      },
+      "500": {
+        "description": "Internal server error",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

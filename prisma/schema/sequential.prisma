@@ -1,0 +1,22 @@
+model Sequential {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  workspaceId    String     @db.ObjectId
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+  organizationId String? // External organization ID from req
+
+  name      String
+  code      String
+  pattern   String
+  module    String? // Filter by module: "project", "transaction", "estimation", "order", etc.
+  current   Int      @default(0)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  isDeleted Boolean  @default(false)
+
+  @@unique([name, workspaceId]) // Name unique per workspace
+  @@unique([code, workspaceId]) // Code unique per workspace
+  @@index([workspaceId])
+  @@index([module])
+  @@map("sequentials")
+}

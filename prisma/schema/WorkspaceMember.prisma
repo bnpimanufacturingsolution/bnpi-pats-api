@@ -1,0 +1,25 @@
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model WorkspaceMember {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  workspaceId String        @db.ObjectId
+  workspace   Workspace?    @relation(fields: [workspaceId], references: [id])
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+
+  displayName String?
+  email       String?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+}

@@ -1,0 +1,61 @@
+enum WorkspaceStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model Workspace {
+  id             String          @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String? // External organization ID from login/authentication system
+  name           String
+  code           String          @unique
+  description    String?
+  address        String? // Company address for documents
+  phone          String? // Company phone number
+  email          String? // Company email
+  logoUrl        String? // Company logo URL for documents
+  status         WorkspaceStatus @default(ACTIVE)
+  isPinned       Boolean         @default(false)
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  vendors                    Vendor[]
+  projects                   Project[]
+  categories                 Category[]
+  items                      Item[]
+  orders                     Order[]
+  employees                  Employee[]
+  estimations                Estimation[]
+  fields                     Field[]
+  itemTypes                  ItemType[]
+  milestones                 Milestone[]
+  payslips                   Payslip[]
+  sequentials                Sequential[]
+  templates                  Template[]
+  transactions               Transaction[]
+  usageCodes                 UsageCode[]
+  purchaseOrders             PurchaseOrder[]
+  deliveryOrders             DeliveryOrder[]
+  invoices                   Invoice[]
+  paymentTerms               PaymentTerm[]
+  poTypes                    POType[]
+  paymentSchedules           PaymentSchedule[]
+  workspaceMembers           WorkspaceMember[]
+  projectMembers             ProjectMember[]
+  products                   Product[]
+  productSteps               ProductProductionStep[]
+  productMaterials           ProductMaterial[]
+  productCostAssumptions     ProductCostAssumption[]
+  demandPlans                DemandPlan[]
+  demandLines                DemandLine[]
+  demandEstimateVersions     DemandEstimateVersion[]
+  demandEstimateLines        DemandEstimateLine[]
+  demandMaterialRequirements DemandMaterialRequirement[]
+  demandLaborRequirements    DemandLaborRequirement[]
+  projectConversions         ProjectConversion[]
+
+  @@index([status])
+}
