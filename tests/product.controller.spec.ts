@@ -20,7 +20,7 @@ describe("Product Controller", () => {
 		code: "TOY-A",
 		name: "Toy A",
 		description: "Starter toy car",
-		brand: "BNPI Play",
+		brand: "Bandai PATS",
 		category: "Toys",
 		variant: "Starter",
 		unitOfMeasure: "PCS",
@@ -128,7 +128,7 @@ describe("Product Controller", () => {
 			req.body = {
 				name: "Toy D",
 				description: "Demo product",
-				brand: "BNPI Play",
+				brand: "Bandai PATS",
 			};
 			await productController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);

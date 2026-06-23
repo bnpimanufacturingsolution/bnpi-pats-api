@@ -761,9 +761,9 @@ export async function seedProject(prisma: PrismaClient, workspaceIds: string | s
 		},
 		{
 			id: "507f1f77bcf86cd799439058",
-			name: "Project Portfolio Management",
-			description: "Enterprise PPM tool for project tracking and resource management",
-			type: "Project Management",
+			name: "Bandai PATS Assembly Pilot",
+			description: "Demo project for line planning, tracking, and budget validation",
+			type: "Manufacturing Demo",
 			code: "PROJ-2025-048",
 			notebookNo: "NB-2025-048",
 			vatIncEx: "INC",

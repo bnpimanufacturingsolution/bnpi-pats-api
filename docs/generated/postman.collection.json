@@ -16144,7 +16144,7 @@
         "name": "Bandai PATS API",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         "description": {
-            "content": "Welcome to the Bandai PATS API documentation. This REST API powers Bandai PATS backend services.\n\nContact Support:\n Name: Bandai PATS Support\n Email: support@bnpi-pats.example",
+            "content": "Welcome to the Bandai PATS API documentation. This REST API powers Bandai PATS backend services.\n\nContact Support:\n Name: Bandai PATS Support\n Email: support@bandai-pats.example",
             "type": "text/plain"
         }
     }

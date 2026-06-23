@@ -329,14 +329,14 @@ export const controller = (appInstance?: ExpressApp) => {
 						"Welcome to the Bandai PATS API documentation. This REST API powers Bandai PATS backend services.",
 					contact: {
 						name: "Bandai PATS Support",
-						email: "support@bnpi-pats.example",
-						url: "https://bnpi-pats.example/support",
+						email: "support@bandai-pats.example",
+						url: "https://bandai-pats.example/support",
 					},
 					license: {
 						name: "MIT",
 						url: "https://opensource.org/licenses/MIT",
 					},
-					termsOfService: "https://bnpi-pats.example/terms",
+					termsOfService: "https://bandai-pats.example/terms",
 				},
 				servers: [
 					{
@@ -344,7 +344,7 @@ export const controller = (appInstance?: ExpressApp) => {
 						description: "Development server",
 					},
 					{
-						url: "https://api.bnpi-pats.example/api",
+						url: "https://api.bandai-pats.example/api",
 						description: "Production server",
 					},
 				],
@@ -560,7 +560,7 @@ export const controller = (appInstance?: ExpressApp) => {
 						description: "Template management operations",
 						externalDocs: {
 							description: "Find out more about templates",
-							url: "https://bnpi-pats.example/docs/templates",
+							url: "https://bandai-pats.example/docs/templates",
 						},
 					},
 					{

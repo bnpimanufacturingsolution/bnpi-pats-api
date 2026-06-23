@@ -291,7 +291,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const formattedData = formatDataForExcel(projects);
 		const columnHeaders = {
-			id: "ID", code: "Project Code", name: "Name", description: "Description",
+			id: "ID", code: "Workspace Code", name: "Name", description: "Description",
 			type: "Type", notebookNo: "Notebook No", vatIncEx: "VAT INC/EX", form2307: "Form 2307",
 			status: "Status", capital: "Capital", actualExpenses: "Actual Expenses",
 			createdAt: "Created At", updatedAt: "Updated At",
@@ -299,8 +299,8 @@ export const controller = (prisma: PrismaClient) => {
 		const fields = ["code", "name", "description", "type", "notebookNo", "vatIncEx", "form2307", "status", "capital", "actualExpenses", "createdAt", "updatedAt"];
 
 		exportToExcel(res, formattedData, {
-			filename: `projects-export-${new Date().toISOString().split("T")[0]}`,
-			sheetName: "Projects",
+			filename: `workspaces-export-${new Date().toISOString().split("T")[0]}`,
+			sheetName: "Workspaces",
 			columnHeaders,
 			fields,
 		});
@@ -348,15 +348,15 @@ export const controller = (prisma: PrismaClient) => {
 
 		const formattedData = formatDataForExcel(projects);
 		const columnHeaders = {
-			code: "Project Code", name: "Project Name", description: "Description",
+			code: "Workspace Code", name: "Workspace Name", description: "Description",
 			type: "Type", notebookNo: "Notebook No", vatIncEx: "VAT INC/EX", form2307: "Form 2307",
 			status: "Status", capital: "Budget", startDate: "Start Date", endDate: "End Date", createdAt: "Created At",
 		};
 		const fields = ["code", "name", "description", "type", "notebookNo", "vatIncEx", "form2307", "status", "capital", "startDate", "endDate", "createdAt"];
 
 		exportToExcel(res, formattedData, {
-			filename: `project-client-summary-${new Date().toISOString().split("T")[0]}`,
-			sheetName: "Projects",
+			filename: `workspace-client-summary-${new Date().toISOString().split("T")[0]}`,
+			sheetName: "Workspaces",
 			columnHeaders,
 			fields,
 		});

@@ -24,9 +24,9 @@ export const router = (route: Router, controller: IController): Router => {
 	 * @openapi
 	 * /api/project/generate-code:
 	 *   get:
-	 *     summary: Generate project code from name
-	 *     description: Generates a unique project code based on the project name. Takes the first letter plus next consonants to form a 3-character prefix, then adds a sequential number (e.g., OKADA → OKD001)
-	 *     tags: [Project]
+	 *     summary: Generate workspace code from name
+	 *     description: Generates a unique workspace code based on the workspace name. Takes the first letter plus next consonants to form a 3-character prefix, then adds a sequential number (e.g., OKADA → OKD001)
+	 *     tags: [Workspace]
 	 *     security:
 	 *       - bearerAuth: []
 	 *     parameters:
@@ -36,11 +36,11 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         schema:
 	 *           type: string
 	 *           minLength: 1
-	 *         description: Project name to generate code from
+	 *         description: Workspace name to generate code from
 	 *         example: "OKADA"
 	 *     responses:
 	 *       200:
-	 *         description: Project code generated successfully
+	 *         description: Workspace code generated successfully
 	 *         content:
 	 *           application/json:
 	 *             schema:
@@ -53,7 +53,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                       properties:
 	 *                         code:
 	 *                           type: string
-	 *                           description: The generated project code
+	 *                           description: The generated workspace code
 	 *                           example: "OKD001"
 	 *                         prefix:
 	 *                           type: string
@@ -76,8 +76,8 @@ export const router = (route: Router, controller: IController): Router => {
 	 * @openapi
 	 * /api/project/{id}:
 	 *   get:
-	 *     summary: Get project by ID
-	 *     description: Retrieve a specific project by its unique identifier with optional field selection
+	 *     summary: Get workspace by ID
+	 *     description: Retrieve a specific workspace by its unique identifier with optional field selection
 	 *     tags: [Project]
 	 *     security:
 	 *       - bearerAuth: []
@@ -140,9 +140,9 @@ export const router = (route: Router, controller: IController): Router => {
 	 * @openapi
 	 * /api/project:
 	 *   get:
-	 *     summary: Get all projects
-	 *     description: Retrieve projects with advanced filtering, pagination, sorting, field selection, and optional grouping
-	 *     tags: [Project]
+	 *     summary: Get all workspaces
+	 *     description: Retrieve workspaces with advanced filtering, pagination, sorting, field selection, and optional grouping
+	 *     tags: [Workspace]
 	 *     security:
 	 *       - bearerAuth: []
 	 *     parameters:
@@ -303,11 +303,11 @@ export const router = (route: Router, controller: IController): Router => {
 	 *               name:
 	 *                 type: string
 	 *                 minLength: 1
-	 *                 description: Project name
+	 *                 description: Workspace name
 	 *                 example: "Email Welcome Project"
 	 *               description:
 	 *                 type: string
-	 *                 description: Project description
+	 *                 description: Workspace description
 	 *                 example: "Welcome email project for new users"
 	 *               type:
 	 *                 type: string
@@ -401,16 +401,16 @@ export const router = (route: Router, controller: IController): Router => {
 	 *               name:
 	 *                 type: string
 	 *                 minLength: 1
-	 *                 description: Project name
+	 *                 description: Workspace name
 	 *                 example: "Updated Email Project"
 	 *               description:
 	 *                 type: string
-	 *                 description: Project description
+	 *                 description: Workspace description
 	 *                 example: "Updated description for the project"
 	 *               type:
 	 *                 type: string
 	 *                 enum: ["email", "sms", "push", "form"]
-	 *                 description: Project type for categorization
+	 *                 description: Workspace type for categorization
 	 *                 example: "email"
 	 *               isDeleted:
 	 *                 type: boolean
@@ -453,9 +453,9 @@ export const router = (route: Router, controller: IController): Router => {
 	 * @openapi
 	 * /api/project/export/excel:
 	 *   get:
-	 *     summary: Export projects to Excel
-	 *     description: Export all projects to Excel format with optional filtering and sorting
-	 *     tags: [Project]
+	 *     summary: Export workspaces to Excel
+	 *     description: Export all workspaces to Excel format with optional filtering and sorting
+	 *     tags: [Workspace]
 	 *     security:
 	 *       - bearerAuth: []
 	 *     parameters:

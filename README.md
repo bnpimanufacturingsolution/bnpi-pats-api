@@ -2,7 +2,7 @@
 
 Backend shell for Bandai Production and Assembly Tracking System.
 
-This repository was cloned from the source API and rebranded as a separate Bandai PATS project. The current codebase still carries inherited project-management, estimation, and employee-sync modules, but it is now the local backend foundation for the manufacturing initiative.
+This repository was cloned from the source API and rebranded as a separate Bandai PATS project. The current codebase still carries inherited project, estimation, and employee-sync modules, but it is now the local backend foundation for the manufacturing initiative.
 
 ## 🚀 Overview
 
@@ -27,7 +27,7 @@ pnpm dev
 ## ✨ Key Features
 
 ### Core Modules
-- **Project Management** - Complete project lifecycle management with status tracking
+- **Legacy Project Modules** - Complete project lifecycle management with status tracking
 - **Estimation System** - Detailed cost estimation with CAPEX/OPEX/MISC breakdown
 - **Item Management** - Flexible item tracking with custom fields and hierarchies
 - **ItemType System** - Categorization system for items (CAPEX, OPEX, MISC, Task, Bug, etc.)
@@ -615,5 +615,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🏷️ Keywords
 
-`project-management`, `estimation-system`, `cost-tracking`, `mongodb`, `prisma`, `typescript`, `express`, `rest-api`, `capex-opex`, `financial-breakdown`, `audit-logging`, `dynamic-fields`, `vendor-management`, `order-processing`, `payroll-tracking`
+`production-tracking`, `assembly-tracking`, `manufacturing`, `estimation-system`, `cost-tracking`, `mongodb`, `prisma`, `typescript`, `express`, `rest-api`, `capex-opex`, `financial-breakdown`, `audit-logging`, `dynamic-fields`, `vendor-management`, `order-processing`, `payroll-tracking`
 

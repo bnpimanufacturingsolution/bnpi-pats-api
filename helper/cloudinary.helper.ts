@@ -9,7 +9,7 @@ cloudinary.config({
 	api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const MAIN_FOLDER = "pms-assets";
+const MAIN_FOLDER = "bandai-pats-assets";
 
 const isTestEnvironment =
 	process.env.NODE_ENV === "test" ||
@@ -126,8 +126,8 @@ export const deleteFile = async (publicId: string, subfolder?: string): Promise<
 
 /**
  * Extract publicId from Cloudinary URL
- * Example: https://res.cloudinary.com/cloud/image/upload/v123/pms-assets/folder/file.jpg
- * Returns: pms-assets/folder/file
+ * Example: https://res.cloudinary.com/cloud/image/upload/v123/bandai-pats-assets/folder/file.jpg
+ * Returns: bandai-pats-assets/folder/file
  */
 export const extractPublicIdFromUrl = (url: string): string | null => {
 	try {

@@ -4581,25 +4581,25 @@ export async function seedEstimation(prisma: PrismaClient, workspaceIds: string 
 				],
 			},
 
-			// ==================== Project 48 - Project Portfolio Management ====================
+			// ==================== Project 48 - Bandai PATS Assembly Pilot ====================
 			{
 				estimation: {
 					id: "607f1f77bcf86cd799442001",
-					estimationNumber: "EST-PPM-2025-0001",
-					name: "Portfolio Management - Basic PMO",
+					estimationNumber: "EST-BPATS-2025-0048",
+					name: "Assembly Pilot - Baseline Plan",
 					projectId: projects[47]?.id || projects[0].id,
 					marginPercentage: 28.0,
 					status: EstimationStatus.APPROVED,
 					approvedBy: "user_001",
 					approvedAt: new Date("2025-01-15"),
-					notes: "Initial PPM proposal",
+					notes: "Initial Bandai PATS demo proposal",
 					isDeleted: false,
 				},
 				items: [
 					{
 						itemTypeId: "608f1f77bcf86cd799450001",
 						categoryId: "607f1f77bcf86cd799430005",
-						itemName: "Portfolio Dashboard",
+						itemName: "Production Board",
 						estimatedQuantity: 200,
 						actualQuantity: null,
 						estimatedUnitPrice: 170.0,
@@ -4610,7 +4610,7 @@ export async function seedEstimation(prisma: PrismaClient, workspaceIds: string 
 					{
 						itemTypeId: "608f1f77bcf86cd799450001",
 						categoryId: "607f1f77bcf86cd799430005",
-						itemName: "Resource Management",
+						itemName: "Resource Planning",
 						estimatedQuantity: 150,
 						actualQuantity: null,
 						estimatedUnitPrice: 175.0,
@@ -4623,21 +4623,21 @@ export async function seedEstimation(prisma: PrismaClient, workspaceIds: string 
 			{
 				estimation: {
 					id: "607f1f77bcf86cd799442002",
-					estimationNumber: "EST-PPM-2025-0002",
-					name: "Portfolio Management - Enterprise PMO",
+					estimationNumber: "EST-BPATS-2025-0049",
+					name: "Assembly Pilot - Revised Plan",
 					projectId: projects[47]?.id || projects[0].id,
 					marginPercentage: 28.0,
 					status: EstimationStatus.APPROVED,
 					approvedBy: "user_003",
 					approvedAt: new Date("2025-01-31"),
-					notes: "Approved with budget tracking",
+					notes: "Approved with workflow tracking",
 					isDeleted: false,
 				},
 				items: [
 					{
 						itemTypeId: "608f1f77bcf86cd799450001",
 						categoryId: "607f1f77bcf86cd799430005",
-						itemName: "Portfolio Dashboard",
+						itemName: "Production Board",
 						estimatedQuantity: 200,
 						actualQuantity: 198,
 						estimatedUnitPrice: 170.0,
@@ -4648,7 +4648,7 @@ export async function seedEstimation(prisma: PrismaClient, workspaceIds: string 
 					{
 						itemTypeId: "608f1f77bcf86cd799450001",
 						categoryId: "607f1f77bcf86cd799430005",
-						itemName: "Resource Management",
+						itemName: "Resource Planning",
 						estimatedQuantity: 150,
 						actualQuantity: 148,
 						estimatedUnitPrice: 175.0,
@@ -4659,7 +4659,7 @@ export async function seedEstimation(prisma: PrismaClient, workspaceIds: string 
 					{
 						itemTypeId: "608f1f77bcf86cd799450001",
 						categoryId: "607f1f77bcf86cd799430005",
-						itemName: "Budget & Financial Tracking",
+						itemName: "Budget Tracking",
 						estimatedQuantity: 100,
 						actualQuantity: 98,
 						estimatedUnitPrice: 180.0,

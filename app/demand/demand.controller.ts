@@ -848,7 +848,7 @@ export const controller = (prisma: PrismaClient) => {
 			repository.findProjectConversionsByPlanId(id, workspaceId),
 		);
 		res.status(200).json(
-			buildSuccessResponse("Project conversions retrieved successfully", conversions, 200),
+			buildSuccessResponse("Workspace conversions retrieved successfully", conversions, 200),
 		);
 	});
 

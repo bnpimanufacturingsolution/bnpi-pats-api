@@ -13,7 +13,12 @@ const TEST_TIMEOUT = 5000;
 
 describe("Demand Controller", () => {
 	let demandController: any;
-	let req: Partial<Request>;
+	type TestRequest = Omit<Partial<Request>, "get"> & {
+		workspaceId?: string;
+		organizationId?: string;
+		get?: any;
+	};
+	let req: TestRequest;
 	let res: Response;
 	let next: NextFunction;
 	let prisma: any;
@@ -29,7 +34,7 @@ describe("Demand Controller", () => {
 		code: "TOY-A",
 		name: "Toy A",
 		description: "Starter toy car",
-		brand: "BNPI Play",
+		brand: "Bandai PATS",
 		category: "Toys",
 		variant: "Starter",
 		unitOfMeasure: "PCS",
@@ -48,7 +53,7 @@ describe("Demand Controller", () => {
 		code: "TOY-B",
 		name: "Toy B",
 		description: "Assembly toy robot",
-		brand: "BNPI Play",
+		brand: "Bandai PATS",
 		category: "Toys",
 		variant: "Assembly",
 		unitOfMeasure: "PCS",
@@ -67,7 +72,7 @@ describe("Demand Controller", () => {
 		code: "TOY-C",
 		name: "Toy C",
 		description: "Premium toy set",
-		brand: "BNPI Play",
+		brand: "Bandai PATS",
 		category: "Toys",
 		variant: "Premium",
 		unitOfMeasure: "PCS",
@@ -412,7 +417,7 @@ describe("Demand Controller", () => {
 				}
 				return undefined;
 			},
-		} as Request;
+		};
 		res = {
 			send: (data: any) => {
 				sentData = data;

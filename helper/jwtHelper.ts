@@ -42,7 +42,7 @@ export function generateAccessToken(payload: TokenPayload): string {
 			expiresIn: ACCESS_TOKEN_EXPIRY as never,
 			algorithm: "HS256",
 			issuer: "bnpi-pats-api",
-			audience: "pms-client",
+			audience: "bandai-pats-client",
 		};
 		const token = jwt.sign(payload, JWT_SECRET, options);
 
@@ -77,7 +77,7 @@ export function generateRefreshToken(payload: TokenPayload): string {
 			expiresIn: REFRESH_TOKEN_EXPIRY as never,
 			algorithm: "HS256",
 			issuer: "bnpi-pats-api",
-			audience: "pms-client",
+			audience: "bandai-pats-client",
 		};
 		const token = jwt.sign(refreshPayload, JWT_REFRESH_SECRET, options);
 
@@ -119,7 +119,7 @@ export function verifyAccessToken(token: string): TokenPayload {
 		const decoded = jwt.verify(token, JWT_SECRET, {
 			algorithms: ["HS256"],
 			issuer: "bnpi-pats-api",
-			audience: "pms-client",
+			audience: "bandai-pats-client",
 		}) as TokenPayload;
 
 		return decoded;
@@ -151,7 +151,7 @@ export function verifyRefreshToken(token: string): { userId: string; role: strin
 		const decoded = jwt.verify(token, JWT_REFRESH_SECRET, {
 			algorithms: ["HS256"],
 			issuer: "bnpi-pats-api",
-			audience: "pms-client",
+			audience: "bandai-pats-client",
 		}) as Record<string, unknown>;
 
 		// Ensure it's actually a refresh token
