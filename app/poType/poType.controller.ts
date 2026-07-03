@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 
@@ -98,7 +98,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(poType, res, "POType", poTypeLogger, id)) return;
+		assertFound(poType, "POType", poTypeLogger, id);
 
 		poTypeLogger.info(`PO Type retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.PO_TYPE.RETRIEVED, poType, 200));
@@ -116,7 +116,8 @@ export const controller = (prisma: PrismaClient) => {
 		const updateData: UpdatePOType = { ...validatedData };
 		const { existingPOType, updatedPOType } = await repository.update(id, updateData, workspaceId);
 
-		if (handleUpdateNotFound(existingPOType, updatedPOType, res, "POType", poTypeLogger, id)) return;
+		assertFound(existingPOType, "POType", poTypeLogger, id);
+		assertFound(updatedPOType, "POType", poTypeLogger, id);
 
 		poTypeLogger.info(`PO Type updated: ${id}`);
 
@@ -133,7 +134,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingPOType = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingPOType, res, "POType", poTypeLogger, id)) return;
+		assertFound(existingPOType, "POType", poTypeLogger, id);
 
 		poTypeLogger.info(`PO Type deleted: ${id}`);
 

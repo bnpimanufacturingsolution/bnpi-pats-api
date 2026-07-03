@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -95,7 +95,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(payslip, res, "Payslip", payslipLogger, id)) return;
+		assertFound(payslip, "Payslip", payslipLogger, id);
 
 		payslipLogger.info(`Payslip retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.PAYSLIP.RETRIEVED, payslip, 200));
@@ -112,7 +112,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingPayslip, updatedPayslip } = await repository.update(id, validatedData, workspaceId);
 
-		if (handleUpdateNotFound(existingPayslip, updatedPayslip, res, "Payslip", payslipLogger, id)) return;
+		assertFound(existingPayslip, "Payslip", payslipLogger, id);
+		assertFound(updatedPayslip, "Payslip", payslipLogger, id);
 
 		payslipLogger.info(`Payslip updated: ${id}`);
 
@@ -129,7 +130,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingPayslip = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingPayslip, res, "Payslip", payslipLogger, id)) return;
+		assertFound(existingPayslip, "Payslip", payslipLogger, id);
 
 		payslipLogger.info(`Payslip deleted: ${id}`);
 

@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -97,7 +97,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(order, res, "Order", orderLogger, id)) return;
+		assertFound(order, "Order", orderLogger, id);
 
 		orderLogger.info(`Order retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.ORDER.RETRIEVED, order, 200));
@@ -115,7 +115,8 @@ export const controller = (prisma: PrismaClient) => {
 		const updateData: UpdateOrder = { ...validatedData };
 		const { existingOrder, updatedOrder } = await repository.update(id, updateData, workspaceId);
 
-		if (handleUpdateNotFound(existingOrder, updatedOrder, res, "Order", orderLogger, id)) return;
+		assertFound(existingOrder, "Order", orderLogger, id);
+		assertFound(updatedOrder, "Order", orderLogger, id);
 
 		orderLogger.info(`Order updated: ${id}`);
 
@@ -132,7 +133,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingOrder = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingOrder, res, "Order", orderLogger, id)) return;
+		assertFound(existingOrder, "Order", orderLogger, id);
 
 		orderLogger.info(`Order deleted: ${id}`);
 

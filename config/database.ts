@@ -1,9 +1,8 @@
-import { PrismaClient } from "../generated/prisma";
 import { getLogger } from "../helper/logger";
 import { config } from "./config";
 import { redisClient } from "./redis";
+import { prisma } from "./prisma";
 
-const prisma = new PrismaClient();
 const logger = getLogger();
 
 export async function connectDb() {

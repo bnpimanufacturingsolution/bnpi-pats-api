@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { buildErrorResponse, handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { buildErrorResponse, validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, CachePatterns, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll, logExport } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -202,7 +202,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(project, res, "Project", projectLogger, id)) return;
+		assertFound(project, "Project", projectLogger, id);
 
 		projectLogger.info(`Project retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.PROJECT.RETRIEVED, project, 200));
@@ -219,12 +219,13 @@ export const controller = (prisma: PrismaClient) => {
 
 		// Get existing project to merge capital/actualExpenses if only one is being updated
 		const existing = await repository.getById({ where: { id, workspaceId } });
-		if (handleNotFound(existing, res, "Project", projectLogger, id)) return;
+		assertFound(existing, "Project", projectLogger, id);
 
 		const updateData: UpdateProject = { ...validatedData };
 		const { existingProject, updatedProject } = await repository.update(id, updateData, workspaceId);
 
-		if (handleUpdateNotFound(existingProject, updatedProject, res, "Project", projectLogger, id)) return;
+		assertFound(existingProject, "Project", projectLogger, id);
+		assertFound(updatedProject, "Project", projectLogger, id);
 
 		projectLogger.info(`Project updated: ${id}`);
 
@@ -241,7 +242,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingProject = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingProject, res, "Project", projectLogger, id)) return;
+		assertFound(existingProject, "Project", projectLogger, id);
 
 		projectLogger.info(`Project deleted: ${id}`);
 

@@ -4,6 +4,11 @@ import { validate, validateObjectId } from "../../middleware/validate";
 import { transformFormData } from "../../middleware/transformFormData";
 import { CreatePurchaseOrderSchema, UpdatePurchaseOrderSchema } from "../../zod/purchaseOrder.zod";
 import { validateWorkspaceId } from "../../middleware/validateWorkspaceId";
+import { requireWorkspaceRole } from "../../middleware/workspaceAuth";
+
+const READ_ROLES = ["OWNER", "ADMIN", "MEMBER", "VIEWER"];
+const WRITE_ROLES = ["OWNER", "ADMIN", "MEMBER"];
+const DELETE_ROLES = ["OWNER", "ADMIN"];
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): void;
@@ -49,6 +54,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/:id/export-pdf",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		validateObjectId("id"),
 		controller.exportPdf,
 	);
@@ -85,6 +91,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/:id",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		validateObjectId("id"),
 		cache({
 			ttl: 90,
@@ -136,6 +143,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		cache({
 			ttl: 60,
 			keyGenerator: (req: Request) => {
@@ -175,7 +183,14 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       201:
 	 *         description: Purchase order created successfully
 	 */
-	routes.post("/", validateWorkspaceId, transformFormData, validate(CreatePurchaseOrderSchema), controller.create);
+	routes.post(
+		"/",
+		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
+		transformFormData,
+		validate(CreatePurchaseOrderSchema),
+		controller.create,
+	);
 
 	/**
 	 * @openapi
@@ -205,6 +220,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.patch(
 		"/:id",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		validateObjectId("id"),
 		transformFormData,
 		validate(UpdatePurchaseOrderSchema),
@@ -230,7 +246,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       200:
 	 *         description: Purchase order deleted successfully
 	 */
-	routes.delete("/:id", validateWorkspaceId, validateObjectId("id"), controller.remove);
+	routes.delete("/:id", validateWorkspaceId, requireWorkspaceRole(DELETE_ROLES), validateObjectId("id"), controller.remove);
 
 	route.use(path, routes);
 

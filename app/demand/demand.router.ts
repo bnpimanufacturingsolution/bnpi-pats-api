@@ -3,6 +3,7 @@ import { cache } from "../../middleware/cache";
 import { validate, validateObjectId } from "../../middleware/validate";
 import { transformFormData } from "../../middleware/transformFormData";
 import { validateWorkspaceId } from "../../middleware/validateWorkspaceId";
+import { requireWorkspaceRole } from "../../middleware/workspaceAuth";
 import {
 	CreateDemandPlanSchema,
 	UpdateDemandPlanSchema,
@@ -12,6 +13,10 @@ import {
 	UpdateDemandEstimateVersionSchema,
 	CreateProjectConversionSchema,
 } from "../../zod/demand.zod";
+
+const READ_ROLES = ["OWNER", "ADMIN", "MEMBER", "VIEWER"];
+const WRITE_ROLES = ["OWNER", "ADMIN", "MEMBER"];
+const DELETE_ROLES = ["OWNER", "ADMIN"];
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): void;
@@ -38,6 +43,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		cache({
 			ttl: 60,
 			keyGenerator: (req: Request) => {
@@ -51,6 +57,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post(
 		"/",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		transformFormData,
 		validate(CreateDemandPlanSchema),
 		controller.create,
@@ -59,6 +66,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/:id",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		validateObjectId("id"),
 		controller.getById,
 	);
@@ -66,17 +74,19 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.patch(
 		"/:id",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		validateObjectId("id"),
 		transformFormData,
 		validate(UpdateDemandPlanSchema),
 		controller.update,
 	);
 
-	routes.delete("/:id", validateWorkspaceId, validateObjectId("id"), controller.remove);
+	routes.delete("/:id", validateWorkspaceId, requireWorkspaceRole(DELETE_ROLES), validateObjectId("id"), controller.remove);
 
 	routes.post(
 		"/:id/lines",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		validateObjectId("id"),
 		transformFormData,
 		validate(CreateDemandLineSchema),
@@ -86,6 +96,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.patch(
 		"/:id/lines/:lineId",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		validateObjectId("id"),
 		validateObjectId("lineId"),
 		transformFormData,
@@ -96,16 +107,24 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.delete(
 		"/:id/lines/:lineId",
 		validateWorkspaceId,
+		requireWorkspaceRole(DELETE_ROLES),
 		validateObjectId("id"),
 		validateObjectId("lineId"),
 		controller.removeLine,
 	);
 
-	routes.get("/:id/versions", validateWorkspaceId, validateObjectId("id"), controller.getVersions);
+	routes.get(
+		"/:id/versions",
+		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
+		validateObjectId("id"),
+		controller.getVersions,
+	);
 
 	routes.post(
 		"/:id/versions",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		validateObjectId("id"),
 		transformFormData,
 		validate(CreateDemandEstimateVersionSchema),
@@ -115,6 +134,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/:id/versions/:versionId",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		validateObjectId("id"),
 		validateObjectId("versionId"),
 		controller.getVersionById,
@@ -123,6 +143,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.patch(
 		"/:id/versions/:versionId",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		validateObjectId("id"),
 		validateObjectId("versionId"),
 		transformFormData,
@@ -133,6 +154,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.delete(
 		"/:id/versions/:versionId",
 		validateWorkspaceId,
+		requireWorkspaceRole(DELETE_ROLES),
 		validateObjectId("id"),
 		validateObjectId("versionId"),
 		controller.removeVersion,
@@ -141,6 +163,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/:id/project-conversions",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		validateObjectId("id"),
 		controller.getProjectConversions,
 	);
@@ -148,6 +171,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post(
 		"/:id/project-conversions",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		validateObjectId("id"),
 		transformFormData,
 		validate(CreateProjectConversionSchema),

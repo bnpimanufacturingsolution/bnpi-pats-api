@@ -2,6 +2,7 @@ import { Response, NextFunction } from "express";
 import { PrismaClient } from "../generated/prisma";
 import { createLogger } from "../helper/logger";
 import { AuthRequest } from "./verifyToken";
+import { prisma } from "../config/prisma";
 
 const logger = createLogger("project-auth");
 
@@ -105,3 +106,9 @@ export const createProjectAuth = (prisma: PrismaClient) => {
 
 	return { requireProjectAccess };
 };
+
+/**
+ * Ready-to-use middleware bound to the app's shared PrismaClient.
+ * Use this in routers instead of calling createProjectAuth directly.
+ */
+export const { requireProjectAccess } = createProjectAuth(prisma);

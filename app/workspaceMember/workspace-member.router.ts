@@ -1,7 +1,11 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { validate, validateObjectId } from "../../middleware/validate";
 import { validateWorkspaceId } from "../../middleware/validateWorkspaceId";
+import { requireWorkspaceRole } from "../../middleware/workspaceAuth";
 import { AddWorkspaceMemberSchema, UpdateWorkspaceMemberRoleSchema } from "../../zod/workspaceMember.zod";
+
+const ANY_MEMBER = ["OWNER", "ADMIN", "MEMBER", "VIEWER"];
+const MANAGE_MEMBERS = ["OWNER", "ADMIN"];
 
 interface IController {
 	add(req: Request, res: Response, next: NextFunction): void;
@@ -50,7 +54,13 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       200:
 	 *         description: Member retrieved successfully
 	 */
-	routes.get("/:id", validateWorkspaceId, validateObjectId("id"), controller.getById);
+	routes.get(
+		"/:id",
+		validateWorkspaceId,
+		validateObjectId("id"),
+		requireWorkspaceRole(ANY_MEMBER),
+		controller.getById,
+	);
 
 	/**
 	 * @openapi
@@ -64,7 +74,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       200:
 	 *         description: Members retrieved successfully
 	 */
-	routes.get("/", validateWorkspaceId, controller.getAll);
+	routes.get("/", validateWorkspaceId, requireWorkspaceRole(ANY_MEMBER), controller.getAll);
 
 	/**
 	 * @openapi
@@ -78,7 +88,13 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       201:
 	 *         description: Member added successfully
 	 */
-	routes.post("/", validateWorkspaceId, validate(AddWorkspaceMemberSchema), controller.add);
+	routes.post(
+		"/",
+		validateWorkspaceId,
+		requireWorkspaceRole(MANAGE_MEMBERS),
+		validate(AddWorkspaceMemberSchema),
+		controller.add,
+	);
 
 	/**
 	 * @openapi
@@ -96,6 +112,7 @@ export const router = (route: Router, controller: IController): Router => {
 		"/:id/role",
 		validateWorkspaceId,
 		validateObjectId("id"),
+		requireWorkspaceRole(MANAGE_MEMBERS),
 		validate(UpdateWorkspaceMemberRoleSchema),
 		controller.updateRole,
 	);
@@ -112,7 +129,13 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       200:
 	 *         description: Member removed successfully
 	 */
-	routes.delete("/:id", validateWorkspaceId, validateObjectId("id"), controller.remove);
+	routes.delete(
+		"/:id",
+		validateWorkspaceId,
+		validateObjectId("id"),
+		requireWorkspaceRole(MANAGE_MEMBERS),
+		controller.remove,
+	);
 
 	route.use(path, routes);
 

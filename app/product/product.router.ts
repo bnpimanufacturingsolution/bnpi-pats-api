@@ -3,9 +3,14 @@ import { cache } from "../../middleware/cache";
 import { validate, validateObjectId } from "../../middleware/validate";
 import { transformFormData } from "../../middleware/transformFormData";
 import { validateWorkspaceId } from "../../middleware/validateWorkspaceId";
+import { requireWorkspaceRole } from "../../middleware/workspaceAuth";
 import { CreateProductSchema, UpdateProductSchema } from "../../zod/product.zod";
 import { controller } from "./product.controller";
 import { Permission, requirePermission } from "../../middleware/rbac";
+
+const READ_ROLES = ["OWNER", "ADMIN", "MEMBER", "VIEWER"];
+const WRITE_ROLES = ["OWNER", "ADMIN", "MEMBER"];
+const DELETE_ROLES = ["OWNER", "ADMIN"];
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): void;
@@ -36,6 +41,7 @@ export const router = (route: Router, productController: IController): Router =>
 	routes.get(
 		"/generate-code",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		requirePermission(Permission.PRODUCT_CREATE),
 		productController.generateCode,
 	);
@@ -53,6 +59,7 @@ export const router = (route: Router, productController: IController): Router =>
 	routes.get(
 		"/:id",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		validateObjectId("id"),
 		requirePermission(Permission.PRODUCT_READ),
 		cache({
@@ -78,6 +85,7 @@ export const router = (route: Router, productController: IController): Router =>
 	routes.get(
 		"/",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		requirePermission(Permission.PRODUCT_READ),
 		cache({
 			ttl: 300,
@@ -102,6 +110,7 @@ export const router = (route: Router, productController: IController): Router =>
 	routes.post(
 		"/",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		requirePermission(Permission.PRODUCT_CREATE),
 		transformFormData,
 		validate(CreateProductSchema),
@@ -121,6 +130,7 @@ export const router = (route: Router, productController: IController): Router =>
 	routes.patch(
 		"/:id",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		validateObjectId("id"),
 		requirePermission(Permission.PRODUCT_UPDATE),
 		transformFormData,
@@ -141,6 +151,7 @@ export const router = (route: Router, productController: IController): Router =>
 	routes.delete(
 		"/:id",
 		validateWorkspaceId,
+		requireWorkspaceRole(DELETE_ROLES),
 		validateObjectId("id"),
 		requirePermission(Permission.PRODUCT_DELETE),
 		productController.remove,

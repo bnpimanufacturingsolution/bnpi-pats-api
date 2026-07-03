@@ -27,6 +27,10 @@ pnpm dev
 ## ✨ Key Features
 
 ### Core Modules
+- **Workspace (Multi-Tenancy)** - Workspaces are the tenant boundary; `WorkspaceMember` and `ProjectMember` control per-tenant/per-project access
+- **Product & Manufacturing** - Product master records with BOM, production, and cost assumption data
+- **Purchase Orders, Delivery Orders & Invoices** - Procurement and fulfillment tracking, including payment terms and schedules
+- **Demand Planning** - Demand plans, versions, and project-conversion workflows
 - **Legacy Project Modules** - Complete project lifecycle management with status tracking
 - **Estimation System** - Detailed cost estimation with CAPEX/OPEX/MISC breakdown
 - **Item Management** - Flexible item tracking with custom fields and hierarchies
@@ -34,7 +38,7 @@ pnpm dev
 - **Category Management** - Organize items and costs by categories
 - **Vendor Management** - Track vendors, contacts, and orders
 - **Order Processing** - Purchase order management with delivery tracking
-- **Payslip Management** - Employee payment tracking and reporting
+- **Employee & Payslip Management** - Employee records synced from SSO/HRIS and payment tracking
 - **Field System** - Dynamic custom fields (common & custom) with multiple types
 - **Template System** - Reusable templates for estimations and projects
 - **Sequential System** - Auto-incrementing number generators for documents
@@ -55,11 +59,23 @@ pnpm dev
 ```
 bnpi-pats-api/
 ├── app/                        # Application modules (controllers, routes, repositories)
+│   ├── workspace/              # Tenant/workspace CRUD
+│   ├── workspaceMember/        # Per-workspace membership & roles
+│   ├── projectMember/          # Per-project membership & roles
+│   ├── product/                # Product master data (BOM, production, cost)
+│   ├── purchaseOrder/          # Purchase orders
+│   ├── deliveryOrder/          # Delivery orders
+│   ├── invoice/                # Invoices
+│   ├── paymentTerm/            # Payment terms
+│   ├── paymentSchedule/        # Payment schedules
+│   ├── poType/                 # PO type configuration
+│   ├── demand/                 # Demand planning
+│   ├── employee/               # Employee records (SSO/HRIS sync)
 │   ├── category/              # Category management
 │   ├── estimation/            # Estimation system
 │   ├── field/                 # Custom fields
 │   ├── item/                  # Item management
-│   ├── itemType/              # Item type categorization (NEW)
+│   ├── itemType/              # Item type categorization
 │   ├── order/                 # Order processing
 │   ├── payslip/               # Payslip management
 │   ├── project/               # Project management
@@ -69,14 +85,17 @@ bnpi-pats-api/
 ├── config/                    # Configuration files
 ├── generated/                 # Generated Prisma client
 ├── helper/                    # Helper utilities
-│   ├── query-builder.ts      # Query construction
+│   ├── query-builder.ts      # Query construction (DMMF-validated filter/sort)
 │   ├── validation-helper.ts  # Request validation
 │   ├── success-handler.ts    # Success responses
 │   └── error-handler.ts      # Error handling
 ├── middleware/               # Express middleware
-│   ├── auth.ts              # Authentication
-│   ├── cache.ts             # Redis caching
-│   └── upload.ts            # File uploads
+│   ├── verifyToken.ts        # JWT verification (auth is issued by an external SSO)
+│   ├── validateWorkspaceId.ts # Validates the x-workspace-id header format
+│   ├── workspaceAuth.ts      # Workspace membership/role enforcement
+│   ├── projectAuth.ts        # Project membership/role enforcement
+│   ├── cache.ts              # Redis caching
+│   └── upload.ts             # File uploads
 ├── prisma/                  # Database schema and seeds
 │   ├── schema/              # Prisma schema files
 │   │   ├── project.prisma
@@ -97,12 +116,13 @@ bnpi-pats-api/
 │   │   ├── fieldSeeder.ts
 │   │   └── ...
 │   └── seed.ts              # Main seeder orchestrator
-├── tests/                   # Comprehensive test suites
+├── tests/                   # Mocha/Chai/Supertest specs (controller-level, mostly mocked Prisma)
 │   ├── project.controller.spec.ts
 │   ├── estimation.controller.spec.ts
 │   ├── item.controller.spec.ts
-│   ├── itemType.controller.spec.ts  # (NEW)
+│   ├── itemType.controller.spec.ts
 │   ├── field.controller.spec.ts
+│   ├── workspace-authorization.spec.ts  # Integration test: cross-workspace access is denied
 │   └── ...
 ├── utils/                   # Utility functions
 │   ├── calculations.ts     # Financial calculations
@@ -115,13 +135,14 @@ bnpi-pats-api/
 │   ├── itemType.zod.ts    # (NEW)
 │   └── ...
 └── docs/                   # API documentation
-    ├── USER_JOURNEY.md     # End-to-End Workflow & Scenarios
-    └── frontend_integration_guide.md
+    ├── openApiSpecs.ts     # Swagger/OpenAPI spec source
+    ├── openApiOptions.json
+    ├── models/             # Generated model docs
+    └── generated/          # Generated swagger/postman exports (via `pnpm export-docs`)
 
 ## 📚 Documentation
-- **[User Journey & Workflow](docs/USER_JOURNEY.md)** - Complete guide from project creation to financial tracking.
-- **[Frontend Integration](docs/frontend_integration_guide.md)** - Technical guide for implementing the API.
-- **[Migration Guide](docs/MIGRATION_GUIDE_TRANSACTION_NUMBERS.md)** - Details on recent breaking changes.
+- **Swagger UI** - Served at `/api/docs` when the server is running (see `docs/openApiSpecs.ts`).
+- **[Milestone Completion](docs/MILESTONE_COMPLETION.md)** - Delivery status notes.
 ```
 
 ## 📊 Database Schema - ER Diagram
@@ -388,7 +409,7 @@ If you want the local infrastructure to come up in containers instead of using a
 
 ## 🧪 Testing
 
-The project includes comprehensive test suites for all modules:
+Most modules have controller-level unit tests with a fully mocked Prisma client — they cover CRUD/validation/error-handling logic but do not exercise the real Express middleware chain (auth, workspace authorization, rate limiting). `tests/workspace-authorization.spec.ts` is the exception: it builds a real middleware chain and is the only integration-style test in the suite.
 
 ```bash
 # Run all tests
@@ -399,12 +420,13 @@ pnpm test -- tests/itemType.controller.spec.ts
 ```
 
 ### Test Coverage
-- **25+ test cases** for ItemType module
-- **CRUD operations** testing for all modules
-- **Validation testing** for all input scenarios
+- **CRUD operations** unit testing for most modules (mocked Prisma)
+- **Validation testing** for common input scenarios
 - **Error handling** testing for edge cases
 - **Soft delete** functionality testing
 - **Filtering, sorting, pagination** testing
+- **Cross-workspace access control** integration testing (`workspace-authorization.spec.ts`)
+- Not yet covered: integration tests for most other routers' auth/authorization middleware, and real-database tests
 
 ## 🌱 Database Seeding
 
@@ -567,7 +589,7 @@ npx prisma studio         # Open Prisma Studio (database GUI)
 - [x] Category subtotals
 - [x] Item hierarchy (parent-child)
 - [x] Document upload (Cloudinary)
-- [x] Comprehensive test suites (25+ tests per module)
+- [x] Controller-level unit test suites (mocked Prisma) plus one cross-workspace authorization integration test
 - [x] Database seeders for all modules
 - [x] OpenAPI/Swagger documentation
 

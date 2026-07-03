@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -97,7 +97,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(paymentTerm, res, "PaymentTerm", paymentTermLogger, id)) return;
+		assertFound(paymentTerm, "PaymentTerm", paymentTermLogger, id);
 
 		paymentTermLogger.info(`Payment Term retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.PAYMENT_TERM.RETRIEVED, paymentTerm, 200));
@@ -115,7 +115,8 @@ export const controller = (prisma: PrismaClient) => {
 		const updateData: UpdatePaymentTerm = { ...validatedData };
 		const { existingPaymentTerm, updatedPaymentTerm } = await repository.update(id, updateData, workspaceId);
 
-		if (handleUpdateNotFound(existingPaymentTerm, updatedPaymentTerm, res, "PaymentTerm", paymentTermLogger, id)) return;
+		assertFound(existingPaymentTerm, "PaymentTerm", paymentTermLogger, id);
+		assertFound(updatedPaymentTerm, "PaymentTerm", paymentTermLogger, id);
 
 		paymentTermLogger.info(`Payment Term updated: ${id}`);
 
@@ -132,7 +133,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingPaymentTerm = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingPaymentTerm, res, "PaymentTerm", paymentTermLogger, id)) return;
+		assertFound(existingPaymentTerm, "PaymentTerm", paymentTermLogger, id);
 
 		paymentTermLogger.info(`Payment Term deleted: ${id}`);
 

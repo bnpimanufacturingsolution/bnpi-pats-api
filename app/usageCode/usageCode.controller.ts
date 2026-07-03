@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound } from "../../helper/error-handler";
+import { assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -101,7 +101,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const usageCode = await repository.getById(query);
 
-		if (handleNotFound(usageCode, res, "UsageCode", usageCodeLogger, id)) return;
+		assertFound(usageCode, "UsageCode", usageCodeLogger, id);
 
 		usageCodeLogger.info(`UsageCode retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.USAGE_CODE.RETRIEVED, usageCode, 200));
@@ -114,7 +114,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingUsageCode, updatedUsageCode } = await repository.update(id, validatedData, workspaceId);
 
-		if (handleUpdateNotFound(existingUsageCode, updatedUsageCode, res, "UsageCode", usageCodeLogger, id)) return;
+		assertFound(existingUsageCode, "UsageCode", usageCodeLogger, id);
+		assertFound(updatedUsageCode, "UsageCode", usageCodeLogger, id);
 
 		usageCodeLogger.info(`UsageCode updated: ${id}`);
 
@@ -131,7 +132,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const usageCode = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(usageCode, res, "UsageCode", usageCodeLogger, id)) return;
+		assertFound(usageCode, "UsageCode", usageCodeLogger, id);
 
 		usageCodeLogger.info(`UsageCode deleted: ${id}`);
 

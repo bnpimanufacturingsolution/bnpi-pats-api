@@ -28,6 +28,12 @@ module.exports = {
 	resolve: {
 		// Add in `.ts` and `.tsx` as a resolvable extension.
 		extensions: [".webpack.js", ".web.js", ".ts", ".tsx", ".js", ".json", ".yaml"],
+		// TS's node16/nodenext module resolution requires explicit ".js"
+		// specifiers on relative imports of ".ts" source files; resolve those
+		// back to the real ".ts" file here.
+		extensionAlias: {
+			".js": [".ts", ".js"],
+		},
 		modules: ["./node_modules", "node_modules"],
 	},
 	resolveLoader: {

@@ -46,3 +46,8 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+if (env.NODE_ENV === "production" && env.ENABLE_TEST_MODE === "true") {
+	console.error("❌ ENABLE_TEST_MODE=true is not allowed when NODE_ENV=production (it bypasses authentication).");
+	process.exit(1);
+}

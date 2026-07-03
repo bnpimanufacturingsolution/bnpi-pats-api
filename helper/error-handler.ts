@@ -74,43 +74,6 @@ export function assertFound<T>(
 }
 
 /**
- * @deprecated Use `assertFound` instead. This function now throws NotFoundError.
- * Kept for backward compatibility during migration.
- */
-export function handleNotFound<T>(
-	entity: T | null | undefined,
-	_res: unknown,
-	entityType: string,
-	logger?: Logger,
-	id?: string,
-): entity is null | undefined {
-	if (!entity) {
-		logger?.warn(`${entityType} not found${id ? `: ${id}` : ""}`);
-		throw new NotFoundError(entityType, id);
-	}
-	return false;
-}
-
-/**
- * @deprecated Use `assertFound` on the updated entity instead. This function now throws NotFoundError.
- * Kept for backward compatibility during migration.
- */
-export function handleUpdateNotFound<T>(
-	existing: T | null | undefined,
-	updated: T | null | undefined,
-	_res: unknown,
-	entityType: string,
-	logger?: Logger,
-	id?: string,
-): boolean {
-	if (!existing || !updated) {
-		logger?.warn(`${entityType} not found for update${id ? `: ${id}` : ""}`);
-		throw new NotFoundError(entityType, id);
-	}
-	return false;
-}
-
-/**
  * Validate required ID parameter — throws BadRequestError if missing.
  */
 export function validateRequiredId(

@@ -11,10 +11,9 @@ import {
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
 import {
-	handleNotFound,
-	handleUpdateNotFound,
 	validateUpdatePayload,
 	buildErrorResponse,
+	assertFound,
 } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 
@@ -212,7 +211,7 @@ export const controller = (prisma: PrismaClient): IEmployeeController => {
 			return result;
 		});
 
-		if (handleNotFound(employee, res, "Employee", employeeLogger, id)) return;
+		assertFound(employee, "Employee", employeeLogger, id);
 
 		employeeLogger.info(`Employee retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.EMPLOYEE.RETRIEVED, employee, 200));
@@ -314,7 +313,8 @@ export const controller = (prisma: PrismaClient): IEmployeeController => {
 			workspaceId
 		);
 
-		if (handleUpdateNotFound(existingEmployee, updatedEmployee, res, "Employee", employeeLogger, id)) return;
+		assertFound(existingEmployee, "Employee", employeeLogger, id);
+		assertFound(updatedEmployee, "Employee", employeeLogger, id);
 
 		employeeLogger.info(`Employee updated: ${id}`);
 		await invalidateEntityCache("employee", employeeLogger, id);
@@ -330,7 +330,7 @@ export const controller = (prisma: PrismaClient): IEmployeeController => {
 
 		const existingEmployee = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingEmployee, res, "Employee", employeeLogger, id)) return;
+		assertFound(existingEmployee, "Employee", employeeLogger, id);
 
 		employeeLogger.info(`Employee deleted: ${id}`);
 		await invalidateEntityCache("employee", employeeLogger, id);
@@ -396,7 +396,7 @@ export const controller = (prisma: PrismaClient): IEmployeeController => {
 			externalSource as string | undefined
 		);
 
-		if (handleNotFound(employee, res, "Employee", employeeLogger, externalId)) return;
+		assertFound(employee, "Employee", employeeLogger, externalId);
 
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.EMPLOYEE.RETRIEVED, employee, 200));
 	});

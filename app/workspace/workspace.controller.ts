@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 
@@ -72,6 +72,17 @@ export const controller = (prisma: PrismaClient) => {
 		workspaceLogger.info(`Getting workspaces, page: ${page}, limit: ${limit}`);
 
 		const whereClause: Prisma.WorkspaceWhereInput = { isDeleted: false };
+
+		// Superadmins can browse every workspace; everyone else only sees
+		// workspaces they're a member of.
+		if (req.role !== "superadmin") {
+			const memberships = await prisma.workspaceMember.findMany({
+				where: { userId: req.userId, isDeleted: false },
+				select: { workspaceId: true },
+			});
+			whereClause.id = { in: memberships.map((m) => m.workspaceId) };
+		}
+
 		const searchFields = ["name", "code", "description"];
 
 		if (query) {
@@ -114,7 +125,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(workspace, res, "Workspace", workspaceLogger, id)) return;
+		assertFound(workspace, "Workspace", workspaceLogger, id);
 
 		workspaceLogger.info(`Workspace retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.WORKSPACE.RETRIEVED, workspace, 200));
@@ -130,7 +141,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingWorkspace, updatedWorkspace } = await repository.update(id, validatedData);
 
-		if (handleUpdateNotFound(existingWorkspace, updatedWorkspace, res, "Workspace", workspaceLogger, id)) return;
+		assertFound(existingWorkspace, "Workspace", workspaceLogger, id);
+		assertFound(updatedWorkspace, "Workspace", workspaceLogger, id);
 
 		workspaceLogger.info(`Workspace updated: ${id}`);
 
@@ -146,7 +158,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingWorkspace = await repository.remove(id);
 
-		if (handleNotFound(existingWorkspace, res, "Workspace", workspaceLogger, id)) return;
+		assertFound(existingWorkspace, "Workspace", workspaceLogger, id);
 
 		workspaceLogger.info(`Workspace deleted: ${id}`);
 

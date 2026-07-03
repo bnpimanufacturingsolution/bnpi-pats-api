@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { buildErrorResponse, handleNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { buildErrorResponse, validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, CachePatterns, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll, logExport } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -105,7 +105,7 @@ export const controller = (prisma: PrismaClient) => {
 		// Verify project exists
 		const project = await repository.findProjectById(validatedData.projectId);
 
-		if (handleNotFound(project, res, "Project", estimationLogger, validatedData.projectId)) return;
+		assertFound(project, "Project", estimationLogger, validatedData.projectId);
 
 		// Auto-generate estimation number if not provided (per project)
 		let estimationNumber = validatedData.estimationNumber;
@@ -281,7 +281,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(estimation, res, "Estimation", estimationLogger, id)) return;
+		assertFound(estimation, "Estimation", estimationLogger, id);
 
 		estimationLogger.info(`Estimation retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.ESTIMATION.RETRIEVED, estimation, 200));
@@ -299,13 +299,13 @@ export const controller = (prisma: PrismaClient) => {
 		// First get existing estimation to check if it exists and for calculations
 		const tempExisting = await repository.getById({ where: { id, isDeleted: false, workspaceId } });
 
-		if (handleNotFound(tempExisting, res, "Estimation", estimationLogger, id)) return;
+		assertFound(tempExisting, "Estimation", estimationLogger, id);
 
 		const updateData: UpdateEstimation = { ...validatedData };
 
 		const { existingEstimation, updatedEstimation } = await repository.update(id, updateData, workspaceId);
 
-		if (handleNotFound(existingEstimation, res, "Estimation", estimationLogger, id)) return;
+		assertFound(existingEstimation, "Estimation", estimationLogger, id);
 
 		logUpdate(req, "Estimation", id, existingEstimation!, { ...updatedEstimation!, name: updatedEstimation!.estimationNumber });
 		await invalidateEntityCache("estimation", estimationLogger, id, [`cache:project:byId:${existingEstimation!.projectId}:*`]);
@@ -341,7 +341,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingEstimation = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingEstimation, res, "Estimation", estimationLogger, id)) return;
+		assertFound(existingEstimation, "Estimation", estimationLogger, id);
 
 		estimationLogger.info(`Estimation deleted: ${id}`);
 
@@ -370,7 +370,7 @@ export const controller = (prisma: PrismaClient) => {
 		// Verify project exists
 		const project = await repository.findProjectById(projectId);
 
-		if (handleNotFound(project, res, "Project", estimationLogger, projectId)) return;
+		assertFound(project, "Project", estimationLogger, projectId);
 
 		// Check if an approved estimation already exists for this project
 		const approvedEstimation = await prisma.estimation.findFirst({
@@ -414,7 +414,7 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
-			if (handleNotFound(sourceEstimation, res, "Source estimation", estimationLogger, sourceEstimationId)) return;
+			assertFound(sourceEstimation, "Source estimation", estimationLogger, sourceEstimationId);
 			estimationLogger.info(
 				`Copying from specific estimation: ${sourceEstimation.estimationNumber}`,
 			);
@@ -434,7 +434,7 @@ export const controller = (prisma: PrismaClient) => {
 				orderBy: { createdAt: "desc" },
 			});
 
-			if (handleNotFound(sourceEstimation, res, "Estimation to copy from", estimationLogger, projectId)) return;
+			assertFound(sourceEstimation, "Estimation to copy from", estimationLogger, projectId);
 			estimationLogger.info(
 				`Copying from latest estimation: ${sourceEstimation.estimationNumber}`,
 			);

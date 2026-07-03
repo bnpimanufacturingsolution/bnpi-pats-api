@@ -10,9 +10,8 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import {
-	handleNotFound,
-	handleUpdateNotFound,
 	validateUpdatePayload,
+	assertFound,
 } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { groupDataByField } from "../../helper/dataGrouping";
@@ -388,7 +387,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(demandPlan, res, "DemandPlan", demandLogger, id)) return;
+		assertFound(demandPlan, "DemandPlan", demandLogger, id);
 
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.DEMAND_PLAN.RETRIEVED, demandPlan, 200));
 	});
@@ -406,7 +405,8 @@ export const controller = (prisma: PrismaClient) => {
 		};
 
 		const { existingPlan, updatedPlan } = await repository.updatePlan(id, updateData, workspaceId);
-		if (handleUpdateNotFound(existingPlan, updatedPlan, res, "DemandPlan", demandLogger, id)) return;
+		assertFound(existingPlan, "DemandPlan", demandLogger, id);
+		assertFound(updatedPlan, "DemandPlan", demandLogger, id);
 
 		logUpdate(req, "DemandPlan", id, existingPlan!, {
 			...updatedPlan!,
@@ -422,7 +422,7 @@ export const controller = (prisma: PrismaClient) => {
 		const { id } = req.params as { id: string };
 
 		const removedPlan = await repository.removePlan(id, workspaceId);
-		if (handleNotFound(removedPlan, res, "DemandPlan", demandLogger, id)) return;
+		assertFound(removedPlan, "DemandPlan", demandLogger, id);
 
 		logDelete(req, "DemandPlan", { ...removedPlan!, name: removedPlan!.planCode });
 		await invalidateEntityCache("demandPlan", demandLogger, id);
@@ -438,10 +438,10 @@ export const controller = (prisma: PrismaClient) => {
 		const plan = await repository.getById({
 			where: { id, workspaceId, isDeleted: false },
 		});
-		if (handleNotFound(plan, res, "DemandPlan", demandLogger, id)) return;
+		assertFound(plan, "DemandPlan", demandLogger, id);
 
 		const product = await repository.findProductById(validatedData.productId, workspaceId);
-		if (handleNotFound(product, res, "Product", demandLogger, validatedData.productId)) return;
+		assertFound(product, "Product", demandLogger, validatedData.productId);
 
 		const existingLines = await repository.findLinesByPlanId(id, workspaceId);
 		const lineNo = validatedData.lineNo ?? getNextNumericSequence(existingLines.map((line) => line.lineNo));
@@ -470,12 +470,12 @@ export const controller = (prisma: PrismaClient) => {
 
 		const validatedData = req.body as UpdateDemandLine;
 		const existingLine = await repository.getLineById(lineId, workspaceId);
-		if (handleNotFound(existingLine?.demandPlanId === id ? existingLine : null, res, "DemandLine", demandLogger, lineId)) return;
+		assertFound(existingLine?.demandPlanId === id ? existingLine : null, "DemandLine", demandLogger, lineId);
 
 		let product = null;
 		if (validatedData.productId) {
 			product = await repository.findProductById(validatedData.productId, workspaceId);
-			if (handleNotFound(product, res, "Product", demandLogger, validatedData.productId)) return;
+			assertFound(product, "Product", demandLogger, validatedData.productId);
 		}
 
 		const updateData: UpdateDemandLine = {
@@ -490,7 +490,8 @@ export const controller = (prisma: PrismaClient) => {
 		};
 
 		const { existingLine: before, updatedLine } = await repository.updateLine(lineId, updateData, workspaceId);
-		if (handleUpdateNotFound(before, updatedLine, res, "DemandLine", demandLogger, lineId)) return;
+		assertFound(before, "DemandLine", demandLogger, lineId);
+		assertFound(updatedLine, "DemandLine", demandLogger, lineId);
 
 		logUpdate(req, "DemandLine", lineId, before!, {
 			...updatedLine!,
@@ -506,10 +507,10 @@ export const controller = (prisma: PrismaClient) => {
 		const { id, lineId } = req.params as { id: string; lineId: string };
 
 		const existingLine = await repository.getLineById(lineId, workspaceId);
-		if (handleNotFound(existingLine?.demandPlanId === id ? existingLine : null, res, "DemandLine", demandLogger, lineId)) return;
+		assertFound(existingLine?.demandPlanId === id ? existingLine : null, "DemandLine", demandLogger, lineId);
 
 		const removedLine = await repository.removeLine(lineId, workspaceId);
-		if (handleNotFound(removedLine, res, "DemandLine", demandLogger, lineId)) return;
+		assertFound(removedLine, "DemandLine", demandLogger, lineId);
 
 		logDelete(req, "DemandLine", { ...removedLine!, name: removedLine!.productName });
 		await invalidateEntityCache("demandPlan", demandLogger, id);
@@ -536,7 +537,7 @@ export const controller = (prisma: PrismaClient) => {
 			},
 		})) as DemandPlanWithRelations | null;
 
-		if (handleNotFound(plan, res, "DemandPlan", demandLogger, id)) return;
+		assertFound(plan, "DemandPlan", demandLogger, id);
 
 		const nextVersionNumber =
 			validatedData.versionNumber ??
@@ -566,7 +567,7 @@ export const controller = (prisma: PrismaClient) => {
 				}
 
 				const product = await repository.findProductById(productId, workspaceId);
-				if (handleNotFound(product, res, "Product", demandLogger, productId)) return null;
+				assertFound(product, "Product", demandLogger, productId);
 
 				return {
 					workspaceId,
@@ -693,7 +694,7 @@ export const controller = (prisma: PrismaClient) => {
 			where: { id, workspaceId, isDeleted: false },
 			select: { id: true },
 		});
-		if (handleNotFound(plan, res, "DemandPlan", demandLogger, id)) return;
+		assertFound(plan, "DemandPlan", demandLogger, id);
 
 		const cacheKey = `cache:demandPlan:${id}:versions:${workspaceId}`;
 		const versions = await getOrFetch(cacheKey, async () => repository.findVersionsByPlanId(id, workspaceId));
@@ -714,7 +715,7 @@ export const controller = (prisma: PrismaClient) => {
 			});
 		});
 
-		if (handleNotFound(version, res, "DemandEstimateVersion", demandLogger, versionId)) return;
+		assertFound(version, "DemandEstimateVersion", demandLogger, versionId);
 
 		res.status(200).json(
 			buildSuccessResponse("Demand estimate version retrieved successfully", version, 200),
@@ -726,16 +727,7 @@ export const controller = (prisma: PrismaClient) => {
 		const { id, versionId } = req.params as { id: string; versionId: string };
 
 		const versionBeforeUpdate = await repository.getVersionById(versionId, workspaceId);
-		if (
-			handleNotFound(
-				versionBeforeUpdate?.demandPlanId === id ? versionBeforeUpdate : null,
-				res,
-				"DemandEstimateVersion",
-				demandLogger,
-				versionId,
-			)
-		)
-			return;
+		assertFound(versionBeforeUpdate?.demandPlanId === id ? versionBeforeUpdate : null, "DemandEstimateVersion", demandLogger, versionId);
 
 		if (!validateUpdatePayload(req.body, res, demandLogger)) return;
 
@@ -746,9 +738,8 @@ export const controller = (prisma: PrismaClient) => {
 			workspaceId,
 		);
 
-		if (handleUpdateNotFound(existingVersion, updatedVersion, res, "DemandEstimateVersion", demandLogger, versionId)) {
-			return;
-		}
+		assertFound(existingVersion, "DemandEstimateVersion", demandLogger, versionId);
+		assertFound(updatedVersion, "DemandEstimateVersion", demandLogger, versionId);
 
 		logUpdate(req, "DemandEstimateVersion", versionId, existingVersion!, {
 			...updatedVersion!,
@@ -766,19 +757,10 @@ export const controller = (prisma: PrismaClient) => {
 		const { id, versionId } = req.params as { id: string; versionId: string };
 
 		const versionBeforeDelete = await repository.getVersionById(versionId, workspaceId);
-		if (
-			handleNotFound(
-				versionBeforeDelete?.demandPlanId === id ? versionBeforeDelete : null,
-				res,
-				"DemandEstimateVersion",
-				demandLogger,
-				versionId,
-			)
-		)
-			return;
+		assertFound(versionBeforeDelete?.demandPlanId === id ? versionBeforeDelete : null, "DemandEstimateVersion", demandLogger, versionId);
 
 		const removedVersion = await repository.removeEstimateVersion(versionId, workspaceId);
-		if (handleNotFound(removedVersion, res, "DemandEstimateVersion", demandLogger, versionId)) return;
+		assertFound(removedVersion, "DemandEstimateVersion", demandLogger, versionId);
 
 		logDelete(req, "DemandEstimateVersion", {
 			...removedVersion!,
@@ -805,9 +787,7 @@ export const controller = (prisma: PrismaClient) => {
 			},
 		});
 
-		if (handleNotFound(version, res, "DemandEstimateVersion", demandLogger, validatedData.demandEstimateVersionId)) {
-			return;
-		}
+		assertFound(version, "DemandEstimateVersion", demandLogger, validatedData.demandEstimateVersionId);
 
 		const conversion = await repository.createProjectConversion({
 			workspaceId,
@@ -841,7 +821,7 @@ export const controller = (prisma: PrismaClient) => {
 			where: { id, workspaceId, isDeleted: false },
 			select: { id: true },
 		});
-		if (handleNotFound(plan, res, "DemandPlan", demandLogger, id)) return;
+		assertFound(plan, "DemandPlan", demandLogger, id);
 
 		const cacheKey = `cache:demandPlan:${id}:projectConversions:${workspaceId}`;
 		const conversions = await getOrFetch(cacheKey, async () =>

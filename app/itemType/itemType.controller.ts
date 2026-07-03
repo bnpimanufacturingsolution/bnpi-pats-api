@@ -8,7 +8,7 @@ import {
 	buildSearchConditions,
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
-import { handleNotFound, handleUpdateNotFound } from "../../helper/error-handler";
+import { assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -83,7 +83,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const itemType = await repository.getById({ where: { id, workspaceId } });
 
-		if (handleNotFound(itemType, res, "ItemType", itemTypeLogger, id)) return;
+		assertFound(itemType, "ItemType", itemTypeLogger, id);
 
 		itemTypeLogger.info(`ItemType retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.ITEM_TYPE.RETRIEVED, itemType, 200));
@@ -96,7 +96,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingItemType, updatedItemType } = await repository.update(id, validatedData, workspaceId);
 
-		if (handleUpdateNotFound(existingItemType, updatedItemType, res, "ItemType", itemTypeLogger, id)) return;
+		assertFound(existingItemType, "ItemType", itemTypeLogger, id);
+		assertFound(updatedItemType, "ItemType", itemTypeLogger, id);
 
 		itemTypeLogger.info(`ItemType updated: ${id}`);
 
@@ -112,7 +113,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const itemType = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(itemType, res, "ItemType", itemTypeLogger, id)) return;
+		assertFound(itemType, "ItemType", itemTypeLogger, id);
 
 		itemTypeLogger.info(`ItemType deleted: ${id}`);
 

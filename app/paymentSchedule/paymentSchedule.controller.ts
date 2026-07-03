@@ -9,7 +9,7 @@ import {
 	getNestedFields,
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
-import { buildErrorResponse, handleNotFound } from "../../helper/error-handler";
+import { buildErrorResponse, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logGetAll, logDelete } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -76,7 +76,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(paymentSchedule, res, "PaymentSchedule", paymentScheduleLogger, id)) return;
+		assertFound(paymentSchedule, "PaymentSchedule", paymentScheduleLogger, id);
 
 		paymentScheduleLogger.info(`Payment Schedule retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.PAYMENT_SCHEDULE.RETRIEVED, paymentSchedule, 200));
@@ -90,7 +90,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const schedule = await repository.getByPurchaseOrderId(purchaseOrderId, workspaceId);
 
-		if (handleNotFound(schedule, res, "PaymentSchedule", paymentScheduleLogger, purchaseOrderId)) return;
+		assertFound(schedule, "PaymentSchedule", paymentScheduleLogger, purchaseOrderId);
 
 		paymentScheduleLogger.info(`Payment Schedule retrieved for PO: ${purchaseOrderId}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.PAYMENT_SCHEDULE.RETRIEVED, schedule, 200));
@@ -142,7 +142,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingSchedule = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingSchedule, res, "PaymentSchedule", paymentScheduleLogger, id)) return;
+		assertFound(existingSchedule, "PaymentSchedule", paymentScheduleLogger, id);
 
 		paymentScheduleLogger.info(`Payment Schedule deleted: ${id}`);
 

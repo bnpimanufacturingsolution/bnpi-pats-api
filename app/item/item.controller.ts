@@ -16,7 +16,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { buildErrorResponse, handleNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { buildErrorResponse, validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -170,7 +170,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const item = await service.getItemById(id, fields as string | undefined, workspaceId);
 
-		if (handleNotFound(item, res, "Item", itemLogger, id)) return;
+		assertFound(item, "Item", itemLogger, id);
 
 		itemLogger.info(`Item retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.ITEM.RETRIEVED, item, 200));
@@ -188,7 +188,7 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const { existingItem, updatedItem, progress } = await service.updateItem(id, validatedData, workspaceId);
 
-			if (handleNotFound(existingItem, res, "Item", itemLogger, id)) return;
+			assertFound(existingItem, "Item", itemLogger, id);
 
 			itemLogger.info(`Item updated: ${id}`);
 
@@ -272,7 +272,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingItem, progress } = await service.deleteItem(id, workspaceId);
 
-		if (handleNotFound(existingItem, res, "Item", itemLogger, id)) return;
+		assertFound(existingItem, "Item", itemLogger, id);
 
 		itemLogger.info(`Item deleted: ${id}`);
 

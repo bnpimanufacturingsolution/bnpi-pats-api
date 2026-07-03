@@ -3,6 +3,18 @@ import { cache } from "../../middleware/cache";
 import { validate, validateObjectId } from "../../middleware/validate";
 import { transformFormData } from "../../middleware/transformFormData";
 import { CreateWorkspaceSchema, UpdateWorkspaceSchema } from "../../zod/workspace.zod";
+import { requireWorkspaceRole } from "../../middleware/workspaceAuth";
+import { AuthRequest } from "../../middleware/verifyToken";
+
+/**
+ * Workspace identity comes from the :id route param here, not the
+ * x-workspace-id header, so scope req.workspaceId to it before running
+ * requireWorkspaceRole.
+ */
+const scopeToRouteWorkspace = (req: Request, res: Response, next: NextFunction) => {
+	(req as AuthRequest).workspaceId = req.params.id;
+	next();
+};
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): void;
@@ -74,6 +86,8 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/:id",
 		validateObjectId("id"),
+		scopeToRouteWorkspace,
+		requireWorkspaceRole(["OWNER", "ADMIN", "MEMBER", "VIEWER"]),
 		cache({
 			ttl: 90,
 			keyGenerator: (req: Request) => {
@@ -140,6 +154,8 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.patch(
 		"/:id",
 		validateObjectId("id"),
+		scopeToRouteWorkspace,
+		requireWorkspaceRole(["OWNER", "ADMIN"]),
 		transformFormData,
 		validate(UpdateWorkspaceSchema),
 		controller.update,
@@ -158,7 +174,13 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       200:
 	 *         description: Workspace deleted successfully
 	 */
-	routes.delete("/:id", validateObjectId("id"), controller.remove);
+	routes.delete(
+		"/:id",
+		validateObjectId("id"),
+		scopeToRouteWorkspace,
+		requireWorkspaceRole(["OWNER"]),
+		controller.remove,
+	);
 
 	route.use(path, routes);
 

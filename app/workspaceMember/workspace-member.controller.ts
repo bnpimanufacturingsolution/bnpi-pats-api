@@ -9,7 +9,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound } from "../../helper/error-handler";
+import { assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -19,6 +19,16 @@ import asyncHandler from "../../middleware/asyncHandler";
 import { AuthRequest } from "../../middleware/verifyToken";
 
 const logger = createLogger("workspace-member");
+
+/**
+ * Only OWNER can grant/hold the OWNER role; ADMIN can grant MEMBER/VIEWER/ADMIN
+ * but not OWNER. requireWorkspaceRole has already confirmed the caller is at
+ * least ADMIN before these handlers run.
+ */
+const canGrantRole = (callerRole: string | undefined, targetRole: string): boolean => {
+	if (targetRole === "OWNER") return callerRole === "OWNER";
+	return true;
+};
 
 /**
  * Fetch user details from SSO by userId
@@ -64,6 +74,15 @@ export const controller = (prisma: PrismaClient) => {
 	const add = asyncHandler(async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const validatedData = req.body;
 		const workspaceId = req.workspaceId!;
+
+		if (!canGrantRole(req.workspaceMemberRole, validatedData.role)) {
+			res.status(403).json({
+				success: false,
+				message: "Only a workspace OWNER can grant the OWNER role",
+				code: 403,
+			});
+			return;
+		}
 
 		// Check if user is already a member
 		const existingMember = await repository.getByWorkspaceAndUser(workspaceId, validatedData.userId);
@@ -156,7 +175,7 @@ export const controller = (prisma: PrismaClient) => {
 			where: { id, workspaceId, isDeleted: false },
 		});
 
-		if (handleNotFound(member, res, "WorkspaceMember", logger, id)) return;
+		assertFound(member, "WorkspaceMember", logger, id);
 
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.WORKSPACE_MEMBER.RETRIEVED, member, 200));
 	});
@@ -188,12 +207,30 @@ export const controller = (prisma: PrismaClient) => {
 
 		logger.info(`Updating workspace member role: ${id} to ${role}`);
 
+		if (!canGrantRole(req.workspaceMemberRole, role)) {
+			res.status(403).json({
+				success: false,
+				message: "Only a workspace OWNER can grant the OWNER role",
+				code: 403,
+			});
+			return;
+		}
+
 		// If demoting from OWNER, check it's not the last owner
 		const existingMember = await repository.getById({
 			where: { id, workspaceId, isDeleted: false },
 		});
 
-		if (handleNotFound(existingMember, res, "WorkspaceMember", logger, id)) return;
+		assertFound(existingMember, "WorkspaceMember", logger, id);
+
+		if (existingMember!.userId === req.userId) {
+			res.status(403).json({
+				success: false,
+				message: "You cannot change your own workspace role",
+				code: 403,
+			});
+			return;
+		}
 
 		if (existingMember!.role === "OWNER" && role !== "OWNER") {
 			const ownerCount = await repository.countByRole(workspaceId, "OWNER");
@@ -210,7 +247,7 @@ export const controller = (prisma: PrismaClient) => {
 		const { existing, updated } = await repository.updateRole(id, role, workspaceId);
 
 		if (!updated) {
-			if (handleNotFound(existing, res, "WorkspaceMember", logger, id)) return;
+			assertFound(existing, "WorkspaceMember", logger, id);
 		}
 
 		logUpdate(req, "WorkspaceMember", id, existing!, updated!);
@@ -230,7 +267,7 @@ export const controller = (prisma: PrismaClient) => {
 			where: { id, workspaceId, isDeleted: false },
 		});
 
-		if (handleNotFound(existingMember, res, "WorkspaceMember", logger, id)) return;
+		assertFound(existingMember, "WorkspaceMember", logger, id);
 
 		if (existingMember!.role === "OWNER") {
 			const ownerCount = await repository.countByRole(workspaceId, "OWNER");
@@ -245,7 +282,7 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		const removed = await repository.remove(id, workspaceId);
-		if (handleNotFound(removed, res, "WorkspaceMember", logger, id)) return;
+		assertFound(removed, "WorkspaceMember", logger, id);
 
 		// Cascade: soft-delete all project memberships for this user in this workspace
 		await prisma.projectMember.updateMany({

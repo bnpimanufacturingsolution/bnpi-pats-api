@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -95,7 +95,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(template, res, "Template", templateLogger, id)) return;
+		assertFound(template, "Template", templateLogger, id);
 
 		templateLogger.info(`Template retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.TEMPLATE.RETRIEVED, template, 200));
@@ -112,7 +112,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingTemplate, updatedTemplate } = await repository.update(id, validatedData, workspaceId);
 
-		if (handleUpdateNotFound(existingTemplate, updatedTemplate, res, "Template", templateLogger, id)) return;
+		assertFound(existingTemplate, "Template", templateLogger, id);
+		assertFound(updatedTemplate, "Template", templateLogger, id);
 
 		templateLogger.info(`Template updated: ${id}`);
 
@@ -129,7 +130,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingTemplate = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingTemplate, res, "Template", templateLogger, id)) return;
+		assertFound(existingTemplate, "Template", templateLogger, id);
 
 		templateLogger.info(`Template deleted: ${id}`);
 

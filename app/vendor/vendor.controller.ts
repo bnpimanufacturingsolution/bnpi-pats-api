@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -95,7 +95,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(vendor, res, "Vendor", vendorLogger, id)) return;
+		assertFound(vendor, "Vendor", vendorLogger, id);
 
 		vendorLogger.info(`Vendor retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.VENDOR.RETRIEVED, vendor, 200));
@@ -112,7 +112,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingVendor, updatedVendor } = await repository.update(id, validatedData, workspaceId);
 
-		if (handleUpdateNotFound(existingVendor, updatedVendor, res, "Vendor", vendorLogger, id)) return;
+		assertFound(existingVendor, "Vendor", vendorLogger, id);
+		assertFound(updatedVendor, "Vendor", vendorLogger, id);
 
 		vendorLogger.info(`Vendor updated: ${id}`);
 
@@ -129,7 +130,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingVendor = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingVendor, res, "Vendor", vendorLogger, id)) return;
+		assertFound(existingVendor, "Vendor", vendorLogger, id);
 
 		vendorLogger.info(`Vendor deleted: ${id}`);
 

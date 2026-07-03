@@ -5,6 +5,11 @@ import { cache } from "../../middleware/cache";
 import { validate } from "../../middleware/validate";
 import { CreateFieldSchema, UpdateFieldSchema } from "../../zod/field.zod";
 import { validateWorkspaceId } from "../../middleware/validateWorkspaceId";
+import { requireWorkspaceRole } from "../../middleware/workspaceAuth";
+
+const READ_ROLES = ["OWNER", "ADMIN", "MEMBER", "VIEWER"];
+const WRITE_ROLES = ["OWNER", "ADMIN", "MEMBER"];
+const DELETE_ROLES = ["OWNER", "ADMIN"];
 
 const path = "/field";
 
@@ -17,7 +22,13 @@ export default (prisma: PrismaClient) => {
 	 * @desc    Create a new field
 	 * @access  Private
 	 */
-	router.post(path, validateWorkspaceId, validate(CreateFieldSchema), fieldController.create);
+	router.post(
+		path,
+		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
+		validate(CreateFieldSchema),
+		fieldController.create,
+	);
 
 	/**
 	 * @route   GET /api/field
@@ -35,6 +46,7 @@ export default (prisma: PrismaClient) => {
 	router.get(
 		path,
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		cache({
 			ttl: 300, // 5 minutes
 			keyGenerator: (req) => {
@@ -53,6 +65,7 @@ export default (prisma: PrismaClient) => {
 	router.get(
 		`${path}/:id`,
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		cache({
 			ttl: 300, // 5 minutes
 			keyGenerator: (req) => {
@@ -68,14 +81,20 @@ export default (prisma: PrismaClient) => {
 	 * @desc    Update field
 	 * @access  Private
 	 */
-	router.patch(`${path}/:id`, validateWorkspaceId, validate(UpdateFieldSchema), fieldController.update);
+	router.patch(
+		`${path}/:id`,
+		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
+		validate(UpdateFieldSchema),
+		fieldController.update,
+	);
 
 	/**
 	 * @route   DELETE /api/field/:id
 	 * @desc    Soft delete field
 	 * @access  Private
 	 */
-	router.delete(`${path}/:id`, validateWorkspaceId, fieldController.remove);
+	router.delete(`${path}/:id`, validateWorkspaceId, requireWorkspaceRole(DELETE_ROLES), fieldController.remove);
 
 	return router;
 };

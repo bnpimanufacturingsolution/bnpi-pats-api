@@ -8,7 +8,7 @@ import {
 	buildSearchConditions,
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
-import { handleNotFound, handleUpdateNotFound } from "../../helper/error-handler";
+import { assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete } from "../../helper/logging-helper";
 import { milestoneRepository } from "./milestone.repository";
@@ -83,7 +83,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const milestone = await repository.getById({ where: { id, workspaceId } });
 
-		if (handleNotFound(milestone, res, "Milestone", milestoneLogger, id)) return;
+		assertFound(milestone, "Milestone", milestoneLogger, id);
 
 		milestoneLogger.info(`Milestone retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.MILESTONE.RETRIEVED, milestone, 200));
@@ -96,7 +96,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingMilestone, updatedMilestone } = await repository.update(id, validatedData, workspaceId);
 
-		if (handleUpdateNotFound(existingMilestone, updatedMilestone, res, "Milestone", milestoneLogger, id)) return;
+		assertFound(existingMilestone, "Milestone", milestoneLogger, id);
+		assertFound(updatedMilestone, "Milestone", milestoneLogger, id);
 
 		milestoneLogger.info(`Milestone updated: ${id}`);
 
@@ -112,7 +113,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const milestone = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(milestone, res, "Milestone", milestoneLogger, id)) return;
+		assertFound(milestone, "Milestone", milestoneLogger, id);
 
 		milestoneLogger.info(`Milestone deleted: ${id}`);
 

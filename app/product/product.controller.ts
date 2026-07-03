@@ -4,7 +4,7 @@ import { createLogger } from "../../helper/logger";
 import { validateQueryParams } from "../../helper/validation-helper";
 import { buildFilterConditions, buildSearchConditions } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
-import { handleNotFound, handleUpdateNotFound } from "../../helper/error-handler";
+import { assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -130,7 +130,7 @@ export const controller = (prisma: PrismaClient) => {
 			include: PRODUCT_INCLUDE,
 		});
 
-		if (handleNotFound(product, res, "Product", productLogger, id)) return;
+		assertFound(product, "Product", productLogger, id);
 
 		productLogger.info(`Product retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.PRODUCT.RETRIEVED, product, 200));
@@ -143,7 +143,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingProduct, updatedProduct } = await repository.update(id, validatedData, workspaceId);
 
-		if (handleUpdateNotFound(existingProduct, updatedProduct, res, "Product", productLogger, id)) return;
+		assertFound(existingProduct, "Product", productLogger, id);
+		assertFound(updatedProduct, "Product", productLogger, id);
 
 		productLogger.info(`Product updated: ${id}`);
 
@@ -159,7 +160,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const product = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(product, res, "Product", productLogger, id)) return;
+		assertFound(product, "Product", productLogger, id);
 
 		productLogger.info(`Product deleted: ${id}`);
 

@@ -3,7 +3,12 @@ import { cache } from "../../middleware/cache";
 import { validate, validateObjectId } from "../../middleware/validate";
 import { transformFormData } from "../../middleware/transformFormData";
 import { validateWorkspaceId } from "../../middleware/validateWorkspaceId";
+import { requireWorkspaceRole } from "../../middleware/workspaceAuth";
 import { CreateCategorySchema, UpdateCategorySchema } from "../../zod/category.zod";
+
+const READ_ROLES = ["OWNER", "ADMIN", "MEMBER", "VIEWER"];
+const WRITE_ROLES = ["OWNER", "ADMIN", "MEMBER"];
+const DELETE_ROLES = ["OWNER", "ADMIN"];
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): void;
@@ -60,7 +65,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         description: Internal server error
 	 */
-	routes.get("/generate-code", validateWorkspaceId, controller.generateCode);
+	routes.get("/generate-code", validateWorkspaceId, requireWorkspaceRole(READ_ROLES), controller.generateCode);
 
 	/**
 	 * @openapi
@@ -98,6 +103,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/:id",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		validateObjectId("id"),
 		cache({
 			ttl: 90,
@@ -153,6 +159,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		cache({
 			ttl: 60,
 			keyGenerator: (req: Request) => {
@@ -215,7 +222,14 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         description: Internal server error
 	 */
-	routes.post("/", validateWorkspaceId, transformFormData, validate(CreateCategorySchema), controller.create);
+	routes.post(
+		"/",
+		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
+		transformFormData,
+		validate(CreateCategorySchema),
+		controller.create,
+	);
 
 	/**
 	 * @openapi
@@ -270,6 +284,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.patch(
 		"/:id",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		validateObjectId("id"),
 		transformFormData,
 		validate(UpdateCategorySchema),
@@ -301,7 +316,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         description: Internal server error
 	 */
-	routes.delete("/:id", validateWorkspaceId, validateObjectId("id"), controller.remove);
+	routes.delete("/:id", validateWorkspaceId, requireWorkspaceRole(DELETE_ROLES), validateObjectId("id"), controller.remove);
 
 	route.use(path, routes);
 

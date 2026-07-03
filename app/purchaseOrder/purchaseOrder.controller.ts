@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -101,7 +101,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(purchaseOrder, res, "PurchaseOrder", purchaseOrderLogger, id)) return;
+		assertFound(purchaseOrder, "PurchaseOrder", purchaseOrderLogger, id);
 
 		purchaseOrderLogger.info(`Purchase Order retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.PURCHASE_ORDER.RETRIEVED, purchaseOrder, 200));
@@ -118,7 +118,8 @@ export const controller = (prisma: PrismaClient) => {
 		const updateData: UpdatePurchaseOrder = { ...req.body };
 		const { existingPurchaseOrder, updatedPurchaseOrder } = await repository.update(id, updateData, workspaceId);
 
-		if (handleUpdateNotFound(existingPurchaseOrder, updatedPurchaseOrder, res, "PurchaseOrder", purchaseOrderLogger, id)) return;
+		assertFound(existingPurchaseOrder, "PurchaseOrder", purchaseOrderLogger, id);
+		assertFound(updatedPurchaseOrder, "PurchaseOrder", purchaseOrderLogger, id);
 
 		// Delegate all status-change side effects to the service
 		if (existingPurchaseOrder!.status !== updatedPurchaseOrder!.status) {
@@ -140,7 +141,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingPurchaseOrder = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingPurchaseOrder, res, "PurchaseOrder", purchaseOrderLogger, id)) return;
+		assertFound(existingPurchaseOrder, "PurchaseOrder", purchaseOrderLogger, id);
 
 		purchaseOrderLogger.info(`Purchase Order deleted: ${id}`);
 

@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -97,7 +97,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(invoice, res, "Invoice", invoiceLogger, id)) return;
+		assertFound(invoice, "Invoice", invoiceLogger, id);
 
 		invoiceLogger.info(`Invoice retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.INVOICE.RETRIEVED, invoice, 200));
@@ -115,7 +115,8 @@ export const controller = (prisma: PrismaClient) => {
 		const updateData: UpdateInvoice = { ...validatedData };
 		const { existingInvoice, updatedInvoice } = await repository.update(id, updateData, workspaceId);
 
-		if (handleUpdateNotFound(existingInvoice, updatedInvoice, res, "Invoice", invoiceLogger, id)) return;
+		assertFound(existingInvoice, "Invoice", invoiceLogger, id);
+		assertFound(updatedInvoice, "Invoice", invoiceLogger, id);
 
 		invoiceLogger.info(`Invoice updated: ${id}`);
 
@@ -132,7 +133,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingInvoice = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingInvoice, res, "Invoice", invoiceLogger, id)) return;
+		assertFound(existingInvoice, "Invoice", invoiceLogger, id);
 
 		invoiceLogger.info(`Invoice deleted: ${id}`);
 

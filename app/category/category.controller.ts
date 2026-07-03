@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound } from "../../helper/error-handler";
+import { assertFound } from "../../helper/error-handler";
 import { generateCodeFromName } from "../../helper/code-generator";
 import { invalidateEntityCache } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
@@ -105,7 +105,7 @@ export const controller = (prisma: PrismaClient) => {
 		const category = await repository.getById(query);
 
 		// Use helper for not found check
-		if (handleNotFound(category, res, "Category", categoryLogger, id)) return;
+		assertFound(category, "Category", categoryLogger, id);
 
 		categoryLogger.info(`Category retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.CATEGORY.RETRIEVED, category, 200));
@@ -119,7 +119,8 @@ export const controller = (prisma: PrismaClient) => {
 		const { existingCategory, updatedCategory } = await repository.update(id, validatedData, workspaceId);
 
 		// Use helper for not found check
-		if (handleUpdateNotFound(existingCategory, updatedCategory, res, "Category", categoryLogger, id)) return;
+		assertFound(existingCategory, "Category", categoryLogger, id);
+		assertFound(updatedCategory, "Category", categoryLogger, id);
 
 		categoryLogger.info(`Category updated: ${id}`);
 
@@ -138,7 +139,7 @@ export const controller = (prisma: PrismaClient) => {
 		const category = await repository.remove(id, workspaceId);
 
 		// Use helper for not found check
-		if (handleNotFound(category, res, "Category", categoryLogger, id)) return;
+		assertFound(category, "Category", categoryLogger, id);
 
 		categoryLogger.info(`Category deleted: ${id}`);
 

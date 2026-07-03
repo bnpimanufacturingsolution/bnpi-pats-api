@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { buildErrorResponse, handleNotFound, handleUpdateNotFound } from "../../helper/error-handler";
+import { buildErrorResponse, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 
@@ -111,7 +111,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(sequential, res, "Sequential", sequentialLogger, id)) return;
+		assertFound(sequential, "Sequential", sequentialLogger, id);
 
 		sequentialLogger.info(`Sequential retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.SEQUENTIAL.RETRIEVED, sequential, 200));
@@ -126,7 +126,7 @@ export const controller = (prisma: PrismaClient) => {
 			where: { id, isDeleted: false, workspaceId },
 		});
 
-		if (handleNotFound(existingSequential, res, "Sequential", sequentialLogger, id)) return;
+		assertFound(existingSequential, "Sequential", sequentialLogger, id);
 
 		// Check for duplicate name or code if they're being updated
 		if (validatedData.name || validatedData.code) {
@@ -151,7 +151,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingSequential: existingSequentialFromUpdate, updatedSequential } = await repository.update(id, validatedData, workspaceId);
 
-		if (handleUpdateNotFound(existingSequentialFromUpdate, updatedSequential, res, "Sequential", sequentialLogger, id)) return;
+		assertFound(existingSequentialFromUpdate, "Sequential", sequentialLogger, id);
+		assertFound(updatedSequential, "Sequential", sequentialLogger, id);
 
 		sequentialLogger.info(`Sequential updated: ${id}`);
 
@@ -168,7 +169,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const sequential = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(sequential, res, "Sequential", sequentialLogger, id)) return;
+		assertFound(sequential, "Sequential", sequentialLogger, id);
 
 		sequentialLogger.info(`Sequential deleted: ${id}`);
 

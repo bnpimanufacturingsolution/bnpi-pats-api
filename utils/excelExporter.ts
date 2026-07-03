@@ -1,3 +1,8 @@
+// xlsx@0.18.5 carries known prototype-pollution/ReDoS advisories in its
+// *parsing* path (XLSX.read/readFile). This module only ever writes
+// server-generated data via XLSX.write — it must stay that way. Do not add
+// XLSX.read/readFile calls against user-uploaded files without first
+// upgrading past this advisory.
 import * as XLSX from "xlsx";
 import { Response } from "express";
 import { createLogger } from "../helper/logger";

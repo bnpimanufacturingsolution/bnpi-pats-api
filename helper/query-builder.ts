@@ -37,15 +37,23 @@ export const buildFindManyQuery = <T extends unknown | undefined>(
 	fields?: string,
 	modelName: string = "Project",
 ): Record<string, unknown> => {
+	let orderBy: Record<string, unknown> = { id: order as Prisma.SortOrder };
+
+	if (sort) {
+		if (typeof sort === "string" && !sort.startsWith("{")) {
+			if (isValidField(modelName, sort)) orderBy = { [sort]: order };
+		} else {
+			const parsed = typeof sort === "string" ? JSON.parse(sort) : sort;
+			const sanitized = sanitizeSortObject(parsed, modelName);
+			if (Object.keys(sanitized).length > 0) orderBy = sanitized;
+		}
+	}
+
 	const query: Record<string, unknown> = {
 		where: whereClause,
 		skip,
 		take: limit,
-		orderBy: sort
-			? typeof sort === "string" && !sort.startsWith("{")
-				? { [sort]: order }
-				: JSON.parse(sort as string)
-			: { id: order as Prisma.SortOrder },
+		orderBy,
 	};
 
 	query.select = getNestedFields(fields, modelName);
@@ -64,6 +72,32 @@ function isValidField(modelName: string, fieldName: string): boolean {
 	if (type && type.fields.some((f) => f.name === fieldName)) return true;
 
 	return false;
+}
+
+/**
+ * Recursively strip any key from a parsed `orderBy` object that isn't a real
+ * field (or nested relation field) on the model, so a raw JSON sort payload
+ * can't reference fields outside the model's schema.
+ */
+function sanitizeSortObject(sortObj: unknown, modelName: string): Record<string, unknown> {
+	if (typeof sortObj !== "object" || sortObj === null || Array.isArray(sortObj)) return {};
+
+	const model = dmmf.datamodel.models.find((m) => m.name === modelName);
+	if (!model) return {};
+
+	const sanitized: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(sortObj as Record<string, unknown>)) {
+		const field = model.fields.find((f) => f.name === key);
+		if (!field) continue;
+
+		if (value === "asc" || value === "desc") {
+			sanitized[key] = value;
+		} else if (field.kind === "object") {
+			const nested = sanitizeSortObject(value, field.type);
+			if (Object.keys(nested).length > 0) sanitized[key] = nested;
+		}
+	}
+	return sanitized;
 }
 
 /**

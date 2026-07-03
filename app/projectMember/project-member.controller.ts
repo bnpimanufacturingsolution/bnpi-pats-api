@@ -9,7 +9,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound } from "../../helper/error-handler";
+import { assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -126,7 +126,7 @@ export const controller = (prisma: PrismaClient) => {
 			where: { id, workspaceId, isDeleted: false },
 		});
 
-		if (handleNotFound(member, res, "ProjectMember", logger, id)) return;
+		assertFound(member, "ProjectMember", logger, id);
 
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.PROJECT_MEMBER.RETRIEVED, member, 200));
 	});
@@ -182,7 +182,7 @@ export const controller = (prisma: PrismaClient) => {
 		const { existing, updated } = await repository.updateRole(id, role, workspaceId);
 
 		if (!updated) {
-			if (handleNotFound(existing, res, "ProjectMember", logger, id)) return;
+			assertFound(existing, "ProjectMember", logger, id);
 		}
 
 		logUpdate(req, "ProjectMember", id, existing!, updated!);
@@ -198,7 +198,7 @@ export const controller = (prisma: PrismaClient) => {
 		logger.info(`Removing project member: ${id}`);
 
 		const removed = await repository.remove(id, workspaceId);
-		if (handleNotFound(removed, res, "ProjectMember", logger, id)) return;
+		assertFound(removed, "ProjectMember", logger, id);
 
 		logDelete(req, "ProjectMember", removed!);
 		await invalidateEntityCache("projectMember", logger);

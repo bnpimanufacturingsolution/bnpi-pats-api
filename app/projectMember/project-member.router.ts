@@ -1,7 +1,12 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { validate, validateObjectId } from "../../middleware/validate";
 import { validateWorkspaceId } from "../../middleware/validateWorkspaceId";
+import { requireWorkspaceRole } from "../../middleware/workspaceAuth";
 import { AddProjectMemberSchema, UpdateProjectMemberRoleSchema } from "../../zod/projectMember.zod";
+
+const READ_ROLES = ["OWNER", "ADMIN", "MEMBER", "VIEWER"];
+const WRITE_ROLES = ["OWNER", "ADMIN", "MEMBER"];
+const DELETE_ROLES = ["OWNER", "ADMIN"];
 
 interface IController {
 	add(req: Request, res: Response, next: NextFunction): void;
@@ -38,6 +43,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/project/:projectId/me",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		validateObjectId("projectId"),
 		controller.getMyProjectRole,
 	);
@@ -63,6 +69,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get(
 		"/project/:projectId",
 		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
 		validateObjectId("projectId"),
 		controller.getByProject,
 	);
@@ -85,7 +92,13 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       200:
 	 *         description: Member retrieved successfully
 	 */
-	routes.get("/:id", validateWorkspaceId, validateObjectId("id"), controller.getById);
+	routes.get(
+		"/:id",
+		validateWorkspaceId,
+		requireWorkspaceRole(READ_ROLES),
+		validateObjectId("id"),
+		controller.getById,
+	);
 
 	/**
 	 * @openapi
@@ -99,7 +112,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       200:
 	 *         description: Members retrieved successfully
 	 */
-	routes.get("/", validateWorkspaceId, controller.getAll);
+	routes.get("/", validateWorkspaceId, requireWorkspaceRole(READ_ROLES), controller.getAll);
 
 	/**
 	 * @openapi
@@ -113,7 +126,13 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       201:
 	 *         description: Member added successfully
 	 */
-	routes.post("/", validateWorkspaceId, validate(AddProjectMemberSchema), controller.add);
+	routes.post(
+		"/",
+		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
+		validate(AddProjectMemberSchema),
+		controller.add,
+	);
 
 	/**
 	 * @openapi
@@ -130,6 +149,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.patch(
 		"/:id/role",
 		validateWorkspaceId,
+		requireWorkspaceRole(WRITE_ROLES),
 		validateObjectId("id"),
 		validate(UpdateProjectMemberRoleSchema),
 		controller.updateRole,
@@ -147,7 +167,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       200:
 	 *         description: Member removed successfully
 	 */
-	routes.delete("/:id", validateWorkspaceId, validateObjectId("id"), controller.remove);
+	routes.delete("/:id", validateWorkspaceId, requireWorkspaceRole(DELETE_ROLES), validateObjectId("id"), controller.remove);
 
 	route.use(path, routes);
 

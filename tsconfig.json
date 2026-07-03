@@ -2,13 +2,13 @@
 	"compilerOptions": {
 		"target": "ES6",
 		"strict": true,
-		"module": "commonjs",
+		"module": "node16",
 		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"outDir": "./dist",
 		"rootDir": ".",
 		"typeRoots": ["./node_modules/@types", "type"],
-		"moduleResolution": "node",
+		"moduleResolution": "node16",
 		"sourceMap": true,
 		"resolveJsonModule": true
 	},
@@ -21,5 +21,8 @@
 		"utils/**/*.ts",
 		"zod/**/*.ts"
 	],
-	"exclude": ["node_modules"]
+	"exclude": ["node_modules"],
+	"ts-node": {
+		"transpileOnly": true
+	}
 }

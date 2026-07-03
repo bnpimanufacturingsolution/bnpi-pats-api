@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { buildErrorResponse, handleNotFound } from "../../helper/error-handler";
+import { buildErrorResponse, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -236,7 +236,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(transaction, res, "Transaction", transactionLogger, id)) return;
+		assertFound(transaction, "Transaction", transactionLogger, id);
 
 		transactionLogger.info(`Transaction retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.TRANSACTION.RETRIEVED, transaction, 200));
@@ -310,7 +310,7 @@ export const controller = (prisma: PrismaClient) => {
 			workspaceId,
 		);
 
-		if (handleNotFound(existingTransaction, res, "Transaction", transactionLogger, id)) return;
+		assertFound(existingTransaction, "Transaction", transactionLogger, id);
 
 		// Sync item financials
 		await transactionService.syncFinancialsForModifiedTransaction(existingTransaction!, updatedTransaction!);
@@ -330,7 +330,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingTransaction = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingTransaction, res, "Transaction", transactionLogger, id)) return;
+		assertFound(existingTransaction, "Transaction", transactionLogger, id);
 
 		// Sync item financials
 		await transactionService.syncFinancialsForModifiedTransaction(existingTransaction!, null);
@@ -436,7 +436,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const updatedTransaction = await repository.setCleared(id, date);
 
-		if (handleNotFound(updatedTransaction, res, "Transaction", transactionLogger, id)) return;
+		assertFound(updatedTransaction, "Transaction", transactionLogger, id);
 
 		await invalidateEntityCache("transaction", transactionLogger, id);
 

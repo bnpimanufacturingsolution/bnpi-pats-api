@@ -7,7 +7,7 @@ import { Server } from "socket.io";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import swaggerUi from "swagger-ui-express";
-import { PrismaClient } from "./generated/prisma";
+import { prisma } from "./config/prisma";
 import { config } from "./config/config";
 import openApiSpecs from "./docs/openApiSpecs";
 import verifyToken from "./middleware/verifyToken";
@@ -55,7 +55,6 @@ if (!global.__errorHandlersRegistered) {
 // Wrap everything in try-catch
 try {
 	const app = express();
-	const prisma = new PrismaClient();
 
 	// Import route modules
 	const template = require("./app/template")(prisma);
@@ -151,7 +150,7 @@ try {
 	// Redis health check endpoint (requires authentication for detailed info)
 	app.get("/health/redis", verifyToken, async (req: Request, res: Response) => {
 		try {
-			const { redisClient } = await import("./config/redis");
+			const { redisClient } = await import("./config/redis.js");
 			const start = Date.now();
 			await redisClient.ping();
 			const latency = Date.now() - start;

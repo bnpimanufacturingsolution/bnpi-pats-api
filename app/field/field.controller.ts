@@ -8,7 +8,7 @@ import {
 	buildSearchConditions,
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
-import { handleNotFound, handleUpdateNotFound } from "../../helper/error-handler";
+import { assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete } from "../../helper/logging-helper";
 import { fieldRepository } from "./field.repository";
@@ -83,7 +83,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const field = await repository.getById({ where: { id, workspaceId } });
 
-		if (handleNotFound(field, res, "Field", fieldLogger, id)) return;
+		assertFound(field, "Field", fieldLogger, id);
 
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.FIELD.RETRIEVED, field, 200));
 	});
@@ -95,7 +95,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const { existingField, updatedField } = await repository.update(id, validatedData, workspaceId);
 
-		if (handleUpdateNotFound(existingField, updatedField, res, "Field", fieldLogger, id)) return;
+		assertFound(existingField, "Field", fieldLogger, id);
+		assertFound(updatedField, "Field", fieldLogger, id);
 
 		fieldLogger.info(`Field updated: ${id}`);
 
@@ -111,7 +112,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingField = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingField, res, "Field", fieldLogger, id)) return;
+		assertFound(existingField, "Field", fieldLogger, id);
 
 		fieldLogger.info(`Field deleted: ${id}`);
 

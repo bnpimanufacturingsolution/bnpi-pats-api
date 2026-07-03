@@ -10,7 +10,7 @@ import {
 } from "../../helper/query-builder";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
-import { handleNotFound, handleUpdateNotFound, validateUpdatePayload } from "../../helper/error-handler";
+import { validateUpdatePayload, assertFound } from "../../helper/error-handler";
 import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 import { logCreate, logUpdate, logDelete, logGetAll } from "../../helper/logging-helper";
 import { config } from "../../config/constant";
@@ -97,7 +97,7 @@ export const controller = (prisma: PrismaClient) => {
 			return repository.getById(query);
 		});
 
-		if (handleNotFound(deliveryOrder, res, "DeliveryOrder", deliveryOrderLogger, id)) return;
+		assertFound(deliveryOrder, "DeliveryOrder", deliveryOrderLogger, id);
 
 		deliveryOrderLogger.info(`Delivery Order retrieved: ${id}`);
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.DELIVERY_ORDER.RETRIEVED, deliveryOrder, 200));
@@ -115,7 +115,8 @@ export const controller = (prisma: PrismaClient) => {
 		const updateData: UpdateDeliveryOrder = { ...validatedData };
 		const { existingDeliveryOrder, updatedDeliveryOrder } = await repository.update(id, updateData, workspaceId);
 
-		if (handleUpdateNotFound(existingDeliveryOrder, updatedDeliveryOrder, res, "DeliveryOrder", deliveryOrderLogger, id)) return;
+		assertFound(existingDeliveryOrder, "DeliveryOrder", deliveryOrderLogger, id);
+		assertFound(updatedDeliveryOrder, "DeliveryOrder", deliveryOrderLogger, id);
 
 		deliveryOrderLogger.info(`Delivery Order updated: ${id}`);
 
@@ -132,7 +133,7 @@ export const controller = (prisma: PrismaClient) => {
 
 		const existingDeliveryOrder = await repository.remove(id, workspaceId);
 
-		if (handleNotFound(existingDeliveryOrder, res, "DeliveryOrder", deliveryOrderLogger, id)) return;
+		assertFound(existingDeliveryOrder, "DeliveryOrder", deliveryOrderLogger, id);
 
 		deliveryOrderLogger.info(`Delivery Order deleted: ${id}`);
 

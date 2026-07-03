@@ -3,6 +3,11 @@ import { cache } from "../../middleware/cache";
 import { validateObjectId } from "../../middleware/validate";
 import { EmployeeController } from "./employee.controller";
 import { validateWorkspaceId } from "../../middleware/validateWorkspaceId";
+import { requireWorkspaceRole } from "../../middleware/workspaceAuth";
+
+const READ_ROLES = ["OWNER", "ADMIN", "MEMBER", "VIEWER"];
+const WRITE_ROLES = ["OWNER", "ADMIN", "MEMBER"];
+const DELETE_ROLES = ["OWNER", "ADMIN"];
 
 /**
  * @openapi
@@ -69,6 +74,7 @@ export const router = (route: Router, controller: EmployeeController): Router =>
   routes.get(
     "/",
     validateWorkspaceId,
+    requireWorkspaceRole(READ_ROLES),
     cache({
       ttl: 60,
       keyGenerator: (req: Request) => {
@@ -93,7 +99,7 @@ export const router = (route: Router, controller: EmployeeController): Router =>
    *       401:
    *         $ref: '#/components/responses/Unauthorized'
    */
-  routes.get("/stats", validateWorkspaceId, controller.getStats);
+  routes.get("/stats", validateWorkspaceId, requireWorkspaceRole(READ_ROLES), controller.getStats);
 
   /**
    * @openapi
@@ -148,7 +154,7 @@ export const router = (route: Router, controller: EmployeeController): Router =>
    *       401:
    *         $ref: '#/components/responses/Unauthorized'
    */
-  routes.post("/sync", validateWorkspaceId, controller.sync);
+  routes.post("/sync", validateWorkspaceId, requireWorkspaceRole(WRITE_ROLES), controller.sync);
 
   /**
    * @openapi
@@ -162,7 +168,7 @@ export const router = (route: Router, controller: EmployeeController): Router =>
    *       200:
    *         description: Sync status including any issues
    */
-  routes.get("/sync/status", validateWorkspaceId, controller.getSyncStatus);
+  routes.get("/sync/status", validateWorkspaceId, requireWorkspaceRole(READ_ROLES), controller.getSyncStatus);
 
   /**
    * @openapi
@@ -176,7 +182,7 @@ export const router = (route: Router, controller: EmployeeController): Router =>
    *       200:
    *         description: List of employees with FAILED or PENDING sync status
    */
-  routes.get("/sync/issues", validateWorkspaceId, controller.getSyncIssues);
+  routes.get("/sync/issues", validateWorkspaceId, requireWorkspaceRole(READ_ROLES), controller.getSyncIssues);
 
   /**
    * @openapi
@@ -203,7 +209,12 @@ export const router = (route: Router, controller: EmployeeController): Router =>
    *       404:
    *         $ref: '#/components/responses/NotFound'
    */
-  routes.get("/external/:externalId", validateWorkspaceId, controller.getByExternalId);
+  routes.get(
+    "/external/:externalId",
+    validateWorkspaceId,
+    requireWorkspaceRole(READ_ROLES),
+    controller.getByExternalId
+  );
 
   /**
    * @openapi
@@ -230,6 +241,7 @@ export const router = (route: Router, controller: EmployeeController): Router =>
   routes.get(
     "/:id",
     validateWorkspaceId,
+    requireWorkspaceRole(READ_ROLES),
     validateObjectId("id"),
     cache({
       ttl: 90,
@@ -291,7 +303,7 @@ export const router = (route: Router, controller: EmployeeController): Router =>
    *       409:
    *         description: Duplicate email or employee number
    */
-  routes.post("/", validateWorkspaceId, controller.create);
+  routes.post("/", validateWorkspaceId, requireWorkspaceRole(WRITE_ROLES), controller.create);
 
   /**
    * @openapi
@@ -319,7 +331,13 @@ export const router = (route: Router, controller: EmployeeController): Router =>
    *       404:
    *         $ref: '#/components/responses/NotFound'
    */
-  routes.put("/:id", validateWorkspaceId, validateObjectId("id"), controller.update);
+  routes.put(
+    "/:id",
+    validateWorkspaceId,
+    requireWorkspaceRole(WRITE_ROLES),
+    validateObjectId("id"),
+    controller.update
+  );
 
   /**
    * @openapi
@@ -341,7 +359,13 @@ export const router = (route: Router, controller: EmployeeController): Router =>
    *       404:
    *         $ref: '#/components/responses/NotFound'
    */
-  routes.delete("/:id", validateWorkspaceId, validateObjectId("id"), controller.remove);
+  routes.delete(
+    "/:id",
+    validateWorkspaceId,
+    requireWorkspaceRole(DELETE_ROLES),
+    validateObjectId("id"),
+    controller.remove
+  );
 
   route.use(path, routes);
 
