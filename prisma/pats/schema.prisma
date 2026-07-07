@@ -1,0 +1,398 @@
+// =============================================================================
+// Bandai PATS — Manufacturing Domain Schema (DRAFT, PostgreSQL)
+// =============================================================================
+//
+// Status: PROPOSED (2026-07-07) — standalone draft, deliberately NOT part of the live
+// `prisma/schema` build (which remains the MongoDB-backed legacy PMS domain). Nothing imports
+// this yet; it exists so the API-side model is designed and validated against the frontend
+// domain before any runtime wiring. Mirrors `bnpi-pats-app/app/types/pats/*` one-to-one:
+//   WorkflowGroup / Stage / SubStage (generic admin-authored catalog)
+//   Project / ProductSpecification / Pmrs / PartsList / RoutingStep / Part / Lot
+//   Batch / BatchPartLine (execution containers)
+//   StageEvent / InventoryTransaction / RoutingViolation / ProcessChangeLog (append ledger)
+//   Station / WorkInstruction / UserPreference (2026-07-07 additions: stations, localization,
+//   first-time walkthrough)
+//
+// Conventions:
+// - Provider is PostgreSQL per the on-prem appliance alignment
+//   (docs/architecture/2026-07-07-pats-onprem-api-architecture-readiness.md, Decision 5.1):
+//   real versioned migrations (`prisma migrate`) over Mongo's `db push`.
+// - A "stage step" (the frontend's StageStepRef) is a (stageId, subStageId?) column pair.
+// - Localized text (frontend LocalizedText: { en, ja?, fil? }) is a Json column — en required
+//   by application-level validation, ja/fil optional.
+// - `workspaceId` scopes tenant-owned records to a Line (workspace), matching the existing
+//   API's per-tenant WorkspaceRole pattern. No cross-schema FK — the workspace lives in the
+//   legacy schema until this domain goes live.
+// - Ledger tables (StageEvent, InventoryTransaction, RoutingViolation, ProcessChangeLog) are
+//   append-oriented: no updatedAt, rows are never rewritten (violation resolution is the one
+//   sanctioned mutation, kept as explicit resolution fields).
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../generated/pats-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PATS_DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog (admin-authored, generic — no fixed stage enums anywhere)
+// ---------------------------------------------------------------------------
+
+enum LinkageMode {
+  LINKED
+  STANDALONE
+}
+
+model WorkflowGroup {
+  id           String      @id @default(uuid())
+  projectId    String
+  project      Project     @relation(fields: [projectId], references: [id])
+  name         String
+  linkageMode  LinkageMode
+  displayOrder Int
+  isSystemSeed Boolean     @default(false)
+  stages       Stage[]
+
+  @@index([projectId])
+}
+
+model Stage {
+  id              String        @id @default(uuid())
+  workflowGroupId String
+  workflowGroup   WorkflowGroup @relation(fields: [workflowGroupId], references: [id])
+  name            String
+  // Optional per-locale name overrides: { ja?: string, fil?: string }
+  nameLocalized   Json?
+  displayOrder    Int
+  isSystemSeed    Boolean       @default(false)
+  subStageLinks   SubStageEligibility[]
+
+  @@index([workflowGroupId])
+}
+
+model SubStage {
+  id                            String  @id @default(uuid())
+  name                          String
+  nameLocalized                 Json?
+  displayOrder                  Int
+  isSystemSeed                  Boolean @default(false)
+  isConfigurable                Boolean @default(true)
+  isBuffer                      Boolean @default(false)
+  hasQualityCheckpoint          Boolean @default(false)
+  isMandatoryCheckpoint         Boolean @default(false)
+  alwaysAlertOnRoutingViolation Boolean @default(true)
+  subProcessGroup               String?
+  isDisabled                    Boolean @default(false)
+  eligibleStages                SubStageEligibility[]
+}
+
+// A SubStage can be eligible under more than one Stage (the Capsulation/Assortment
+// Assembly-vs-Warehouse mechanism) — a join table, not a single parent FK.
+model SubStageEligibility {
+  stageId    String
+  stage      Stage    @relation(fields: [stageId], references: [id])
+  subStageId String
+  subStage   SubStage @relation(fields: [subStageId], references: [id])
+
+  @@id([stageId, subStageId])
+}
+
+// ---------------------------------------------------------------------------
+// Planning definition
+// ---------------------------------------------------------------------------
+
+model Project {
+  id                         String              @id @default(uuid())
+  workspaceId                String
+  projectCode                String              @unique
+  name                       String
+  requiredProductionQuantity Int
+  createdAt                  DateTime            @default(now())
+  productSpecification       ProductSpecification?
+  pmrs                       Pmrs?
+  partsLists                 PartsList[]
+  workflowGroups             WorkflowGroup[]
+  parts                      Part[]
+  lots                       Lot[]
+  processChangeLogs          ProcessChangeLog[]
+
+  @@index([workspaceId])
+}
+
+model ProductSpecification {
+  id                   String  @id @default(uuid())
+  projectId            String  @unique
+  project              Project @relation(fields: [projectId], references: [id])
+  skuCode              String
+  productName          String
+  trayQuantityStandard Int
+  createdAt            DateTime @default(now())
+}
+
+// Minimal placeholder — PMRS structure remains NEEDS_CONFIRMATION (BRD Open Question #2).
+// Do not extend without stakeholder confirmation.
+model Pmrs {
+  id          String    @id @default(uuid())
+  projectId   String    @unique
+  project     Project   @relation(fields: [projectId], references: [id])
+  partsListId String?
+}
+
+model PartsList {
+  id        String        @id @default(uuid())
+  projectId String
+  project   Project       @relation(fields: [projectId], references: [id])
+  version   Int
+  createdAt DateTime      @default(now())
+  steps     RoutingStep[]
+
+  @@unique([projectId, version])
+}
+
+// One ordered routing step for one Part inside one PartsList version — the frontend's
+// PartsListEntry.routingSteps flattened into rows. Ordering is the point: an unordered set
+// cannot express "Full Spray -> Mask Spray -> Tampo".
+model RoutingStep {
+  id          String    @id @default(uuid())
+  partsListId String
+  partsList   PartsList @relation(fields: [partsListId], references: [id])
+  partId      String
+  part        Part      @relation(fields: [partId], references: [id])
+  stageId     String
+  subStageId  String?
+  stepOrder   Int
+
+  @@unique([partsListId, partId, stepOrder])
+  @@index([partId])
+}
+
+model Part {
+  id           String        @id @default(uuid())
+  projectId    String
+  project      Project       @relation(fields: [projectId], references: [id])
+  partCode     String
+  partName     String
+  // Hybrid per-part variance tolerance — either, both, or neither bound may be set;
+  // application falls back to the system default (5%) when both are null.
+  variancePercentThreshold Float?
+  varianceAbsoluteFloor    Int?
+  routingSteps RoutingStep[]
+  lots         Lot[]
+
+  @@unique([projectId, partCode])
+}
+
+model Lot {
+  id               String   @id @default(uuid())
+  projectId        String
+  project          Project  @relation(fields: [projectId], references: [id])
+  lotCode          String   @unique
+  partsListId      String
+  partsListVersion Int
+  partId           String
+  part             Part     @relation(fields: [partId], references: [id])
+  partName         String
+  requiredQuantity Int
+  labelBreakdown   String
+  // Lot numbers are assigned once at Planning and never reassigned (client doc, stage 1).
+  createdAtStage   String   @default("Planning")
+  createdAt        DateTime @default(now())
+  batches          Batch[]
+}
+
+// ---------------------------------------------------------------------------
+// Execution containers
+// ---------------------------------------------------------------------------
+
+enum BatchStatus {
+  ACTIVE
+  HELD
+  CLOSED
+  SCRAPPED
+}
+
+model Batch {
+  id                 String          @id @default(uuid())
+  barcodeValue       String          @unique
+  lotId              String
+  lot                Lot             @relation(fields: [lotId], references: [id])
+  currentStageId     String
+  currentSubStageId  String?
+  status             BatchStatus     @default(ACTIVE)
+  createdAt          DateTime        @default(now())
+  parts              BatchPartLine[]
+
+  @@index([lotId])
+  @@index([currentStageId])
+}
+
+// Batch <-> Part cardinality is unconfirmed (domain foundation, Section 8) — modeled
+// many-per-batch as the more general reading, same as the frontend.
+model BatchPartLine {
+  batchId  String
+  batch    Batch  @relation(fields: [batchId], references: [id])
+  partId   String
+  quantity Int
+
+  @@id([batchId, partId])
+}
+
+// ---------------------------------------------------------------------------
+// Execution ledger (append-oriented, auditable)
+// ---------------------------------------------------------------------------
+
+enum StageEventType {
+  STAGE_SCAN_RECORDED
+  ROUTE_VALIDATED
+  ROUTING_VIOLATION_DETECTED
+  STAGE_COMPLETED
+  VARIANCE_FLAG_RAISED
+}
+
+model StageEvent {
+  id                 String            @id @default(uuid())
+  stageId            String
+  subStageId         String?
+  eventType          StageEventType
+  batchId            String
+  lotId              String
+  partId             String?
+  quantity           Int?
+  occurredAt         DateTime
+  actor              String
+  isRoutingViolation Boolean           @default(false)
+  routingViolation   RoutingViolation?
+
+  @@index([batchId, occurredAt])
+  @@index([stageId])
+}
+
+enum InventoryTransactionType {
+  RECEIVING
+  ISSUANCE
+}
+
+model InventoryTransaction {
+  id                String                   @id @default(uuid())
+  transactionType   InventoryTransactionType
+  batchId           String
+  partId            String
+  lotId             String
+  fromStageId       String?
+  fromSubStageId    String?
+  toStageId         String
+  toSubStageId      String?
+  expectedQuantity  Int
+  actualQuantity    Int
+  withdrawalFormRef String?
+  recordedAt        DateTime
+  recordedBy        String
+
+  @@index([batchId, recordedAt])
+  @@index([lotId])
+}
+
+model RoutingViolation {
+  id                 String     @id @default(uuid())
+  stageEventId       String     @unique
+  stageEvent         StageEvent @relation(fields: [stageEventId], references: [id])
+  batchId            String
+  lotId              String
+  partId             String
+  attemptedStageId   String
+  attemptedSubStageId String?
+  // The allowed route at detection time, denormalized as [{stageId, subStageId, order}] so the
+  // violation stays auditable even after the PartsList is versioned forward.
+  expectedSteps      Json
+  detectedAt         DateTime
+  resolved           Boolean    @default(false)
+  resolvedAt         DateTime?
+  resolvedBy         String?
+  resolutionNote     String?
+
+  @@index([batchId])
+  @@index([resolved])
+}
+
+model ProcessChangeLog {
+  id                 String   @id @default(uuid())
+  projectId          String
+  project            Project  @relation(fields: [projectId], references: [id])
+  lotId              String
+  batchId            String?
+  partId             String
+  previousStageId    String
+  previousSubStageId String?
+  newStageId         String
+  newSubStageId      String?
+  actor              String
+  reason             String
+  changedAt          DateTime
+
+  @@index([projectId, changedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Stations, localization, walkthrough (2026-07-07 model additions)
+// ---------------------------------------------------------------------------
+
+enum ScreenType {
+  COMPUTER
+  TABLET
+}
+
+model Station {
+  id              String        @id @default(uuid())
+  workspaceId     String
+  name            String
+  stageId         String
+  screenType      ScreenType    @default(COMPUTER)
+  scannerAttached Boolean       @default(true)
+  printerAttached Boolean       @default(true)
+  displayOrder    Int
+  isEnabled       Boolean       @default(true)
+  boundSteps      StationStep[]
+
+  @@index([workspaceId])
+}
+
+model StationStep {
+  stationId  String
+  station    Station @relation(fields: [stationId], references: [id])
+  stageId    String
+  subStageId String?
+  // Composite id needs a non-null member for subStageId-null base steps.
+  id         String  @id @default(uuid())
+
+  @@unique([stationId, stageId, subStageId])
+}
+
+model WorkInstruction {
+  id         String   @id @default(uuid())
+  stageId    String
+  subStageId String?
+  // Ordered steps, each a LocalizedText: [{ en, ja?, fil? }, ...]
+  steps      Json
+  version    Int      @default(1)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([stageId, subStageId, version])
+}
+
+enum Locale {
+  EN
+  JA
+  FIL
+}
+
+model UserPreference {
+  userId         String   @id
+  locale         Locale   @default(EN)
+  // Completed walkthrough tour keys, e.g. ["dashboard", "station"].
+  completedTours String[]
+  updatedAt      DateTime @updatedAt
+}
