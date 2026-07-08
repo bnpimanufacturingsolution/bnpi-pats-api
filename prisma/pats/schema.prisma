@@ -197,7 +197,10 @@ model Lot {
   part             Part     @relation(fields: [partId], references: [id])
   partName         String
   requiredQuantity Int
-  labelBreakdown   String
+  // Structured replacement for the PRD's free-text labelBreakdown (whiteboard stage-1 math:
+  // requiredQuantity / labelPackSize = countable labels, e.g. 100,000 / 200 = 500). Label counts
+  // are derived by the application, never stored.
+  labelPackSize    Int
   // Lot numbers are assigned once at Planning and never reassigned (client doc, stage 1).
   createdAtStage   String   @default("Planning")
   createdAt        DateTime @default(now())
