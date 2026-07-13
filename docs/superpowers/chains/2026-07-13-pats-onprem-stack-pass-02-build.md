@@ -7,7 +7,7 @@ Pass 1 baseline report: `docs/superpowers/reports/2026-07-13-pats-onprem-stack-b
 Make API install, build, and production startup deterministic with pnpm, Node 20, port 3000, and `dist/server.js`.
 
 ## Scope
-- Touch only: `package.json`, `Dockerfile`, `webpack.config.js`, `.env.example`, `nginx.conf`, `tsconfig.json` only when required, and `tests/build-contract.spec.ts`.
+- Touch only: `package.json`, `pnpm-lock.yaml`, `Dockerfile`, `webpack.config.js`, `.env.example`, `nginx.conf`, `tsconfig.json` only when required, and `tests/build-contract.spec.ts`.
 - Do not touch: `app/**`, `prisma/**`, `prisma/pats/**`, seeds, auth, legacy route registration, Compose services, the sibling app repository, or unrelated tests.
 
 ## Instructions
@@ -34,4 +34,3 @@ Agent stops and reports back (does not proceed) if:
 - Webpack output cannot be changed without changing runtime behavior outside this pass.
 - A production port cannot be standardized without an unresolved deployment decision.
 - The build requires legacy schema or seed changes to pass.
-
