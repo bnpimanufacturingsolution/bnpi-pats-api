@@ -21,7 +21,7 @@ module.exports = {
 		},
 	],
 	output: {
-		filename: "server.ts", // output file
+		filename: "server.js", // output file
 		path: path.join(__dirname, "dist"),
 		libraryTarget: "commonjs",
 	},
