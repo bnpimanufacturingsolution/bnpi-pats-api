@@ -63,6 +63,14 @@
 			}
 		}
 	},
-	"apis": ["./docs/models/*.yaml", "./app/**/*.router.ts", "./dist/**/*.router.js"]
+	"apis": [
+		"./docs/models/*.yaml",
+		"./app/docs/docs.router.ts",
+		"./app/workspace/workspace.router.ts",
+		"./app/workspaceMember/workspace-member.router.ts",
+		"./app/projectMember/project-member.router.ts",
+		"./app/employee/employee.router.ts",
+		"./app/product/product.router.ts"
+	]
 }
 

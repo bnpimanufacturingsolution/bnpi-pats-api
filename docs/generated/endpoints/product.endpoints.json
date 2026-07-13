@@ -1,0 +1,157 @@
+[
+  {
+    "id": "GET /api/product/generate-code",
+    "method": "GET",
+    "url": "/api/product/generate-code",
+    "summary": "Generate product code",
+    "description": "Generate the next available product code within the current workspace",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Product code generated successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/product/{id}",
+    "method": "GET",
+    "url": "/api/product/{id}",
+    "summary": "Get product by ID",
+    "description": "Retrieve a product and its production, BOM, and cost assumption data",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {},
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "PATCH /api/product/{id}",
+    "method": "PATCH",
+    "url": "/api/product/{id}",
+    "summary": "Update product",
+    "description": "Update a product master record by ID",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {},
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/product/{id}",
+    "method": "DELETE",
+    "url": "/api/product/{id}",
+    "summary": "Delete product",
+    "description": "Soft delete a product by ID",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {},
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/product",
+    "method": "GET",
+    "url": "/api/product",
+    "summary": "Get all products",
+    "description": "Retrieve products with filtering, searching, sorting, and pagination",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {},
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/product",
+    "method": "POST",
+    "url": "/api/product",
+    "summary": "Create new product",
+    "description": "Create a new product master record",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {},
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

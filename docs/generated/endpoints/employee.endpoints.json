@@ -1,0 +1,545 @@
+[
+  {
+    "id": "GET /api/employee",
+    "method": "GET",
+    "url": "/api/employee",
+    "summary": "Get all employees",
+    "description": "Retrieves employees. If syncConfig is provided, attempts to sync from\nthird-party API first, falling back to database on failure.\n",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "page",
+        "schema": {
+          "type": "integer"
+        },
+        "description": "Page number"
+      },
+      {
+        "name": "limit",
+        "schema": {
+          "type": "integer"
+        },
+        "description": "Items per page"
+      },
+      {
+        "name": "search",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Search term"
+      },
+      {
+        "name": "status",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "INACTIVE",
+            "ON_LEAVE",
+            "TERMINATED",
+            "SUSPENDED"
+          ]
+        },
+        "description": "Filter by status"
+      },
+      {
+        "name": "department",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Filter by department"
+      },
+      {
+        "name": "forceDatabase",
+        "schema": {
+          "type": "boolean"
+        },
+        "description": "Skip API sync and use database only"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "List of employees",
+        "contentTypes": []
+      },
+      "401": {
+        "contentTypes": []
+      },
+      "500": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": true,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/employee",
+    "method": "POST",
+    "url": "/api/employee",
+    "summary": "Create a new employee manually",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [
+      "application/json"
+    ],
+    "pathParams": [],
+    "queryParams": [],
+    "requestBody": {
+      "required": true,
+      "schema": {
+        "type": "object",
+        "required": [
+          "employeeNumber",
+          "firstName",
+          "lastName",
+          "email"
+        ],
+        "properties": {
+          "employeeNumber": {
+            "type": "string",
+            "example": "EMP-001"
+          },
+          "firstName": {
+            "type": "string",
+            "example": "John"
+          },
+          "middleName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string",
+            "example": "Doe"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "john.doe@company.com"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "department": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ON_LEAVE",
+              "TERMINATED",
+              "SUSPENDED"
+            ],
+            "default": "ACTIVE"
+          }
+        }
+      },
+      "contentTypes": [
+        "application/json"
+      ]
+    },
+    "responses": {
+      "201": {
+        "description": "Employee created",
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "409": {
+        "description": "Duplicate email or employee number",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/employee/stats",
+    "method": "GET",
+    "url": "/api/employee/stats",
+    "summary": "Get employee statistics",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Employee statistics by status, department, and sync status",
+        "contentTypes": []
+      },
+      "401": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/employee/sync",
+    "method": "POST",
+    "url": "/api/employee/sync",
+    "summary": "Trigger employee sync from external API",
+    "description": "Syncs employees from a third-party API. Falls back to database if API fails.\n",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [
+      "application/json"
+    ],
+    "pathParams": [],
+    "queryParams": [],
+    "requestBody": {
+      "required": true,
+      "schema": {
+        "type": "object",
+        "required": [
+          "apiUrl"
+        ],
+        "properties": {
+          "apiUrl": {
+            "type": "string",
+            "description": "Third-party API URL",
+            "example": "https://api.hris-system.com/employees"
+          },
+          "authType": {
+            "type": "string",
+            "enum": [
+              "bearer",
+              "api-key",
+              "basic",
+              "none"
+            ],
+            "default": "bearer"
+          },
+          "authToken": {
+            "type": "string",
+            "description": "Authentication token"
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "API key (for api-key auth)"
+          },
+          "headers": {
+            "type": "object",
+            "description": "Additional headers"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 30000
+          },
+          "retryAttempts": {
+            "type": "integer",
+            "default": 3
+          },
+          "fieldMapping": {
+            "type": "object",
+            "description": "Custom field mapping from external to internal names"
+          }
+        }
+      },
+      "contentTypes": [
+        "application/json"
+      ]
+    },
+    "responses": {
+      "200": {
+        "description": "Sync result with statistics",
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "401": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/employee/sync/status",
+    "method": "GET",
+    "url": "/api/employee/sync/status",
+    "summary": "Get sync status and health",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Sync status including any issues",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/employee/sync/issues",
+    "method": "GET",
+    "url": "/api/employee/sync/issues",
+    "summary": "Get employees with sync issues",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "List of employees with FAILED or PENDING sync status",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/employee/external/{externalId}",
+    "method": "GET",
+    "url": "/api/employee/external/{externalId}",
+    "summary": "Get employee by external ID",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "externalId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [
+      {
+        "name": "externalSource",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Filter by external source"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "Employee details",
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/employee/{id}",
+    "method": "GET",
+    "url": "/api/employee/{id}",
+    "summary": "Get employee by ID",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Employee ID (MongoDB ObjectId)"
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Employee details",
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "PUT /api/employee/{id}",
+    "method": "PUT",
+    "url": "/api/employee/{id}",
+    "summary": "Update employee",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [
+      "application/json"
+    ],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "requestBody": {
+      "required": true,
+      "schema": {
+        "type": "object"
+      },
+      "contentTypes": [
+        "application/json"
+      ]
+    },
+    "responses": {
+      "200": {
+        "description": "Employee updated",
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/employee/{id}",
+    "method": "DELETE",
+    "url": "/api/employee/{id}",
+    "summary": "Delete employee (soft delete)",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Employee deleted",
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

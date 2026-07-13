@@ -27,6 +27,13 @@ import { seedWorkspaceMember } from "./seeds/workspaceMemberSeeder";
 import { seedProjectMember } from "./seeds/projectMemberSeeder";
 import { seedDemand } from "./seeds/demandSeeder";
 
+/**
+ * Legacy compatibility/demo seed orchestrator.
+ *
+ * These values support local presentation and compatibility testing for the
+ * inherited Mongo runtime. They are not a canonical PATS seed or a source of
+ * requirements for the provisional manufacturing model.
+ */
 const prisma = new PrismaClient();
 
 async function main() {

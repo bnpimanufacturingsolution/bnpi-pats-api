@@ -100,3 +100,12 @@ usage or named security/documentation responsibility. Blocked rows have a
 security, tenancy, external integration, or terminology conflict. All other
 legacy rows have no active frontend route consumer and are safe to remove from
 the default composition while preserving their compatibility source.
+
+## P6 observed outcome
+
+The OpenAPI input list was narrowed to the documentation, workspace,
+workspace-member, project-member, employee, and product routers. Generated
+Swagger, endpoint, and Postman artifacts now describe that retained/blocked
+boundary only; stale per-tag files for quarantined modules were removed.
+The legacy seed orchestrator remains intact and is explicitly labeled as
+compatibility/demo material.

@@ -1,0 +1,217 @@
+[
+  {
+    "id": "GET /api/workspace/check-code/{code}",
+    "method": "GET",
+    "url": "/api/workspace/check-code/{code}",
+    "summary": "Check if workspace code is available",
+    "description": "Check if a workspace code already exists in the system",
+    "tags": [
+      "Workspace"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "code",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Workspace code to check"
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Code availability status",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "available": {
+              "type": "boolean"
+            }
+          }
+        },
+        "contentTypes": [
+          "application/json"
+        ]
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/workspace/{id}",
+    "method": "GET",
+    "url": "/api/workspace/{id}",
+    "summary": "Get workspace by ID",
+    "description": "Retrieve a specific workspace by its unique identifier",
+    "tags": [
+      "Workspace"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Workspace ID (MongoDB ObjectId format)"
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Workspace retrieved successfully",
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "PATCH /api/workspace/{id}",
+    "method": "PATCH",
+    "url": "/api/workspace/{id}",
+    "summary": "Update workspace",
+    "description": "Update workspace data by ID",
+    "tags": [
+      "Workspace"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Workspace updated successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/workspace/{id}",
+    "method": "DELETE",
+    "url": "/api/workspace/{id}",
+    "summary": "Delete workspace",
+    "description": "Delete a workspace by ID",
+    "tags": [
+      "Workspace"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Workspace deleted successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/workspace",
+    "method": "GET",
+    "url": "/api/workspace",
+    "summary": "Get all workspaces",
+    "description": "Retrieve workspaces with filtering, pagination, and sorting",
+    "tags": [
+      "Workspace"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Workspaces retrieved successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/workspace",
+    "method": "POST",
+    "url": "/api/workspace",
+    "summary": "Create new workspace",
+    "description": "Create a new workspace",
+    "tags": [
+      "Workspace"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Workspace created successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]
