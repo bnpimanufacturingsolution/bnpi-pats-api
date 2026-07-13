@@ -7,7 +7,7 @@ Pass 2 build-normalization commit and passing build gate.
 Provide a reproducible local on-prem Compose stack for API, PostgreSQL, and MinIO with persistence and readiness checks.
 
 ## Scope
-- Touch only: `docker-compose.yml`, `.env.example`, `.dockerignore`, `README.md` infrastructure sections, and `tests/compose-contract.spec.ts`.
+- Touch only: `docker-compose.yml`, `.env.example`, `.dockerignore`, `Dockerfile` (build-context copy directives only), `README.md` infrastructure sections, and `tests/compose-contract.spec.ts`.
 - Do not touch: application source, Prisma schemas, migration files, seeds, auth, legacy Mongo route behavior, frontend files, production deployment files, or public bucket policy.
 
 ## Instructions
@@ -36,4 +36,3 @@ Agent stops and reports back (does not proceed) if:
 - A required infrastructure image cannot be pinned or pulled in the approved environment.
 - The host ports are already owned by an unrelated process and cannot be changed safely.
 - MinIO private-bucket initialization requires an unresolved security decision.
-
