@@ -25,6 +25,7 @@ const envSchema = z.object({
 	// Authentication
 	JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
 	ENABLE_TEST_MODE: z.enum(["true", "false"]).default("false"),
+	ENABLE_LEGACY_API: z.enum(["true", "false"]).default("false"),
 
 	// SSO
 	SSO_BASE_URL: z.string().default("http://localhost:3000/api"),
