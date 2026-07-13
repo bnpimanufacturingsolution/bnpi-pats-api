@@ -43,4 +43,8 @@ logs
 **/*.log
 
 # Assets cache
-assets/**/*.map 
+assets/**/*.map
+
+# Local planning and test material
+tests
+.wwg

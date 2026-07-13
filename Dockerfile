@@ -40,6 +40,8 @@ COPY prisma/ ./prisma/
 COPY docs/ ./docs/
 COPY scripts/ ./scripts/
 COPY assets/ ./assets/
+COPY errors/ ./errors/
+COPY cron/ ./cron/
 COPY index.ts ./
 
 # Generate Prisma client (schema folder includes all .prisma models)

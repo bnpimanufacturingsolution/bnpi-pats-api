@@ -56,6 +56,28 @@ Copy `.env.example` to `.env` and set a local `JWT_SECRET`. The development
 defaults enable test mode and keep `ENABLE_LEGACY_API=false`; do not carry
 those development settings into production.
 
+### On-prem foundation
+
+The Compose foundation starts PostgreSQL 16, MinIO, and a private bucket
+initializer. PostgreSQL is mapped to host port `55432` because the default
+local PostgreSQL port `5432` may already be owned by another installation.
+MinIO uses ports `9000` (S3 API) and `9001` (console).
+
+```bash
+docker compose config
+docker compose up -d
+docker compose ps
+```
+
+The API image is built and defined in the `pats` profile but is intentionally
+not started by the base command until the draft PostgreSQL Prisma client is
+wired into the runtime in a later pass. The legacy Mongo service is available
+only with `--profile legacy`; Redis is optional with `--profile redis` and is
+not required for the base foundation.
+
+Named volumes survive `docker compose down`. Use `docker compose down -v`
+only when intentionally deleting local database or object-storage state.
+
 ## Verification commands
 
 ```bash

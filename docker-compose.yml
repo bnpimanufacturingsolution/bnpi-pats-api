@@ -1,16 +1,91 @@
 services:
+    postgres:
+        image: postgres:16.4-alpine
+        container_name: bnpi-pats-postgres
+        environment:
+            POSTGRES_DB: ${POSTGRES_DB:-pats}
+            POSTGRES_USER: ${POSTGRES_USER:-pats}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pats}
+        ports:
+            - "${POSTGRES_PORT:-55432}:5432"
+        volumes:
+            - pats-postgres-data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 10s
+
+    minio:
+        image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+        container_name: bnpi-pats-minio
+        environment:
+            MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pats-minio}
+            MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me-minio}
+        command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
+        ports:
+            - "${MINIO_API_PORT:-9000}:9000"
+            - "${MINIO_CONSOLE_PORT:-9001}:9001"
+        volumes:
+            - pats-minio-data:/data
+        healthcheck:
+            test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 10s
+
+    minio-init:
+        image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+        container_name: bnpi-pats-minio-init
+        environment:
+            MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pats-minio}
+            MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me-minio}
+            MINIO_BUCKET: ${MINIO_BUCKET:-pats-private}
+        depends_on:
+            minio:
+                condition: service_healthy
+        entrypoint: ["/bin/sh", "-c"]
+        command:
+            - >-
+                mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+                mc mb --ignore-existing "local/$${MINIO_BUCKET}" &&
+                mc anonymous set private "local/$${MINIO_BUCKET}"
+        restart: "no"
+
+    app:
+        profiles: ["pats"]
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: bnpi-pats-api
+        environment:
+            PORT: 3000
+            NODE_ENV: ${NODE_ENV:-production}
+            JWT_SECRET: ${JWT_SECRET:-change-me-for-local-dev}
+            ENABLE_TEST_MODE: "false"
+            ENABLE_LEGACY_API: "false"
+            REDIS_ENABLED: "false"
+            PATS_DATABASE_URL: postgresql://${POSTGRES_USER:-pats}:${POSTGRES_PASSWORD:-pats}@postgres:5432/${POSTGRES_DB:-pats}
+            MINIO_ENDPOINT: http://minio:9000
+            MINIO_BUCKET: ${MINIO_BUCKET:-pats-private}
+        ports:
+            - "${PORT:-3000}:3000"
+        depends_on:
+            postgres:
+                condition: service_healthy
+            minio:
+                condition: service_healthy
+
     mongo:
-        image: mongo:7
+        profiles: ["legacy"]
+        image: mongo:7.0.14
         container_name: bnpi-pats-mongo
         ports:
             - "27017:27017"
         volumes:
-            - mongodata:/data/db
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "10m"
-                max-file: "3"
+            - legacy-mongo-data:/data/db
         healthcheck:
             test: ["CMD", "mongosh", "--quiet", "mongodb://localhost:27017/admin", "--eval", "db.runCommand({ ping: 1 }).ok"]
             interval: 10s
@@ -18,46 +93,22 @@ services:
             retries: 5
 
     redis:
-        image: redis:7.2-alpine
+        profiles: ["redis"]
+        image: redis:7.2.7-alpine
         container_name: bnpi-pats-redis
         ports:
             - "6379:6379"
         volumes:
-            - redisdata:/data
-        command: ["redis-server", "--appendonly", "yes", "--requirepass", "template"]
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "10m"
-                max-file: "3"
+            - pats-redis-data:/data
+        command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-template}"]
         healthcheck:
-            test: ["CMD", "redis-cli", "-a", "template", "ping"]
+            test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD:-template}' ping"]
             interval: 10s
             timeout: 5s
             retries: 5
 
-    app:
-        build:
-            context: .
-            dockerfile: Dockerfile
-        container_name: bnpi-pats-api
-        env_file:
-            - .env
-        environment:
-            - DATABASE_URL=mongodb://mongo:27017/bnpi_pats
-            # Override Redis host for Docker networking
-            - REDIS_HOST=redis
-            - REDIS_PASSWORD=template
-            - REDIS_URL=redis://:template@redis:6379
-        ports:
-            - "${PORT:-3000}:${PORT:-3000}"
-        depends_on:
-            mongo:
-                condition: service_healthy
-            redis:
-                condition: service_healthy
-
 volumes:
-    mongodata:
-    redisdata:
-
+    pats-postgres-data:
+    pats-minio-data:
+    pats-redis-data:
+    legacy-mongo-data:
