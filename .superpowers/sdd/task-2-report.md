@@ -88,3 +88,48 @@ it exited successfully and no Task 2 helper emits application logging.
 - The helper accepts a caller-provided normalized request hash. Endpoint/domain work must define
   canonical payload normalization before invoking it.
 - No new recommendations were identified.
+
+## Task 2 review fix: current ETag validation
+
+### Finding addressed
+
+`validateIfMatch` previously accepted equality before confirming that the server/current ETag was a
+single quoted strong ETag. Consequently, identical weak (`W/"version-42"`) or unquoted
+(`version-42`) values incorrectly succeeded.
+
+### Change and regression evidence
+
+- `app/canonical/preconditions.ts` now validates the current ETag against the single quoted
+  strong-ETag grammar before permitting either exact equality or the configured wildcard.
+- `tests/canonical-transport-primitives.spec.ts` adds focused regressions proving that equality
+  with weak and malformed current ETags returns the stable
+  `urn:bandai:pats:problem:precondition-failed` / `412` result. Existing invalid client
+  validator coverage remains unchanged.
+
+### TDD evidence
+
+RED focused command:
+
+```text
+pnpm exec mocha --no-config --require ts-node/register tests/canonical-transport-primitives.spec.ts
+```
+
+Result: **8 passing, 1 failing**. The added malformed/weak-current equality assertion received
+`{ ok: true }`.
+
+GREEN with the same command: **9 passing**.
+
+### Verification
+
+- `pnpm run type-check` — PASS.
+- `pnpm run lint` — PASS.
+- `git diff --check` — PASS.
+
+### Fix self-review and concerns
+
+- Exact matching against a valid strong ETag and allowed wildcard behavior remain intact.
+- The validator continues to reject weak, unquoted, stale, and comma-separated client validators.
+- Only the scoped precondition helper, focused test, and this report are staged/committed; approved
+  documentation and SDD scratch files remain untouched.
+- The repository still declares Node 20.x while verification ran under Node 24.17.0; pnpm emitted
+  its existing engine warning. No new recommendations were identified.

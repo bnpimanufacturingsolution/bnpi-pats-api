@@ -86,6 +86,16 @@ describe("canonical transport primitives", () => {
 		}
 	});
 
+	it("rejects equality against malformed or weak current ETags", () => {
+		for (const currentEtag of ['W/"version-42"', "version-42"]) {
+			assert.deepStrictEqual(validateIfMatch(currentEtag, currentEtag), {
+				ok: false,
+				problemType: "urn:bandai:pats:problem:precondition-failed",
+				status: 412,
+			});
+		}
+	});
+
 	it("rejects unsafe version tokens", () => {
 		assert.throws(() => createStrongEtag('version"42'));
 		assert.throws(() => createStrongEtag("version\n42"));

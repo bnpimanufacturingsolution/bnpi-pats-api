@@ -1,5 +1,6 @@
 const PRECONDITION_FAILED = "urn:bandai:pats:problem:precondition-failed";
 const SAFE_VERSION_TOKEN = /^[!#-~]+$/;
+const STRONG_ETAG = /^"[!#-~]*"$/;
 
 export interface PreconditionFailed {
 	ok: false;
@@ -23,6 +24,7 @@ export function validateIfMatch(
 	currentEtag: string,
 	allowWildcard = true,
 ): { ok: true } | PreconditionFailed {
+	if (!STRONG_ETAG.test(currentEtag)) return preconditionFailed();
 	if (ifMatch === currentEtag || (allowWildcard && ifMatch === "*")) return { ok: true };
 	return preconditionFailed();
 }
