@@ -148,6 +148,61 @@ describe("canonical HTTP boundary", function () {
 		assert.strictEqual(response.headers.tracestate, undefined);
 	});
 
+	it("discards a tracestate member with an empty value", async () => {
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("traceparent", validTraceparent)
+			.set("tracestate", "bandai=")
+			.expect(200);
+
+		assert.strictEqual(response.headers.traceparent, validTraceparent);
+		assert.strictEqual(response.headers.tracestate, undefined);
+	});
+
+	it("discards a tracestate header with duplicate keys", async () => {
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("traceparent", validTraceparent)
+			.set("tracestate", "bandai=first,bandai=second")
+			.expect(200);
+
+		assert.strictEqual(response.headers.traceparent, validTraceparent);
+		assert.strictEqual(response.headers.tracestate, undefined);
+	});
+
+	it("propagates a valid digit-start multi-tenant tracestate key", async () => {
+		const tracestate = "1tenant@system=opaque";
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("traceparent", validTraceparent)
+			.set("tracestate", tracestate)
+			.expect(200);
+
+		assert.strictEqual(response.headers.tracestate, tracestate);
+	});
+
+	it("preserves surrounding OWS and leading opaque value content in valid tracestate", async () => {
+		const tracestate = "vendor=first, \ttenant@system= leading opaque value";
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("traceparent", validTraceparent)
+			.set("tracestate", tracestate)
+			.expect(200);
+
+		assert.strictEqual(response.headers.tracestate, tracestate);
+	});
+
+	it("accepts empty and whitespace-only tracestate list members", async () => {
+		const tracestate = "vendor=opaque,, \t,other=value";
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("traceparent", validTraceparent)
+			.set("tracestate", tracestate)
+			.expect(200);
+
+		assert.strictEqual(response.headers.tracestate, tracestate);
+	});
+
 	it("returns a canonical method-not-allowed problem and Allow header", async () => {
 		const response = await request(createApp({ enableLegacyRoutes: false }))
 			.post("/api/v1/health")

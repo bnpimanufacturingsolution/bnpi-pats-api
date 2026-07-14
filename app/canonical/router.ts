@@ -74,23 +74,26 @@ function isValidTraceparent(value: string): boolean {
 }
 
 function isValidTracestate(value: string): boolean {
-	if (value.length > 512) return false;
-
 	const members = value.split(",");
-	if (members.length === 0 || members.length > 32) return false;
+	if (members.length > 32) return false;
 
+	const keys = new Set<string>();
 	return members.every((member) => {
-		const listMember = member.trim();
+		const listMember = member.replace(/^[ \t]+|[ \t]+$/g, "");
+		if (listMember === "") return true;
+
 		const separator = listMember.indexOf("=");
 		if (separator < 1) return false;
 
 		const key = listMember.slice(0, separator);
 		const memberValue = listMember.slice(separator + 1);
-		return (
-			/^[a-z][a-z0-9_*/-]{0,255}(?:@[a-z][a-z0-9_*/-]{0,240})?$/.test(key) &&
-			/^[\x20-\x2b\x2d-\x3c\x3e-\x7e]{0,256}$/.test(memberValue) &&
-			memberValue.trim() === memberValue
-		);
+		const isSimpleKey = /^[a-z][a-z0-9_*/-]{0,255}$/.test(key);
+		const isMultiTenantKey = /^[a-z0-9][a-z0-9_*/-]{0,240}@[a-z][a-z0-9_*/-]{0,13}$/.test(key);
+		const hasValidValue = /^(?:[\x20\x21-\x2b\x2d-\x3c\x3e-\x7e]{0,255})[\x21-\x2b\x2d-\x3c\x3e-\x7e]$/.test(memberValue);
+		if ((!isSimpleKey && !isMultiTenantKey) || !hasValidValue || keys.has(key)) return false;
+
+		keys.add(key);
+		return true;
 	});
 }
 
@@ -100,7 +103,7 @@ function setTraceContext(req: Request, res: Response): void {
 
 	res.setHeader("traceparent", traceparent);
 	const tracestate = req.header("tracestate");
-	if (tracestate && isValidTracestate(tracestate)) res.setHeader("tracestate", tracestate);
+	if (tracestate !== undefined && isValidTracestate(tracestate)) res.setHeader("tracestate", tracestate);
 }
 
 function isMalformedJson(error: unknown): boolean {

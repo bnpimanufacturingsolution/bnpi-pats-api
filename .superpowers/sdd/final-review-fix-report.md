@@ -82,3 +82,43 @@ Regression tests were added before the production/OpenAPI changes.
   existing engine warning during validation.
 - The full inherited suite still emits known mocked activity/audit and optional Redis warnings but
   exits successfully. No new warning was introduced by this fix wave.
+
+## Final re-review fix: W3C tracestate grammar
+
+### Scope
+
+This follow-up changes only `app/canonical/router.ts`,
+`tests/canonical-http-boundary.spec.ts`, and this report.
+
+### Fix
+
+`tracestate` validation now follows the [W3C Trace Context §3.3.1 grammar](https://www.w3.org/TR/trace-context/#tracestate-header):
+
+- simple keys begin with lowercase alpha and allow at most 255 permitted suffix characters;
+- multi-tenant keys enforce the tenant-id and system-id start-character and length rules;
+- values are 1–256 printable ASCII characters excluding comma and equals, with a final nonblank
+  character;
+- spaces/tabs surrounding a list member are ignored without trimming opaque value content;
+- empty or whitespace-only list members are accepted; malformed members and duplicate keys discard
+  the complete incoming `tracestate` header.
+
+Valid `traceparent` propagation is unaffected when `tracestate` is discarded.
+
+### TDD and validation
+
+- RED: `pnpm exec mocha --no-config --require ts-node/register --extension ts
+  tests/canonical-http-boundary.spec.ts --reporter dot --exit` — **18 passing, 5 failing**. The
+  new failures covered empty value acceptance, duplicate keys, digit-start multi-tenant keys,
+  surrounding OWS/leading opaque value content, and empty list members.
+- GREEN: same focused command — **23 passing**.
+- `pnpm run type-check` — PASS (`Type check passed!`).
+- `pnpm run lint` — PASS.
+- `pnpm test` — PASS (configured Mocha suite exited 0).
+
+### Self-review
+
+- No route, response, legacy composition, persistence, OpenAPI, or domain behavior changed.
+- The parser uses only space and horizontal-tab as OWS, preserves the original valid header value
+  when forwarding, and does not apply broad JavaScript whitespace trimming to opaque values.
+- No new recommendations were identified. The existing Node 20.x engine warning and inherited
+  full-suite mock/Redis warning noise remain non-blocking concerns.
