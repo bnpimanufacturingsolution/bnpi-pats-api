@@ -47,6 +47,56 @@ enum LinkageMode {
   STANDALONE
 }
 
+enum ProductSourceStatus {
+  SOURCE_ALIGNED     @map("source-aligned")
+  NEEDS_CONFIRMATION @map("needs-confirmation")
+  MANUAL
+}
+
+model Product {
+  id          String    @id @default(uuid())
+  productCode String    @unique
+  productName String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  models      Model[]
+  projects    Project[]
+}
+
+model Model {
+  id              String                   @id @default(uuid())
+  productId       String
+  product         Product                  @relation(fields: [productId], references: [id])
+  modelNumber     String
+  modelName       String?
+  sourceStatus    ProductSourceStatus
+  sourceReference Json?
+  skuCode         String
+  pinned          Boolean                  @default(false)
+  updatedAt       DateTime                 @updatedAt
+  modelParts      ModelPart[]
+  allocations     ProjectModelAllocation[]
+  projectParts    Part[]                   @relation("ModelProjectParts")
+
+  @@unique([productId, modelNumber])
+  @@index([productId])
+}
+
+model ModelPart {
+  id           String @id @default(uuid())
+  modelId      String
+  model        Model  @relation(fields: [modelId], references: [id])
+  partCode     String
+  partName     String
+  // Ordered catalog-level StageStepRef[] template. Promotion into a versioned PartsList is
+  // intentionally application-controlled until the template contract is confirmed.
+  routingSteps Json
+  projectParts Part[] @relation("ModelPartProjectParts")
+
+  @@unique([modelId, partCode])
+  @@index([modelId])
+}
+
 model WorkflowGroup {
   id           String      @id @default(uuid())
   projectId    String
@@ -61,32 +111,32 @@ model WorkflowGroup {
 }
 
 model Stage {
-  id              String        @id @default(uuid())
+  id              String                @id @default(uuid())
   workflowGroupId String
-  workflowGroup   WorkflowGroup @relation(fields: [workflowGroupId], references: [id])
+  workflowGroup   WorkflowGroup         @relation(fields: [workflowGroupId], references: [id])
   name            String
   // Optional per-locale name overrides: { ja?: string, fil?: string }
   nameLocalized   Json?
   displayOrder    Int
-  isSystemSeed    Boolean       @default(false)
+  isSystemSeed    Boolean               @default(false)
   subStageLinks   SubStageEligibility[]
 
   @@index([workflowGroupId])
 }
 
 model SubStage {
-  id                            String  @id @default(uuid())
+  id                            String                @id @default(uuid())
   name                          String
   nameLocalized                 Json?
   displayOrder                  Int
-  isSystemSeed                  Boolean @default(false)
-  isConfigurable                Boolean @default(true)
-  isBuffer                      Boolean @default(false)
-  hasQualityCheckpoint          Boolean @default(false)
-  isMandatoryCheckpoint         Boolean @default(false)
-  alwaysAlertOnRoutingViolation Boolean @default(true)
+  isSystemSeed                  Boolean               @default(false)
+  isConfigurable                Boolean               @default(true)
+  isBuffer                      Boolean               @default(false)
+  hasQualityCheckpoint          Boolean               @default(false)
+  isMandatoryCheckpoint         Boolean               @default(false)
+  alwaysAlertOnRoutingViolation Boolean               @default(true)
   subProcessGroup               String?
-  isDisabled                    Boolean @default(false)
+  isDisabled                    Boolean               @default(false)
   eligibleStages                SubStageEligibility[]
 }
 
@@ -106,14 +156,17 @@ model SubStageEligibility {
 // ---------------------------------------------------------------------------
 
 model Project {
-  id                         String              @id @default(uuid())
+  id                         String                   @id @default(uuid())
   workspaceId                String
-  projectCode                String              @unique
+  projectCode                String                   @unique
   name                       String
   requiredProductionQuantity Int
-  createdAt                  DateTime            @default(now())
+  productId                  String?
+  product                    Product?                 @relation(fields: [productId], references: [id])
+  createdAt                  DateTime                 @default(now())
   productSpecification       ProductSpecification?
   pmrs                       Pmrs?
+  modelAllocations           ProjectModelAllocation[]
   partsLists                 PartsList[]
   workflowGroups             WorkflowGroup[]
   parts                      Part[]
@@ -121,12 +174,28 @@ model Project {
   processChangeLogs          ProcessChangeLog[]
 
   @@index([workspaceId])
+  @@index([productId])
+}
+
+model ProjectModelAllocation {
+  id              String   @id @default(uuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id])
+  modelId         String
+  model           Model    @relation(fields: [modelId], references: [id])
+  plannedQuantity Int
+  createdAt       DateTime @default(now())
+  batches         Batch[]
+
+  @@unique([projectId, modelId])
+  @@index([projectId])
+  @@index([modelId])
 }
 
 model ProductSpecification {
-  id                   String  @id @default(uuid())
-  projectId            String  @unique
-  project              Project @relation(fields: [projectId], references: [id])
+  id                   String   @id @default(uuid())
+  projectId            String   @unique
+  project              Project  @relation(fields: [projectId], references: [id])
   skuCode              String
   productName          String
   trayQuantityStandard Int
@@ -136,9 +205,9 @@ model ProductSpecification {
 // Minimal placeholder — PMRS structure remains NEEDS_CONFIRMATION (BRD Open Question #2).
 // Do not extend without stakeholder confirmation.
 model Pmrs {
-  id          String    @id @default(uuid())
-  projectId   String    @unique
-  project     Project   @relation(fields: [projectId], references: [id])
+  id          String  @id @default(uuid())
+  projectId   String  @unique
+  project     Project @relation(fields: [projectId], references: [id])
   partsListId String?
 }
 
@@ -171,40 +240,48 @@ model RoutingStep {
 }
 
 model Part {
-  id           String        @id @default(uuid())
-  projectId    String
-  project      Project       @relation(fields: [projectId], references: [id])
-  partCode     String
-  partName     String
+  id                       String          @id @default(uuid())
+  projectId                String
+  project                  Project         @relation(fields: [projectId], references: [id])
+  partCode                 String
+  partName                 String
+  sourceModelId            String?
+  sourceModel              Model?          @relation("ModelProjectParts", fields: [sourceModelId], references: [id])
+  sourceModelPartId        String?
+  sourceModelPart          ModelPart?      @relation("ModelPartProjectParts", fields: [sourceModelPartId], references: [id])
   // Hybrid per-part variance tolerance — either, both, or neither bound may be set;
   // application falls back to the system default (5%) when both are null.
   variancePercentThreshold Float?
   varianceAbsoluteFloor    Int?
-  routingSteps RoutingStep[]
-  lots         Lot[]
+  routingSteps             RoutingStep[]
+  lots                     Lot[]
+  batchPartLines           BatchPartLine[]
 
   @@unique([projectId, partCode])
+  @@index([sourceModelId])
+  @@index([sourceModelPartId])
 }
 
 model Lot {
-  id               String   @id @default(uuid())
-  projectId        String
-  project          Project  @relation(fields: [projectId], references: [id])
-  lotCode          String   @unique
-  partsListId      String
-  partsListVersion Int
-  partId           String
-  part             Part     @relation(fields: [partId], references: [id])
-  partName         String
-  requiredQuantity Int
+  id                         String   @id @default(uuid())
+  projectId                  String
+  project                    Project  @relation(fields: [projectId], references: [id])
+  lotCode                    String   @unique
+  lotName                    String
+  partsListId                String
+  partsListVersion           Int
+  partId                     String
+  part                       Part     @relation(fields: [partId], references: [id])
+  partName                   String
+  requiredProductionQuantity Int
   // Structured replacement for the PRD's free-text labelBreakdown (whiteboard stage-1 math:
-  // requiredQuantity / labelPackSize = countable labels, e.g. 100,000 / 200 = 500). Label counts
+  // requiredProductionQuantity / labelPackSize = countable labels, e.g. 100,000 / 200 = 500). Label counts
   // are derived by the application, never stored.
-  labelPackSize    Int
+  labelPackSize              Int
   // Lot numbers are assigned once at Planning and never reassigned (client doc, stage 1).
-  createdAtStage   String   @default("Planning")
-  createdAt        DateTime @default(now())
-  batches          Batch[]
+  createdAtStage             String   @default("Planning")
+  createdAt                  DateTime @default(now())
+  batches                    Batch[]
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +289,7 @@ model Lot {
 // ---------------------------------------------------------------------------
 
 enum BatchStatus {
+  PLANNED
   ACTIVE
   HELD
   CLOSED
@@ -219,17 +297,23 @@ enum BatchStatus {
 }
 
 model Batch {
-  id                 String          @id @default(uuid())
-  barcodeValue       String          @unique
-  lotId              String
-  lot                Lot             @relation(fields: [lotId], references: [id])
-  currentStageId     String
-  currentSubStageId  String?
-  status             BatchStatus     @default(ACTIVE)
-  createdAt          DateTime        @default(now())
-  parts              BatchPartLine[]
+  id                       String                  @id @default(uuid())
+  batchCode                String                  @unique
+  barcodeValue             String                  @unique
+  lotId                    String
+  lot                      Lot                     @relation(fields: [lotId], references: [id])
+  plannedQuantity          Int
+  labelPackSize            Int
+  projectModelAllocationId String?
+  projectModelAllocation   ProjectModelAllocation? @relation(fields: [projectModelAllocationId], references: [id])
+  currentStageId           String
+  currentSubStageId        String?
+  status                   BatchStatus             @default(PLANNED)
+  createdAt                DateTime                @default(now())
+  parts                    BatchPartLine[]
 
   @@index([lotId])
+  @@index([projectModelAllocationId])
   @@index([currentStageId])
 }
 
@@ -239,6 +323,7 @@ model BatchPartLine {
   batchId  String
   batch    Batch  @relation(fields: [batchId], references: [id])
   partId   String
+  part     Part   @relation(fields: [partId], references: [id])
   quantity Int
 
   @@id([batchId, partId])
@@ -300,22 +385,22 @@ model InventoryTransaction {
 }
 
 model RoutingViolation {
-  id                 String     @id @default(uuid())
-  stageEventId       String     @unique
-  stageEvent         StageEvent @relation(fields: [stageEventId], references: [id])
-  batchId            String
-  lotId              String
-  partId             String
-  attemptedStageId   String
+  id                  String     @id @default(uuid())
+  stageEventId        String     @unique
+  stageEvent          StageEvent @relation(fields: [stageEventId], references: [id])
+  batchId             String
+  lotId               String
+  partId              String
+  attemptedStageId    String
   attemptedSubStageId String?
   // The allowed route at detection time, denormalized as [{stageId, subStageId, order}] so the
   // violation stays auditable even after the PartsList is versioned forward.
-  expectedSteps      Json
-  detectedAt         DateTime
-  resolved           Boolean    @default(false)
-  resolvedAt         DateTime?
-  resolvedBy         String?
-  resolutionNote     String?
+  expectedSteps       Json
+  detectedAt          DateTime
+  resolved            Boolean    @default(false)
+  resolvedAt          DateTime?
+  resolvedBy          String?
+  resolutionNote      String?
 
   @@index([batchId])
   @@index([resolved])
