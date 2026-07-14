@@ -48,6 +48,17 @@ describe("canonical HTTP boundary", function () {
 		});
 	});
 
+	it("rejects Problem Details-only Accept for a successful JSON response", async () => {
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("Accept", "application/problem+json")
+			.expect("Content-Type", /application\/problem\+json/)
+			.expect(406);
+
+		assert.strictEqual(response.body.type, "urn:bandai:pats:problem:not-acceptable");
+		assert.strictEqual(response.body.status, 406);
+	});
+
 	it("returns canonical problem details for an unmatched route", async () => {
 		const response = await request(createApp({ enableLegacyRoutes: false }))
 			.get("/api/v1/not-a-route")
@@ -61,6 +72,27 @@ describe("canonical HTTP boundary", function () {
 			detail: "The requested canonical route was not found.",
 			instance: "/api/v1/not-a-route",
 		});
+	});
+
+	it("does not propagate a traceparent containing uppercase hexadecimal", async () => {
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("Accept", "application/json")
+			.set("traceparent", "00-4BF92F3577B34DA6A3CE929D0E0E4736-00F067AA0BA902B7-01")
+			.expect(200);
+
+		assert.strictEqual(response.headers.traceparent, undefined);
+	});
+
+	it("propagates valid future-version traceparent extension fields", async () => {
+		const traceparent = "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-a1b2";
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("Accept", "application/json")
+			.set("traceparent", traceparent)
+			.expect(200);
+
+		assert.strictEqual(response.headers.traceparent, traceparent);
 	});
 
 	it("returns a canonical method-not-allowed problem and Allow header", async () => {

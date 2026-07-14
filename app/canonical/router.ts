@@ -33,15 +33,29 @@ function acceptsCanonicalJson(req: Request): boolean {
 		const quality = parameters.find((parameter) => parameter.trim().startsWith("q="));
 		if (quality && Number(quality.trim().slice(2)) === 0) return false;
 
-		return mediaType === "application/json" || mediaType === "application/problem+json" || mediaType === "*/*";
+		return mediaType === "application/json" || mediaType === "*/*";
 	});
 }
 
 function isValidTraceparent(value: string): boolean {
-	const match = /^([\da-f]{2})-([\da-f]{32})-([\da-f]{16})-([\da-f]{2})$/i.exec(value);
-	if (!match || match[1].toLowerCase() === "ff") return false;
+	const [version, traceId, parentId, flags, ...extensions] = value.split("-");
+	if (
+		!version ||
+		!traceId ||
+		!parentId ||
+		!flags ||
+		!/^[0-9a-f]{2}$/.test(version) ||
+		!/^[0-9a-f]{32}$/.test(traceId) ||
+		!/^[0-9a-f]{16}$/.test(parentId) ||
+		!/^[0-9a-f]{2}$/.test(flags) ||
+		version === "ff" ||
+		(version === "00" && extensions.length > 0) ||
+		extensions.some((extension) => !/^[0-9a-f]{2,}$/.test(extension))
+	) {
+		return false;
+	}
 
-	return !/^0+$/.test(match[2]) && !/^0+$/.test(match[3]);
+	return !/^0+$/.test(traceId) && !/^0+$/.test(parentId);
 }
 
 function setTraceContext(req: Request, res: Response): void {
