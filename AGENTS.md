@@ -17,6 +17,13 @@ MUST read these files in order:
 3. `docs/standards/endpoint-design-review-checklist.md` — required review gate
 4. The relevant domain design and endpoint catalog documents
 
+For the current PATS design work, also load:
+
+5. `docs/superpowers/context/2026-07-14-pats-api-design-context.md`
+6. `docs/superpowers/specs/2026-07-14-pats-api-target-design.md`
+7. `docs/superpowers/chains/2026-07-14-pats-api-design-chain.md`
+8. `docs/superpowers/plans/2026-07-14-pats-api-design-and-implementation-plan.md`
+
 The approved RESTful Endpoint Design Standards, version 1.2.1, are mandatory. They are not
 optional guidance. If a requested endpoint conflicts with the standard, the agent MUST stop,
 describe the conflict, and obtain an explicit case-specific exception before proceeding.
@@ -29,6 +36,23 @@ Every endpoint change must leave review evidence showing:
 - OpenAPI documentation matches the implementation;
 - the endpoint does not silently inherit a legacy route shape;
 - any exception has a documented scope, reason, owner, and expiry or review condition.
+
+## Active PATS Design Package
+
+The current design package is documentation-first and must complete its sequential chain before
+implementation begins:
+
+- Context: `docs/superpowers/context/2026-07-14-pats-api-design-context.md`
+- Architecture: `docs/architecture/2026-07-14-pats-api-target-architecture.md`
+- Data model: `docs/data/2026-07-14-pats-api-data-model-design.md`
+- Endpoint catalog: `docs/api/2026-07-14-pats-api-contract-and-endpoint-catalog.md`
+- Cross-cutting design: `docs/api/2026-07-14-pats-api-cross-cutting-design.md`
+- Decisions: `docs/decisions/2026-07-14-pats-api-design-decision-register.md`
+- Chain prompts: `docs/superpowers/chains/2026-07-14-pats-api-design-chain.md`
+- Handover prompt: `docs/superpowers/prompts/2026-07-14-pats-api-design-handover.md`
+
+Until the chain's final consistency gate passes and the user approves implementation, agents must
+not add new business endpoints or change the PATS schema.
 
 ## Architecture and Scope Rules
 
