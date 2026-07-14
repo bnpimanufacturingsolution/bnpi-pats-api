@@ -13,6 +13,7 @@ import { AppError } from "../errors";
 import { env } from "../config/env";
 import { registerLegacyRoutes, type LegacyRouteRegistration } from "./legacy/register-legacy-routes";
 import { patsModule } from "./pats";
+import { canonicalRouter } from "./canonical/router";
 
 interface RequestWithIO extends Request {
 	io?: SocketServer;
@@ -64,6 +65,10 @@ export function createApp(options: AppOptions = {}): Application {
 
 	// Request ID tracking (first middleware for all requests)
 	app.use(requestIdMiddleware);
+
+	// Canonical PATS routes are intentionally isolated from legacy parsing,
+	// authentication, and error envelopes.
+	app.use("/api/v1", canonicalRouter());
 
 	// Body parsing
 	app.use(express.json());
