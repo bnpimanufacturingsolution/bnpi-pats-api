@@ -16,6 +16,8 @@ declare global {
 	var __errorHandlersRegistered: boolean | undefined;
 }
 
+const legacyRuntimeEnabled = env.ENABLE_LEGACY_API === "true";
+
 // Register process handlers once so test imports and hot reload do not stack
 // duplicate listeners.
 if (!global.__errorHandlersRegistered) {
@@ -71,11 +73,17 @@ try {
 
 	server.listen(config.port, async () => {
 		try {
-			await connectAllDatabases();
-			console.log("✅ Database connected");
+			if (legacyRuntimeEnabled) {
+				await connectAllDatabases();
+				console.log("✅ Database connected");
+			} else {
+				console.log("PATS-only runtime enabled; legacy database and cron jobs skipped");
+			}
 
-			initCronJobs(prisma);
-			console.log("✅ Cron jobs initialized");
+			if (legacyRuntimeEnabled) {
+				initCronJobs(prisma);
+				console.log("✅ Cron jobs initialized");
+			}
 
 			console.log(`🚀 Server is running on port ${config.port}`);
 		} catch (error) {

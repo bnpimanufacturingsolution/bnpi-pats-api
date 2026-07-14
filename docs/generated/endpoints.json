@@ -1580,5 +1580,55 @@
       "hasSearchParam": false,
       "hasSortParams": false
     }
+  },
+  {
+    "id": "GET /api/pats/catalog/products/{productId}",
+    "method": "GET",
+    "url": "/api/pats/catalog/products/{productId}",
+    "summary": "Read a workspace-scoped PATS product catalog record",
+    "description": "Returns Product -> Model -> ModelPart data without legacy seed fallback. Optional private imageObjectKey metadata is resolved to a short-lived read URL and is never returned.",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "productId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Complete or sparse PATS catalog record",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Workspace header is missing or invalid",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Product is not linked to the requested workspace",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "Private image storage is unavailable",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
   }
 ]

@@ -13,7 +13,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "2a5e46dd-c3d9-4024-8e3d-510dad9eb3f3",
+                                    "id": "7d831cc3-9bfa-46c0-9803-b3efc3b2e18b",
                                     "name": "Get API endpoints list",
                                     "request": {
                                         "name": "Get API endpoints list",
@@ -38,7 +38,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "format",
-                                                    "value": "text"
+                                                    "value": "json"
                                                 },
                                                 {
                                                     "disabled": false,
@@ -56,7 +56,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "method",
-                                                    "value": "PATCH"
+                                                    "value": "DELETE"
                                                 }
                                             ],
                                             "variable": []
@@ -73,7 +73,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "2455d5a5-effc-4b59-a84c-4a8d84db6690",
+                                            "id": "f4dfb5cf-0ad8-49da-9f65-8442b86deda3",
                                             "name": "API endpoints list retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -93,7 +93,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "format",
-                                                            "value": "text"
+                                                            "value": "json"
                                                         },
                                                         {
                                                             "disabled": false,
@@ -111,7 +111,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "method",
-                                                            "value": "PATCH"
+                                                            "value": "DELETE"
                                                         }
                                                     ],
                                                     "variable": []
@@ -146,7 +146,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "f99d1c97-774a-414e-bd44-7044bd4e72e7",
+                                            "id": "4ab16ed4-be70-462d-8a0e-03865baff7a0",
                                             "name": "Invalid format or validation error",
                                             "originalRequest": {
                                                 "url": {
@@ -166,7 +166,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "format",
-                                                            "value": "text"
+                                                            "value": "json"
                                                         },
                                                         {
                                                             "disabled": false,
@@ -184,7 +184,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "method",
-                                                            "value": "PATCH"
+                                                            "value": "DELETE"
                                                         }
                                                     ],
                                                     "variable": []
@@ -209,7 +209,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "eb89a689-dde0-40fa-b6c7-09c6b64e1b5c",
+                                            "id": "7e8a2db8-c662-4f15-9f40-718225aa9833",
                                             "name": "Endpoints file not found",
                                             "originalRequest": {
                                                 "url": {
@@ -229,7 +229,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "format",
-                                                            "value": "text"
+                                                            "value": "json"
                                                         },
                                                         {
                                                             "disabled": false,
@@ -247,7 +247,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "method",
-                                                            "value": "PATCH"
+                                                            "value": "DELETE"
                                                         }
                                                     ],
                                                     "variable": []
@@ -284,7 +284,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "3f980c94-29e2-4978-8b12-b2b277430099",
+                                    "id": "f710c68c-4e6e-4218-8b75-a9bfa324b014",
                                     "name": "Get Swagger documentation",
                                     "request": {
                                         "name": "Get Swagger documentation",
@@ -316,7 +316,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "83a756ea-0ec7-40f0-bf83-51adcfc7c435",
+                                            "id": "54f843bb-b86a-48cd-ba2c-9775c6d76156",
                                             "name": "Swagger documentation retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -361,7 +361,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "0535f625-3c1f-4234-a84e-f3309cea6526",
+                                            "id": "841d7ee4-59aa-41bc-b906-ec620973ae13",
                                             "name": "Swagger file not found",
                                             "originalRequest": {
                                                 "url": {
@@ -408,7 +408,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "59dbc16f-c504-48ff-b42a-53426af7c24d",
+                                    "id": "50e7c072-52df-4c69-b4ee-6868b14c64ff",
                                     "name": "Get Postman collection",
                                     "request": {
                                         "name": "Get Postman collection",
@@ -440,7 +440,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "015549b6-701a-4692-be42-723085355192",
+                                            "id": "52efa93f-1c25-4606-9b18-355562208827",
                                             "name": "Postman collection retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -485,7 +485,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "fb155845-2099-4d9c-b758-d2861863d5d4",
+                                            "id": "9d5fde48-7b30-49a5-9c4b-18219ec75230",
                                             "name": "Postman collection not found",
                                             "originalRequest": {
                                                 "url": {
@@ -532,7 +532,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "15385d19-cda1-4800-8fb3-c0d51f568cd2",
+                                    "id": "0859820a-229c-460f-b168-79c015bb8b55",
                                     "name": "Generate iml files",
                                     "request": {
                                         "name": "Generate iml files",
@@ -592,7 +592,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "026cd6c7-5a19-4203-beaa-687104899732",
+                                            "id": "773b1707-bd9a-4e30-9099-6631aee80f76",
                                             "name": "iml files generated successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -665,7 +665,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "4e3f9b53-4ab9-4fd2-bf1d-1ef771a264cd",
+                                            "id": "da4f4c69-0364-4151-a2bb-ef50840bb24b",
                                             "name": "Internal server error",
                                             "originalRequest": {
                                                 "url": {
@@ -750,7 +750,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "89a0f8b8-e1d9-4d88-b6b5-925fce6f6d35",
+                                            "id": "0e03e7b4-edb6-4f66-bcaa-73951a1f24dd",
                                             "name": "Check if workspace code is available",
                                             "request": {
                                                 "name": "Check if workspace code is available",
@@ -802,7 +802,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "8ca06f1a-4a61-49f2-8b38-b1e545c6c032",
+                                                    "id": "91a0992d-2fee-40ae-9e96-04a447682085",
                                                     "name": "Code availability status",
                                                     "originalRequest": {
                                                         "url": {
@@ -873,7 +873,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "5980171c-f6c6-4797-baf7-5b39f4736c4c",
+                                    "id": "76fffc16-a1b6-4ccb-aaa0-fce7f4b7685c",
                                     "name": "Get workspace by ID",
                                     "request": {
                                         "name": "Get workspace by ID",
@@ -894,7 +894,7 @@
                                             "variable": [
                                                 {
                                                     "type": "any",
-                                                    "value": "49Ca17e44A0a05Fb39Adc48e",
+                                                    "value": "46e963C8cC4eFD77A3A27555",
                                                     "key": "id",
                                                     "disabled": false,
                                                     "description": {
@@ -918,7 +918,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "754a906f-9552-4fad-884a-11f721444b6b",
+                                            "id": "547954f6-2aa7-4427-ad23-71fc93544bee",
                                             "name": "Workspace retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -939,7 +939,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "49Ca17e44A0a05Fb39Adc48e",
+                                                            "value": "46e963C8cC4eFD77A3A27555",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -964,7 +964,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "c2671d14-069f-4962-9abd-d1538339c9f9",
+                                            "id": "0e9b3cfc-8ecb-4aa9-8e40-a7e3743f1962",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -985,7 +985,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "49Ca17e44A0a05Fb39Adc48e",
+                                                            "value": "46e963C8cC4eFD77A3A27555",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -1016,7 +1016,7 @@
                                     }
                                 },
                                 {
-                                    "id": "73d69800-8dd3-4186-8ca6-9e16fe9b545f",
+                                    "id": "a593dcb3-4411-4ab5-9ff2-b7de450bdb92",
                                     "name": "Update workspace",
                                     "request": {
                                         "name": "Update workspace",
@@ -1055,7 +1055,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "d69ff422-9697-47a4-9c07-6d50c69cc928",
+                                            "id": "68f35521-f005-4ba3-a42b-55ac0062da69",
                                             "name": "Workspace updated successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1096,7 +1096,7 @@
                                     }
                                 },
                                 {
-                                    "id": "3b3ec70e-67e8-4cc6-865e-37cfcddd3e7f",
+                                    "id": "493bb5bc-05b1-428f-9575-eb6ed8ca4c52",
                                     "name": "Delete workspace",
                                     "request": {
                                         "name": "Delete workspace",
@@ -1135,7 +1135,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "b02bb0b5-f7d1-4fbd-9d7d-ca90918e80c6",
+                                            "id": "cf568f61-2987-4390-87ed-66b88c3bf011",
                                             "name": "Workspace deleted successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1178,7 +1178,7 @@
                             ]
                         },
                         {
-                            "id": "51e9d3e4-66c4-4539-b8a8-2a94d0139ebc",
+                            "id": "ed79df2c-b866-4fa7-9351-f7cc8f6b215c",
                             "name": "Get all workspaces",
                             "request": {
                                 "name": "Get all workspaces",
@@ -1211,7 +1211,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "7a15f165-c9d8-4450-bdb9-bf53548f1d6e",
+                                    "id": "655c56a9-2084-4e0c-b1fa-3cf26cd7fd02",
                                     "name": "Workspaces retrieved successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1251,7 +1251,7 @@
                             }
                         },
                         {
-                            "id": "dc3454b3-38e4-4327-ae4f-b475c7afb4b3",
+                            "id": "097f9780-4716-4a73-b6b4-a0ad548af5c1",
                             "name": "Create new workspace",
                             "request": {
                                 "name": "Create new workspace",
@@ -1284,7 +1284,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "9e825527-9b8b-4db9-a1d5-2f3516665ff0",
+                                    "id": "7ccabc2b-08f4-49a0-bb32-2f6cdde5a6e3",
                                     "name": "Workspace created successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1334,7 +1334,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "4099f12a-fa07-404b-a3a4-b367443df6fc",
+                                    "id": "1081a0bb-33d1-4d53-a587-ff78bd16738d",
                                     "name": "Get current user's workspace membership",
                                     "request": {
                                         "name": "Get current user's workspace membership",
@@ -1365,7 +1365,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "eb3eb158-3130-4252-b51a-d261bda0793a",
+                                            "id": "5e9cc39f-29f7-4061-a202-7aee9aed4e0c",
                                             "name": "Membership retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1400,7 +1400,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "2c5789fc-9f6a-4fa2-a635-06123c1b6dc6",
+                                            "id": "3b55932a-9978-4b88-9d61-b023620527ee",
                                             "name": "Not a member of this workspace",
                                             "originalRequest": {
                                                 "url": {
@@ -1447,7 +1447,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "3a6c4ffa-e6d4-425d-b307-ef96dd209b16",
+                                    "id": "4baf88a1-b66e-4d42-b875-088f3be593d4",
                                     "name": "Get workspace member by ID",
                                     "request": {
                                         "name": "Get workspace member by ID",
@@ -1489,7 +1489,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "007190b3-d99f-421d-b103-ee5bfabb8ac1",
+                                            "id": "48190abe-c98d-4577-8e25-9dc0caa2ab64",
                                             "name": "Member retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1541,7 +1541,7 @@
                                     }
                                 },
                                 {
-                                    "id": "1dfa4be1-a605-4d6a-80e0-0beacaa3db9f",
+                                    "id": "30a9740c-26aa-478e-9598-9a8e27ae00db",
                                     "name": "Remove workspace member",
                                     "request": {
                                         "name": "Remove workspace member",
@@ -1577,7 +1577,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "ab5c31b5-9c1e-4a00-8af5-bfabc9b0fd83",
+                                            "id": "86f57cb8-8c7f-4be3-8da5-391551377353",
                                             "name": "Member removed successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1622,7 +1622,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "0a4197fd-b922-4188-9c21-0e69909da3c7",
+                                            "id": "976b3ce2-c986-459e-bfef-822e526bf23f",
                                             "name": "Update workspace member role",
                                             "request": {
                                                 "name": "Update workspace member role",
@@ -1659,7 +1659,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "1dd6b7cb-3c4d-4721-9d45-d6d48b0294fe",
+                                                    "id": "4cdeced3-f906-43f9-9568-9cd9bbc637d9",
                                                     "name": "Role updated successfully",
                                                     "originalRequest": {
                                                         "url": {
@@ -1705,7 +1705,7 @@
                             ]
                         },
                         {
-                            "id": "2813ed15-d42f-435b-8b89-9402647f4105",
+                            "id": "9a76332c-2882-4663-b50c-6710d563d928",
                             "name": "Get all workspace members",
                             "request": {
                                 "name": "Get all workspace members",
@@ -1735,7 +1735,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "6c10707c-f6ca-4b57-979e-6c0148fcbbcd",
+                                    "id": "5e80373d-4ee4-4af6-a8c1-c4c53fb3897d",
                                     "name": "Members retrieved successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1775,7 +1775,7 @@
                             }
                         },
                         {
-                            "id": "744d12ff-24a7-4953-94a0-e8fc4783b249",
+                            "id": "97d25203-0941-4f48-a28a-0347e9261e72",
                             "name": "Add a member to workspace",
                             "request": {
                                 "name": "Add a member to workspace",
@@ -1805,7 +1805,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "4c31ea0d-da1d-45dc-bae1-4141b7c0b6a6",
+                                    "id": "73c70cd9-76e0-4410-87e6-7c5019c5378e",
                                     "name": "Member added successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1863,7 +1863,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "e54d7fd9-d28d-4ad5-ac4f-c032266f2f32",
+                                                    "id": "14efbb62-29d8-4a6e-99ec-46bb8cad0963",
                                                     "name": "Get current user's role in a project",
                                                     "request": {
                                                         "name": "Get current user's role in a project",
@@ -1907,7 +1907,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "1f796d63-75ab-4966-b5dd-1a69e13493cb",
+                                                            "id": "f76bb84c-1717-4dae-9e2b-ecb18087b184",
                                                             "name": "Project role retrieved successfully",
                                                             "originalRequest": {
                                                                 "url": {
@@ -1963,7 +1963,7 @@
                                             ]
                                         },
                                         {
-                                            "id": "9465388d-6491-447b-99e8-f380b826d11f",
+                                            "id": "1b255e59-e50c-4bac-a20d-a31279769221",
                                             "name": "Get all members of a project",
                                             "request": {
                                                 "name": "Get all members of a project",
@@ -2006,7 +2006,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "b14a385c-d573-4feb-b112-85e52074e58e",
+                                                    "id": "3543e66e-3aeb-4499-bc74-ee605c557ff4",
                                                     "name": "Project members retrieved successfully",
                                                     "originalRequest": {
                                                         "url": {
@@ -2067,7 +2067,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "05c5fca4-e5a9-4fd7-a84a-c7f9d14b42fc",
+                                    "id": "25ec12b3-474e-4039-9d18-d4aac6e18df6",
                                     "name": "Get project member by ID",
                                     "request": {
                                         "name": "Get project member by ID",
@@ -2109,7 +2109,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "da40ee49-13ec-4883-9483-468af3bf1893",
+                                            "id": "0e6f162a-d6ca-476a-92ef-4ed3adb07538",
                                             "name": "Member retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -2161,7 +2161,7 @@
                                     }
                                 },
                                 {
-                                    "id": "bd88563d-98a8-47e1-948d-b0f754ba07e6",
+                                    "id": "cd4d85e4-3201-4785-8059-29b614855e5b",
                                     "name": "Remove project member",
                                     "request": {
                                         "name": "Remove project member",
@@ -2197,7 +2197,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "0a973471-d6ea-423f-9d59-ea7b618028fe",
+                                            "id": "2397c34d-086c-4025-8135-d43dd874f731",
                                             "name": "Member removed successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -2242,7 +2242,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "2f1f9b4e-48e9-4362-baed-b2feec1d06c4",
+                                            "id": "0ebb60f9-fab1-4ae5-a334-5ab3a275c635",
                                             "name": "Update project member role",
                                             "request": {
                                                 "name": "Update project member role",
@@ -2279,7 +2279,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "55367464-71e3-45bc-b368-aac8b948a92b",
+                                                    "id": "40253b47-eff5-4f5c-a6ba-a2688d832d75",
                                                     "name": "Role updated successfully",
                                                     "originalRequest": {
                                                         "url": {
@@ -2325,7 +2325,7 @@
                             ]
                         },
                         {
-                            "id": "81e470d7-a3ce-4d57-a02f-68f16e477b69",
+                            "id": "96913bf5-8072-48fe-a81b-7997c3884ade",
                             "name": "Get all project members in workspace",
                             "request": {
                                 "name": "Get all project members in workspace",
@@ -2355,7 +2355,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "fe056c52-bb2b-445b-bd78-f31a0f6fc885",
+                                    "id": "3950c5fe-cecf-449b-99ca-34e5eb0dfd6a",
                                     "name": "Members retrieved successfully",
                                     "originalRequest": {
                                         "url": {
@@ -2395,7 +2395,7 @@
                             }
                         },
                         {
-                            "id": "c3ee13a9-36be-4f1a-8e39-a3cb8f22b537",
+                            "id": "9439e56d-1a31-4ddf-9f33-2d4f24fe715d",
                             "name": "Add a member to a project",
                             "request": {
                                 "name": "Add a member to a project",
@@ -2425,7 +2425,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "9cd0aea3-13c6-4ba3-b973-b3069bd31ec9",
+                                    "id": "c89bbd1e-09cd-4d8c-a1ba-2691b3ae8190",
                                     "name": "Member added successfully",
                                     "originalRequest": {
                                         "url": {
@@ -2471,7 +2471,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "b5fb0c1e-ca74-4226-a92f-8e9dac4f0a39",
+                            "id": "57f9ca7e-2bf0-49cc-a7b8-d70d37397dfe",
                             "name": "Get all employees",
                             "request": {
                                 "name": "Get all employees",
@@ -2522,7 +2522,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "status",
-                                            "value": "INACTIVE"
+                                            "value": "ACTIVE"
                                         },
                                         {
                                             "disabled": false,
@@ -2559,7 +2559,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "16972a44-0614-401e-add0-7f09ca5105ee",
+                                    "id": "853c882d-2f16-4b51-8ae6-9e1a1657b6e0",
                                     "name": "List of employees",
                                     "originalRequest": {
                                         "url": {
@@ -2605,7 +2605,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "status",
-                                                    "value": "INACTIVE"
+                                                    "value": "ACTIVE"
                                                 },
                                                 {
                                                     "disabled": false,
@@ -2648,7 +2648,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "ab7e7bbc-faad-471a-a080-1c5d8d9fe42c",
+                                    "id": "ef30425d-d1b2-467c-9c98-dd23a9fc7f8c",
                                     "name": "401",
                                     "originalRequest": {
                                         "url": {
@@ -2694,7 +2694,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "status",
-                                                    "value": "INACTIVE"
+                                                    "value": "ACTIVE"
                                                 },
                                                 {
                                                     "disabled": false,
@@ -2737,7 +2737,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "9282e666-fe84-4af8-bebb-6c09af8a7879",
+                                    "id": "a96ec967-d057-4130-8bb5-7f4e8cb7368c",
                                     "name": "500",
                                     "originalRequest": {
                                         "url": {
@@ -2783,7 +2783,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "status",
-                                                    "value": "INACTIVE"
+                                                    "value": "ACTIVE"
                                                 },
                                                 {
                                                     "disabled": false,
@@ -2832,7 +2832,7 @@
                             }
                         },
                         {
-                            "id": "e40f3d82-0331-4c49-b29e-fdb505b8adcb",
+                            "id": "f5b1f33a-8fe6-44bc-b9fa-7c60eff1a61b",
                             "name": "Create a new employee manually",
                             "request": {
                                 "name": "Create a new employee manually",
@@ -2877,7 +2877,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "0e1036c6-26ab-438c-8c55-1306bd9b40ca",
+                                    "id": "d2f6eff1-f102-49dc-9eb4-93c5372222e2",
                                     "name": "Employee created",
                                     "originalRequest": {
                                         "url": {
@@ -2924,7 +2924,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "1ef67a79-9919-47b4-a175-072fef02d0da",
+                                    "id": "b852ac35-2e41-49de-8d0b-12c36cf40879",
                                     "name": "400",
                                     "originalRequest": {
                                         "url": {
@@ -2971,7 +2971,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "b55380df-f7de-47bf-b277-d3ce5bf804af",
+                                    "id": "9c343386-224f-4d11-a338-151cae0c1359",
                                     "name": "Duplicate email or employee number",
                                     "originalRequest": {
                                         "url": {
@@ -3028,7 +3028,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "482b6700-9365-4ee3-a24f-6f0d115709fc",
+                                    "id": "7a96f610-a91d-47f4-8e80-7705053f107a",
                                     "name": "Get employee statistics",
                                     "request": {
                                         "name": "Get employee statistics",
@@ -3059,7 +3059,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "bd9a0eac-8853-4e9d-b7af-7c74bd188402",
+                                            "id": "8b0ce4f5-dfda-46d9-952c-962b90083799",
                                             "name": "Employee statistics by status, department, and sync status",
                                             "originalRequest": {
                                                 "url": {
@@ -3094,7 +3094,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "28ed5c14-36b2-4360-95a6-81a5e51eb8a9",
+                                            "id": "035e9c85-59be-4a9b-9604-adaae93abb18",
                                             "name": "401",
                                             "originalRequest": {
                                                 "url": {
@@ -3141,7 +3141,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "9b902518-7c9a-4b07-b993-74868e0301c9",
+                                    "id": "cb29267a-31bd-4e45-bf97-bdcea9cdc8a0",
                                     "name": "Trigger employee sync from external API",
                                     "request": {
                                         "name": "Trigger employee sync from external API",
@@ -3190,7 +3190,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "ac2aca94-f621-4079-a793-3cc8ba6bf0fa",
+                                            "id": "15d1eacf-865c-4aae-bc73-84f3830dc9c7",
                                             "name": "Sync result with statistics",
                                             "originalRequest": {
                                                 "url": {
@@ -3238,7 +3238,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "9fa1f334-2522-4375-a360-7332c7284e1e",
+                                            "id": "6c20d17d-c6df-4819-bcdd-854a10ead101",
                                             "name": "400",
                                             "originalRequest": {
                                                 "url": {
@@ -3286,7 +3286,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "fd24b635-7458-4fa3-bcf6-31facd9311ae",
+                                            "id": "64ff2cbc-654c-43a8-ab35-578659300f51",
                                             "name": "401",
                                             "originalRequest": {
                                                 "url": {
@@ -3344,7 +3344,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "3cd661e0-c749-493e-a18e-1a7cd5f251f4",
+                                            "id": "91af4898-3fdd-4653-be6b-ac61f5149f41",
                                             "name": "Get sync status and health",
                                             "request": {
                                                 "name": "Get sync status and health",
@@ -3376,7 +3376,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "8175a878-b147-4c54-8752-c38fddefb9e4",
+                                                    "id": "67a11f7a-0bf1-4383-9d3c-d9a3fb7ab4d8",
                                                     "name": "Sync status including any issues",
                                                     "originalRequest": {
                                                         "url": {
@@ -3424,7 +3424,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "decf283a-bde7-4c49-8df7-aac069a00811",
+                                            "id": "465eca1d-08c1-41da-8813-68fcaa5561ed",
                                             "name": "Get employees with sync issues",
                                             "request": {
                                                 "name": "Get employees with sync issues",
@@ -3456,7 +3456,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "5f0a0851-ec3b-4af5-a787-508cd8c98046",
+                                                    "id": "5ab7ebb3-0a41-49f3-8ea5-4b46f3ab1f42",
                                                     "name": "List of employees with FAILED or PENDING sync status",
                                                     "originalRequest": {
                                                         "url": {
@@ -3510,7 +3510,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "c087f6a1-3aef-4575-9912-4f960943227d",
+                                            "id": "9e378dc5-bb00-4dea-804c-8d8ae27a8d3a",
                                             "name": "Get employee by external ID",
                                             "request": {
                                                 "name": "Get employee by external ID",
@@ -3563,7 +3563,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "affc84cb-f988-48dc-837c-adefe6caa1c5",
+                                                    "id": "b40c90f2-9eaf-4ce2-8373-adcdb3306e20",
                                                     "name": "Employee details",
                                                     "originalRequest": {
                                                         "url": {
@@ -3620,7 +3620,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "88f03e30-87ab-4414-a70b-516c4adf716a",
+                                                    "id": "02233e72-a06a-42ec-b916-c174df5acf53",
                                                     "name": "404",
                                                     "originalRequest": {
                                                         "url": {
@@ -3691,7 +3691,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "6ea2c465-103e-483d-93a2-e893524df98e",
+                                    "id": "5113c25b-92f1-41e6-933b-c6acd6043f19",
                                     "name": "Get employee by ID",
                                     "request": {
                                         "name": "Get employee by ID",
@@ -3709,7 +3709,7 @@
                                             "variable": [
                                                 {
                                                     "type": "any",
-                                                    "value": "49Ca17e44A0a05Fb39Adc48e",
+                                                    "value": "46e963C8cC4eFD77A3A27555",
                                                     "key": "id",
                                                     "disabled": false,
                                                     "description": {
@@ -3733,7 +3733,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "5e290a56-058a-4de3-946e-0df52678b959",
+                                            "id": "0a69cc1f-5e28-4825-a4d0-2cd94dcd117f",
                                             "name": "Employee details",
                                             "originalRequest": {
                                                 "url": {
@@ -3754,7 +3754,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "49Ca17e44A0a05Fb39Adc48e",
+                                                            "value": "46e963C8cC4eFD77A3A27555",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -3779,7 +3779,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "fca4bb21-6d83-48f2-a539-6ad606598556",
+                                            "id": "123e3502-3317-41a5-b597-cc9282065f65",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -3800,7 +3800,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "49Ca17e44A0a05Fb39Adc48e",
+                                                            "value": "46e963C8cC4eFD77A3A27555",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -3831,7 +3831,7 @@
                                     }
                                 },
                                 {
-                                    "id": "041338df-da7b-481c-af68-cebf78bceeac",
+                                    "id": "ceaf2b89-09e3-4db7-8477-8fd61343bea3",
                                     "name": "Update employee",
                                     "request": {
                                         "name": "Update employee",
@@ -3888,7 +3888,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "4a93da6d-cc68-477a-b883-22d6d59ba9cb",
+                                            "id": "c3904dc6-2ae5-4e45-a0d4-38c1ff7cec9a",
                                             "name": "Employee updated",
                                             "originalRequest": {
                                                 "url": {
@@ -3947,7 +3947,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "092edbbe-1c16-46e1-86ab-db271d9cb26c",
+                                            "id": "9ae0a6e1-0d93-4753-846d-b972a5a845d3",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -4012,7 +4012,7 @@
                                     }
                                 },
                                 {
-                                    "id": "e982bea3-2aed-43d4-ba7f-1cac031702a1",
+                                    "id": "471ba28a-f15d-4f04-99a9-d1cf7d1ba80d",
                                     "name": "Delete employee (soft delete)",
                                     "request": {
                                         "name": "Delete employee (soft delete)",
@@ -4054,7 +4054,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "66f20882-6676-4481-993c-e830283cc103",
+                                            "id": "31a8c5d1-b246-44f6-89c1-371044c8e8f7",
                                             "name": "Employee deleted",
                                             "originalRequest": {
                                                 "url": {
@@ -4100,7 +4100,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "b0a25262-bf88-4aa4-a3f3-038757a53d4b",
+                                            "id": "6006e565-01d1-4e4f-928b-c9d6e0bb5b3b",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -4164,7 +4164,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "2a073e7f-e1cf-4cce-b7a4-6e2dfdc9d8c7",
+                                    "id": "9ab626cf-6aac-4b7b-90f4-82ded6376644",
                                     "name": "Generate product code",
                                     "request": {
                                         "name": "Generate product code",
@@ -4198,7 +4198,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "146a33e1-44e9-4da2-9787-936ff58b0ca3",
+                                            "id": "3b7da180-a61e-461d-b51c-006937d9eb73",
                                             "name": "Product code generated successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -4245,7 +4245,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "c0cd10e5-911d-433b-8046-aaf8464ebb3a",
+                                    "id": "ecdc0a60-b396-4571-b016-6e4864aca035",
                                     "name": "Get product by ID",
                                     "request": {
                                         "name": "Get product by ID",
@@ -4289,7 +4289,7 @@
                                     }
                                 },
                                 {
-                                    "id": "7812bb1a-f389-49bf-bef5-c0ca778bc223",
+                                    "id": "2c8751c9-13dd-4a42-866a-9e3ee9a656ad",
                                     "name": "Update product",
                                     "request": {
                                         "name": "Update product",
@@ -4333,7 +4333,7 @@
                                     }
                                 },
                                 {
-                                    "id": "bd813703-0b74-49be-a1eb-a9032c691c51",
+                                    "id": "b6279f3d-851b-48dc-b172-f63b39460920",
                                     "name": "Delete product",
                                     "request": {
                                         "name": "Delete product",
@@ -4379,7 +4379,7 @@
                             ]
                         },
                         {
-                            "id": "35776cfc-88f9-4ef7-8b59-58c89c580a12",
+                            "id": "cd7c9dab-4228-4bf8-b5a8-ed8df70b544c",
                             "name": "Get all products",
                             "request": {
                                 "name": "Get all products",
@@ -4417,7 +4417,7 @@
                             }
                         },
                         {
-                            "id": "fa33d902-b3c4-4183-80c5-362958dc86ce",
+                            "id": "fbc00eea-61ac-4691-9dd5-e004a4465211",
                             "name": "Create new product",
                             "request": {
                                 "name": "Create new product",
@@ -4455,6 +4455,322 @@
                             }
                         }
                     ]
+                },
+                {
+                    "name": "pats",
+                    "description": "",
+                    "item": [
+                        {
+                            "name": "catalog",
+                            "description": "",
+                            "item": [
+                                {
+                                    "name": "products",
+                                    "description": "",
+                                    "item": [
+                                        {
+                                            "name": "{productId}",
+                                            "description": "",
+                                            "item": [
+                                                {
+                                                    "id": "a1d848d1-620b-4e96-bab5-253401a876cc",
+                                                    "name": "Read a workspace-scoped PATS product catalog record",
+                                                    "request": {
+                                                        "name": "Read a workspace-scoped PATS product catalog record",
+                                                        "description": {
+                                                            "content": "Returns Product -> Model -> ModelPart data without legacy seed fallback. Optional private imageObjectKey metadata is resolved to a short-lived read URL and is never returned.",
+                                                            "type": "text/plain"
+                                                        },
+                                                        "url": {
+                                                            "path": [
+                                                                "api",
+                                                                "pats",
+                                                                "catalog",
+                                                                "products",
+                                                                ":productId"
+                                                            ],
+                                                            "host": [
+                                                                "{{baseUrl}}"
+                                                            ],
+                                                            "query": [],
+                                                            "variable": [
+                                                                {
+                                                                    "type": "any",
+                                                                    "value": "<string>",
+                                                                    "key": "productId",
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "(Required) ",
+                                                                        "type": "text/plain"
+                                                                    }
+                                                                }
+                                                            ]
+                                                        },
+                                                        "header": [
+                                                            {
+                                                                "disabled": false,
+                                                                "description": {
+                                                                    "content": "(Required) ",
+                                                                    "type": "text/plain"
+                                                                },
+                                                                "key": "x-workspace-id",
+                                                                "value": "46e963C8cC4eFD77A3A27555"
+                                                            }
+                                                        ],
+                                                        "method": "GET",
+                                                        "body": {},
+                                                        "auth": {
+                                                            "type": "bearer",
+                                                            "bearer": [
+                                                                {
+                                                                    "key": "token",
+                                                                    "value": "{{bearerToken}}"
+                                                                }
+                                                            ]
+                                                        }
+                                                    },
+                                                    "response": [
+                                                        {
+                                                            "id": "4d1fe5ba-8287-4739-bef7-60d2f8acbd37",
+                                                            "name": "Complete or sparse PATS catalog record",
+                                                            "originalRequest": {
+                                                                "url": {
+                                                                    "path": [
+                                                                        "api",
+                                                                        "pats",
+                                                                        "catalog",
+                                                                        "products",
+                                                                        ":productId"
+                                                                    ],
+                                                                    "host": [
+                                                                        "{{baseUrl}}"
+                                                                    ],
+                                                                    "query": [],
+                                                                    "variable": [
+                                                                        {
+                                                                            "disabled": false,
+                                                                            "description": {
+                                                                                "content": "(Required) ",
+                                                                                "type": "text/plain"
+                                                                            },
+                                                                            "type": "any",
+                                                                            "value": "<string>",
+                                                                            "key": "productId"
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "header": [
+                                                                    {
+                                                                        "disabled": false,
+                                                                        "description": {
+                                                                            "content": "(Required) ",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "x-workspace-id",
+                                                                        "value": "46e963C8cC4eFD77A3A27555"
+                                                                    },
+                                                                    {
+                                                                        "description": {
+                                                                            "content": "Added as a part of security scheme: bearer",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "Authorization",
+                                                                        "value": "Bearer <token>"
+                                                                    }
+                                                                ],
+                                                                "method": "GET",
+                                                                "body": {}
+                                                            },
+                                                            "status": "OK",
+                                                            "code": 200,
+                                                            "header": [],
+                                                            "cookie": [],
+                                                            "_postman_previewlanguage": "text"
+                                                        },
+                                                        {
+                                                            "id": "1459e546-1a14-4a3f-b9e8-e006481cec50",
+                                                            "name": "Workspace header is missing or invalid",
+                                                            "originalRequest": {
+                                                                "url": {
+                                                                    "path": [
+                                                                        "api",
+                                                                        "pats",
+                                                                        "catalog",
+                                                                        "products",
+                                                                        ":productId"
+                                                                    ],
+                                                                    "host": [
+                                                                        "{{baseUrl}}"
+                                                                    ],
+                                                                    "query": [],
+                                                                    "variable": [
+                                                                        {
+                                                                            "disabled": false,
+                                                                            "description": {
+                                                                                "content": "(Required) ",
+                                                                                "type": "text/plain"
+                                                                            },
+                                                                            "type": "any",
+                                                                            "value": "<string>",
+                                                                            "key": "productId"
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "header": [
+                                                                    {
+                                                                        "disabled": false,
+                                                                        "description": {
+                                                                            "content": "(Required) ",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "x-workspace-id",
+                                                                        "value": "46e963C8cC4eFD77A3A27555"
+                                                                    },
+                                                                    {
+                                                                        "description": {
+                                                                            "content": "Added as a part of security scheme: bearer",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "Authorization",
+                                                                        "value": "Bearer <token>"
+                                                                    }
+                                                                ],
+                                                                "method": "GET",
+                                                                "body": {}
+                                                            },
+                                                            "status": "Bad Request",
+                                                            "code": 400,
+                                                            "header": [],
+                                                            "cookie": [],
+                                                            "_postman_previewlanguage": "text"
+                                                        },
+                                                        {
+                                                            "id": "3acac7d7-bec3-4dd2-bfbd-4b0353e6fcac",
+                                                            "name": "Product is not linked to the requested workspace",
+                                                            "originalRequest": {
+                                                                "url": {
+                                                                    "path": [
+                                                                        "api",
+                                                                        "pats",
+                                                                        "catalog",
+                                                                        "products",
+                                                                        ":productId"
+                                                                    ],
+                                                                    "host": [
+                                                                        "{{baseUrl}}"
+                                                                    ],
+                                                                    "query": [],
+                                                                    "variable": [
+                                                                        {
+                                                                            "disabled": false,
+                                                                            "description": {
+                                                                                "content": "(Required) ",
+                                                                                "type": "text/plain"
+                                                                            },
+                                                                            "type": "any",
+                                                                            "value": "<string>",
+                                                                            "key": "productId"
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "header": [
+                                                                    {
+                                                                        "disabled": false,
+                                                                        "description": {
+                                                                            "content": "(Required) ",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "x-workspace-id",
+                                                                        "value": "46e963C8cC4eFD77A3A27555"
+                                                                    },
+                                                                    {
+                                                                        "description": {
+                                                                            "content": "Added as a part of security scheme: bearer",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "Authorization",
+                                                                        "value": "Bearer <token>"
+                                                                    }
+                                                                ],
+                                                                "method": "GET",
+                                                                "body": {}
+                                                            },
+                                                            "status": "Not Found",
+                                                            "code": 404,
+                                                            "header": [],
+                                                            "cookie": [],
+                                                            "_postman_previewlanguage": "text"
+                                                        },
+                                                        {
+                                                            "id": "6261a479-5ea0-4120-ae25-54f0c3d28294",
+                                                            "name": "Private image storage is unavailable",
+                                                            "originalRequest": {
+                                                                "url": {
+                                                                    "path": [
+                                                                        "api",
+                                                                        "pats",
+                                                                        "catalog",
+                                                                        "products",
+                                                                        ":productId"
+                                                                    ],
+                                                                    "host": [
+                                                                        "{{baseUrl}}"
+                                                                    ],
+                                                                    "query": [],
+                                                                    "variable": [
+                                                                        {
+                                                                            "disabled": false,
+                                                                            "description": {
+                                                                                "content": "(Required) ",
+                                                                                "type": "text/plain"
+                                                                            },
+                                                                            "type": "any",
+                                                                            "value": "<string>",
+                                                                            "key": "productId"
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "header": [
+                                                                    {
+                                                                        "disabled": false,
+                                                                        "description": {
+                                                                            "content": "(Required) ",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "x-workspace-id",
+                                                                        "value": "46e963C8cC4eFD77A3A27555"
+                                                                    },
+                                                                    {
+                                                                        "description": {
+                                                                            "content": "Added as a part of security scheme: bearer",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "Authorization",
+                                                                        "value": "Bearer <token>"
+                                                                    }
+                                                                ],
+                                                                "method": "GET",
+                                                                "body": {}
+                                                            },
+                                                            "status": "Service Unavailable",
+                                                            "code": 503,
+                                                            "header": [],
+                                                            "cookie": [],
+                                                            "_postman_previewlanguage": "text"
+                                                        }
+                                                    ],
+                                                    "event": [],
+                                                    "protocolProfileBehavior": {
+                                                        "disableBodyPruning": true
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
                 }
             ]
         }
@@ -4477,7 +4793,7 @@
         }
     ],
     "info": {
-        "_postman_id": "becd0ea5-53f6-4eca-a85f-bab4b6740cfc",
+        "_postman_id": "643f09e6-7822-4fe1-af27-7979b719b741",
         "name": "Bandai PATS API",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         "description": {

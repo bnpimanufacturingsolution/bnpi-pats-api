@@ -17,6 +17,9 @@ module.exports = {
 			if (request.includes("generated/prisma")) {
 				return callback(null, "commonjs ./generated/prisma");
 			}
+			if (request.includes("generated/pats-client")) {
+				return callback(null, "commonjs ./generated/pats-client");
+			}
 			callback();
 		},
 	],

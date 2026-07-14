@@ -16,7 +16,7 @@ RUN apk add --no-cache libc6-compat openssl
 COPY package.json pnpm-lock.yaml ./
 
 # Install only runtime dependencies from the checked-in lockfile.
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts --shamefully-hoist
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -27,7 +27,7 @@ COPY tsconfig.json ./
 COPY webpack.config.js ./
 
 # Install the complete build toolchain from the checked-in lockfile.
-RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN pnpm install --frozen-lockfile --ignore-scripts --shamefully-hoist
 
 # Copy source code
 COPY app/ ./app/
@@ -46,6 +46,7 @@ COPY index.ts ./
 
 # Generate Prisma client (schema folder includes all .prisma models)
 RUN npx prisma generate --schema prisma/schema
+RUN npx prisma generate --schema prisma/pats/schema.prisma
 RUN npm run export-docs
 
 # Build TypeScript with webpack
@@ -62,17 +63,19 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nodeuser
 
 # Copy built application
-COPY --from=builder /app/dist ./dist
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/generated ./generated
-COPY --from=builder /app/assets ./assets
-COPY --from=builder /app/app ./app
-COPY --from=builder /app/docs ./docs
+COPY --from=builder --chown=nodeuser:nodejs /app/dist ./dist
+COPY --from=deps --chown=nodeuser:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodeuser:nodejs /app/package.json ./
+COPY --from=builder --chown=nodeuser:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nodeuser:nodejs /app/generated ./generated
+COPY --from=builder --chown=nodeuser:nodejs /app/assets ./assets
+COPY --from=builder --chown=nodeuser:nodejs /app/app ./app
+COPY --from=builder --chown=nodeuser:nodejs /app/docs ./docs
 
-# Set ownership to non-root user
-RUN chown -R nodeuser:nodejs /app
+# Winston creates its file-log directory during module initialization.
+RUN mkdir -p /app/logs && chown nodeuser:nodejs /app/logs
+
+# All runtime artifacts are copied with non-root ownership above.
 USER nodeuser
 
 # Expose port

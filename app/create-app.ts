@@ -12,6 +12,7 @@ import { sanitizeInputs } from "../middleware/sanitization";
 import { AppError } from "../errors";
 import { env } from "../config/env";
 import { registerLegacyRoutes, type LegacyRouteRegistration } from "./legacy/register-legacy-routes";
+import { patsModule } from "./pats";
 
 interface RequestWithIO extends Request {
 	io?: SocketServer;
@@ -178,6 +179,10 @@ export function createApp(options: AppOptions = {}): Application {
 		});
 		console.log("⚠️ TEST MODE ENABLED - Authentication bypassed for all requests");
 	}
+
+	// PATS is a separate PostgreSQL-backed read surface. It is mounted after the
+	// shared authentication boundary and before legacy compatibility routes.
+	app.use(config.baseApiPath, patsModule());
 
 	// Retained platform and blocked-review routes stay mounted in the default
 	// application. They are not part of the quarantine compatibility switch.

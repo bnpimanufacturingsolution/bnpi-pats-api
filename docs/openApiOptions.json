@@ -70,7 +70,8 @@
 		"./app/workspaceMember/workspace-member.router.ts",
 		"./app/projectMember/project-member.router.ts",
 		"./app/employee/employee.router.ts",
-		"./app/product/product.router.ts"
+		"./app/product/product.router.ts",
+		"./app/pats/catalog.router.ts"
 	]
 }
 
