@@ -16,6 +16,11 @@ interface ProblemDetails {
 	instance: string;
 }
 
+interface AcceptMediaRange {
+	specificity: number;
+	quality: number;
+}
+
 function requestInstance(req: Request): string {
 	return req.originalUrl.split("?", 1)[0];
 }
@@ -28,29 +33,32 @@ function acceptsCanonicalJson(req: Request): boolean {
 	const accept = req.header("Accept");
 	if (!accept) return true;
 
-	return accept.split(",").some((entry) => {
+	const matchingRanges = accept.split(",").reduce<AcceptMediaRange[]>((ranges, entry) => {
 		const [mediaType, ...parameters] = entry.trim().toLowerCase().split(";");
-		const quality = parameters.find((parameter) => parameter.trim().startsWith("q="));
-		if (quality && Number(quality.trim().slice(2)) === 0) return false;
+		const qualityParameter = parameters.find((parameter) => parameter.trim().startsWith("q="));
+		const quality = qualityParameter ? Number(qualityParameter.trim().slice(2)) : 1;
+		if (!Number.isFinite(quality) || quality < 0 || quality > 1) return ranges;
 
-		return mediaType === "application/json" || mediaType === "*/*";
-	});
+		if (mediaType === "application/json") ranges.push({ specificity: 2, quality });
+		if (mediaType === "application/*") ranges.push({ specificity: 1, quality });
+		if (mediaType === "*/*") ranges.push({ specificity: 0, quality });
+		return ranges;
+	}, []);
+
+	if (matchingRanges.length === 0) return false;
+	const highestSpecificity = Math.max(...matchingRanges.map((range) => range.specificity));
+	return matchingRanges.find((range) => range.specificity === highestSpecificity)?.quality !== 0;
 }
 
 function isValidTraceparent(value: string): boolean {
-	const [version, traceId, parentId, flags, ...extensions] = value.split("-");
+	const match = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(.*)$/.exec(value);
+	if (!match) return false;
+
+	const [, version, traceId, parentId, flags, suffix] = match;
 	if (
-		!version ||
-		!traceId ||
-		!parentId ||
-		!flags ||
-		!/^[0-9a-f]{2}$/.test(version) ||
-		!/^[0-9a-f]{32}$/.test(traceId) ||
-		!/^[0-9a-f]{16}$/.test(parentId) ||
-		!/^[0-9a-f]{2}$/.test(flags) ||
 		version === "ff" ||
-		(version === "00" && extensions.length > 0) ||
-		extensions.some((extension) => !/^[0-9a-f]{2,}$/.test(extension))
+		(version === "00" && suffix !== "") ||
+		(suffix !== "" && !suffix.startsWith("-"))
 	) {
 		return false;
 	}

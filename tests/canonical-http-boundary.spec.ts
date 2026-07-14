@@ -32,6 +32,14 @@ describe("canonical HTTP boundary", function () {
 		assert.strictEqual(response.headers.tracestate, validTracestate);
 	});
 
+	it("accepts the application wildcard media range for a JSON success response", async () => {
+		await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("Accept", "application/*")
+			.expect("Content-Type", /application\/json/)
+			.expect(200);
+	});
+
 	it("returns a canonical not-acceptable problem for an unsupported Accept header", async () => {
 		const response = await request(createApp({ enableLegacyRoutes: false }))
 			.get("/api/v1/health")
@@ -52,6 +60,17 @@ describe("canonical HTTP boundary", function () {
 		const response = await request(createApp({ enableLegacyRoutes: false }))
 			.get("/api/v1/health")
 			.set("Accept", "application/problem+json")
+			.expect("Content-Type", /application\/problem\+json/)
+			.expect(406);
+
+		assert.strictEqual(response.body.type, "urn:bandai:pats:problem:not-acceptable");
+		assert.strictEqual(response.body.status, 406);
+	});
+
+	it("gives a specific JSON exclusion precedence over a wildcard acceptance", async () => {
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("Accept", "application/json;q=0, */*;q=1")
 			.expect("Content-Type", /application\/problem\+json/)
 			.expect(406);
 
@@ -86,6 +105,17 @@ describe("canonical HTTP boundary", function () {
 
 	it("propagates valid future-version traceparent extension fields", async () => {
 		const traceparent = "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-a1b2";
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("Accept", "application/json")
+			.set("traceparent", traceparent)
+			.expect(200);
+
+		assert.strictEqual(response.headers.traceparent, traceparent);
+	});
+
+	it("preserves opaque non-hex fields on a valid future-version traceparent", async () => {
+		const traceparent = "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-opaque-future-extension";
 		const response = await request(createApp({ enableLegacyRoutes: false }))
 			.get("/api/v1/health")
 			.set("Accept", "application/json")

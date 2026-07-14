@@ -158,3 +158,69 @@ Result: **10 passing**. The run retains only pre-existing Node/EventEmitter warn
 - No Prisma, generated, seed, deployment, frontend, or unrelated files were changed.
 - No new recommendations were identified; the existing Node-version and inherited warning-noise
   concerns remain documented above.
+
+## Task 1 re-review fix section
+
+### Findings addressed
+
+1. Canonical success negotiation now accepts `Accept: application/*` for the JSON health
+   response.
+2. Matching media ranges are resolved by specificity before quality: the more-specific
+   `application/json;q=0` excludes JSON even when `*/*;q=1` is also present.
+3. Higher-version `traceparent` values validate only the known lowercase version, trace ID,
+   parent ID, and flags prefix. Unknown future suffix fields are opaque, are not parsed or
+   constrained, and the complete incoming header is propagated. Version `ff` and uppercase
+   known fields remain rejected; existing valid `tracestate` propagation remains intact.
+
+The trace behavior follows the official [W3C Trace Context versioning
+guidance](https://www.w3.org/TR/trace-context/#versioning-of-traceparent): higher-version
+headers are parsed through the known prefix and unknown fields are not interpreted.
+
+### Changed files
+
+- `app/canonical/router.ts` — added media-range specificity/quality selection and opaque
+  higher-version traceparent handling.
+- `tests/canonical-http-boundary.spec.ts` — added regressions for `application/*`, specific
+  `q=0` precedence, and a non-hex future extension while retaining all prior coverage.
+- `.superpowers/sdd/task-1-report.md` — this re-review evidence section.
+
+### TDD evidence
+
+RED command before the production fix:
+
+```text
+pnpm exec mocha --no-config --require ts-node/register --extension ts tests/canonical-http-boundary.spec.ts --reporter dot --exit
+```
+
+Result: **10 passing, 3 failing**. The new `application/*` request returned a canonical 406,
+the specific JSON `q=0` request returned successful JSON, and the opaque future extension was
+dropped.
+
+GREEN command after the production fix:
+
+```text
+pnpm exec mocha --no-config --require ts-node/register --extension ts tests/canonical-http-boundary.spec.ts --reporter dot --exit
+```
+
+Result: **13 passing**. Existing valid trace/tracestate and canonical error behavior remained
+green. Only the repository's pre-existing Node/EventEmitter warning noise was emitted.
+
+### Verification commands and outputs
+
+- `pnpm run type-check` — PASS; `Type check passed!` (existing Node 20.x versus Node 24.17.0
+  engine warning emitted).
+- `pnpm run lint` — PASS; ESLint exited 0 (existing Node engine warning emitted).
+- `git diff --check` — PASS before staging.
+
+### Re-review self-review
+
+- The Accept implementation selects the highest-specificity matching range, so exact JSON
+  exclusions cannot be overridden by wildcard ranges; `application/*` remains a valid match.
+- The trace parser validates only the known prefix and the required delimiter before an unknown
+  suffix; it does not inspect future extension content and returns the original header unchanged.
+- Lowercase known-field validation, nonzero IDs, reserved `ff` rejection, version `00` behavior,
+  valid `tracestate`, RFC 9457 errors, malformed JSON, 404/405, 406, and 415 behavior remain
+  covered by the focused suite.
+- Only `app/canonical/router.ts`, `tests/canonical-http-boundary.spec.ts`, and this report were
+  changed/staged for this re-review; legacy behavior and approved design docs were untouched.
+- No new recommendations were identified.
