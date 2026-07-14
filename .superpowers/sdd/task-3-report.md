@@ -81,3 +81,30 @@ retained its pre-existing legacy mocked audit/activity and optional Redis warnin
 - Remaining concern: the repository’s current full test suite emits known legacy mock warnings;
   they are unrelated to this slice and did not fail the suite. Runtime engine alignment with the
   declared Node 20.x remains an environment concern outside this task.
+
+## Final whole-branch review fix section
+
+### Findings addressed
+
+- `OffsetPagination.pageSize` now declares `maximum: 100`, matching the canonical runtime page
+  size limit.
+- `IdempotencyKey` retains its `minLength: 1` and `maxLength: 255` and now uses `pattern: '\\S'`
+  so whitespace-only header values are rejected.
+- Focused contract assertions cover both source-contract requirements.
+
+### Changed files and verification
+
+- `docs/openapi/2026-07-14-pats-api-v1-common-components.yaml` — added the page-size maximum and
+  non-whitespace idempotency-key pattern.
+- `tests/canonical-response-contract.spec.ts` — asserts the maximum, length limits, and pattern.
+- RED combined canonical command: **17 passing, 9 failing** before this fix wave; the two OpenAPI
+  assertions were among the failures.
+- GREEN combined canonical command: **26 passing**.
+- `pnpm run type-check`, `pnpm run lint`, and `pnpm test` all passed.
+
+### Final review self-check
+
+- The document remains source-only OpenAPI common components with no operations, domain
+  decisions, generated files, or legacy changes.
+- No new recommendations were identified. The existing Node 20.x engine warning and inherited
+  full-suite mock warning noise remain outside this task's scope.

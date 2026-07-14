@@ -92,6 +92,7 @@ describe("canonical OpenAPI common components", () => {
 			"totalPages",
 		]);
 		assert.deepStrictEqual(Object.keys(schemas.CursorPagination.properties).sort(), ["hasMore", "nextCursor"]);
+		assert.strictEqual(schemas.OffsetPagination.properties.pageSize.maximum, 100);
 	});
 
 	it("defines shared conditional, tracing, idempotency, and response-header components", () => {
@@ -99,6 +100,9 @@ describe("canonical OpenAPI common components", () => {
 		for (const name of ["IdempotencyKey", "IfMatch", "Traceparent", "Tracestate"]) {
 			assert.strictEqual(parameters[name].in, "header");
 		}
+		assert.strictEqual(parameters.IdempotencyKey.schema.minLength, 1);
+		assert.strictEqual(parameters.IdempotencyKey.schema.maxLength, 255);
+		assert.strictEqual(parameters.IdempotencyKey.schema.pattern, "\\S");
 		for (const name of [
 			"ETag",
 			"XRequestId",

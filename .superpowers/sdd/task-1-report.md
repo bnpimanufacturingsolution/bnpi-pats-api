@@ -96,6 +96,60 @@ was written before production code and passed with the full focused contract sui
   noise while exiting successfully. No new warnings were added by the canonical boundary.
 - No new recommendations were identified.
 
+## Final whole-branch review fix section
+
+### Findings addressed
+
+1. The canonical error boundary now contains body-parser and transport failures: malformed JSON
+   remains a `400 malformed-request`, oversize JSON is a `413 payload-too-large`, and unsupported
+   charset, encoding, or media errors are a `415 unsupported-media-type`. All other errors raised
+   while handling a canonical request now receive a generic `500 internal-error` Problem Details
+   response without an error message or stack.
+2. `GET` and `HEAD /api/v1/health` both return successful process-health responses. HEAD sends no
+   response body, and unsupported methods advertise `Allow: GET, HEAD`.
+3. Canonical responses remove `X-Powered-By`; legacy composition was not changed. Valid
+   `tracestate` values continue to propagate with a valid `traceparent`, while malformed
+   `tracestate` values are discarded.
+
+### Changed files
+
+- `app/canonical/router.ts` — contained parser/transport/internal errors in the canonical RFC
+  9457 boundary; added HEAD semantics, accurate Allow, canonical-only `X-Powered-By` removal,
+  tracestate validation, and a router-level health-handler injection seam used only by the focused
+  error-boundary test.
+- `tests/canonical-http-boundary.spec.ts` — added regressions for HEAD, Allow, X-Powered-By,
+  invalid tracestate, 413, unsupported charset 415, and a deterministic unexpected handler 500.
+
+### TDD and verification evidence
+
+- RED: `pnpm exec mocha --no-config --require ts-node/register --extension ts
+  tests/canonical-http-boundary.spec.ts tests/canonical-response-contract.spec.ts --reporter dot
+  --exit` — **17 passing, 9 failing** before implementation. Failures demonstrated legacy
+  envelopes for parser errors and unexpected canonical failures, plus the missing HEAD, Allow,
+  header, trace, and OpenAPI constraints.
+- GREEN: the same focused command — **26 passing** after implementation.
+- `pnpm run type-check` — PASS (`Type check passed!`).
+- `pnpm run lint` — PASS.
+- `pnpm test` — PASS (Mocha exited 0).
+
+### Final review self-check
+
+- The canonical router is still mounted before legacy parsing, authentication, and global errors;
+  no legacy registration, response composition, persistence, Prisma, migration, seed,
+  deployment, generated, or frontend file changed.
+- The generic 500 response uses only stable Problem Details fields and a fixed detail; it does not
+  serialize the thrown error, message, or stack.
+- The test seam changes no public route and exists only to make canonical error handling
+  deterministic under Supertest.
+- No new recommendations were identified.
+
+### Remaining concerns
+
+- Commands ran with Node `v24.17.0` while `package.json` declares Node `20.x`; pnpm emitted the
+  existing engine warning.
+- The full inherited suite retains its existing mock audit/activity and optional Redis warning
+  noise while exiting successfully.
+
 ## Task 1 review-fix section
 
 ### Findings addressed

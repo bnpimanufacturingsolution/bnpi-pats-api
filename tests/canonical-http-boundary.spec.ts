@@ -1,6 +1,8 @@
 import assert from "assert";
+import express from "express";
 import request from "supertest";
 import { createApp } from "../app/create-app";
+import { canonicalRouter } from "../app/canonical/router";
 
 const validTraceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
 const validTracestate = "bandai=pats";
@@ -15,6 +17,16 @@ describe("canonical HTTP boundary", function () {
 			.expect(200);
 
 		assert.deepStrictEqual(response.body, { status: "healthy" });
+		assert.strictEqual(response.headers["x-powered-by"], undefined);
+	});
+
+	it("serves process health for HEAD without a response body", async () => {
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.head("/api/v1/health")
+			.expect("Content-Type", /application\/json/)
+			.expect(200);
+
+		assert.strictEqual(response.text ?? "", "");
 	});
 
 	it("accepts application/json and propagates request correlation and valid trace context", async () => {
@@ -125,11 +137,22 @@ describe("canonical HTTP boundary", function () {
 		assert.strictEqual(response.headers.traceparent, traceparent);
 	});
 
+	it("discards invalid tracestate while preserving a valid traceparent", async () => {
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.get("/api/v1/health")
+			.set("traceparent", validTraceparent)
+			.set("tracestate", "bandai")
+			.expect(200);
+
+		assert.strictEqual(response.headers.traceparent, validTraceparent);
+		assert.strictEqual(response.headers.tracestate, undefined);
+	});
+
 	it("returns a canonical method-not-allowed problem and Allow header", async () => {
 		const response = await request(createApp({ enableLegacyRoutes: false }))
 			.post("/api/v1/health")
 			.expect("Content-Type", /application\/problem\+json/)
-			.expect("Allow", "GET")
+			.expect("Allow", "GET, HEAD")
 			.expect(405);
 
 		assert.strictEqual(response.body.type, "urn:bandai:pats:problem:method-not-allowed");
@@ -161,5 +184,47 @@ describe("canonical HTTP boundary", function () {
 		assert.strictEqual(response.body.type, "urn:bandai:pats:problem:malformed-request");
 		assert.strictEqual(response.body.status, 400);
 		assert.strictEqual(response.body.instance, "/api/v1/health");
+	});
+
+	it("returns a canonical payload-too-large problem for oversized JSON", async () => {
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.post("/api/v1/health")
+			.send({ payload: "x".repeat(1024 * 1024) })
+			.expect("Content-Type", /application\/problem\+json/)
+			.expect(413);
+
+		assert.strictEqual(response.body.type, "urn:bandai:pats:problem:payload-too-large");
+		assert.strictEqual(response.body.instance, "/api/v1/health");
+	});
+
+	it("returns a canonical unsupported-media-type problem for an unsupported JSON charset", async () => {
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.post("/api/v1/health")
+			.set("Content-Type", "application/json; charset=madeup")
+			.send('{"status":"healthy"}')
+			.expect("Content-Type", /application\/problem\+json/)
+			.expect(415);
+
+		assert.strictEqual(response.body.type, "urn:bandai:pats:problem:unsupported-media-type");
+		assert.strictEqual(response.body.instance, "/api/v1/health");
+	});
+
+	it("returns a generic canonical internal-error problem for unexpected handler failures", async () => {
+		const app = express();
+		app.use("/api/v1", canonicalRouter({ healthHandler: () => { throw new Error("sensitive test failure"); } }));
+
+		const response = await request(app)
+			.get("/api/v1/health")
+			.expect("Content-Type", /application\/problem\+json/)
+			.expect(500);
+
+		assert.deepStrictEqual(response.body, {
+			type: "urn:bandai:pats:problem:internal-error",
+			title: "Internal Server Error",
+			status: 500,
+			detail: "An unexpected canonical error occurred.",
+			instance: "/api/v1/health",
+		});
+		assert.doesNotMatch(JSON.stringify(response.body), /sensitive test failure|stack/i);
 	});
 });
