@@ -1,0 +1,338 @@
+openapi: 3.1.0
+info:
+  title: Bandai PATS API v1 Common Components
+  version: 2026-07-14
+  description: Reusable canonical HTTP contract components. No domain operations are declared here.
+servers:
+  - url: /api/v1
+    description: Canonical PATS API v1 base path
+paths: {}
+components:
+  schemas:
+    ProblemDetails:
+      type: object
+      description: RFC 9457 Problem Details with PATS extensions.
+      required: [type, title, status, detail, instance]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        errors:
+          type: array
+          description: Required for field-specific or multi-field validation failures.
+          items:
+            $ref: '#/components/schemas/FieldError'
+      additionalProperties: true
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+    OffsetPagination:
+      type: object
+      required: [page, pageSize, totalItems, totalPages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        totalItems:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+    CursorPagination:
+      type: object
+      required: [nextCursor, hasMore]
+      properties:
+        nextCursor:
+          type: [string, 'null']
+          description: Opaque cursor for the next page, or null when no next page exists.
+        hasMore:
+          type: boolean
+    OffsetPaginationEnvelope:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items: {}
+        pagination:
+          $ref: '#/components/schemas/OffsetPagination'
+    CursorPaginationEnvelope:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items: {}
+        pagination:
+          $ref: '#/components/schemas/CursorPagination'
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: Required only by retryable operations that explicitly declare idempotency support.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    IfMatch:
+      name: If-Match
+      in: header
+      description: Strong validator required by operations that enforce optimistic concurrency.
+      schema:
+        type: string
+    Traceparent:
+      name: traceparent
+      in: header
+      description: W3C Trace Context traceparent value.
+      schema:
+        type: string
+    Tracestate:
+      name: tracestate
+      in: header
+      description: Optional W3C Trace Context tracestate value.
+      schema:
+        type: string
+  headers:
+    ETag:
+      description: Strong representation validator when the operation documents concurrency support.
+      schema:
+        type: string
+    XRequestId:
+      description: Human-readable request correlation identifier.
+      schema:
+        type: string
+    RetryAfter:
+      description: Non-negative delay in seconds before a rate-limited request may be retried.
+      schema:
+        type: integer
+        minimum: 0
+    XRateLimitLimit:
+      description: Non-negative request limit for the applicable policy window.
+      schema:
+        type: integer
+        minimum: 0
+    XRateLimitRemaining:
+      description: Non-negative requests remaining in the applicable policy window.
+      schema:
+        type: integer
+        minimum: 0
+    Deprecation:
+      description: Signals that the endpoint is deprecated.
+      schema:
+        type: string
+        const: 'true'
+    Sunset:
+      description: HTTP-date after which a deprecated endpoint is expected to be unavailable.
+      schema:
+        type: string
+        format: http-date
+  responses:
+    Problem400:
+      description: Malformed request.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:malformed-request
+                  status:
+                    const: 400
+    Problem401:
+      description: Authentication required.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:authentication-required
+                  status:
+                    const: 401
+    Problem403:
+      description: Authorization denied.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:authorization-denied
+                  status:
+                    const: 403
+    Problem404:
+      description: Resource not found.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:not-found
+                  status:
+                    const: 404
+    Problem405:
+      description: Method not allowed.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:method-not-allowed
+                  status:
+                    const: 405
+    Problem406:
+      description: Requested representation is not acceptable.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:not-acceptable
+                  status:
+                    const: 406
+    Problem409:
+      description: Request conflicts with current state.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:conflict
+                  status:
+                    const: 409
+    Problem412:
+      description: Request precondition failed.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:precondition-failed
+                  status:
+                    const: 412
+    Problem413:
+      description: Request payload is too large.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:payload-too-large
+                  status:
+                    const: 413
+    Problem415:
+      description: Request media type is unsupported.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:unsupported-media-type
+                  status:
+                    const: 415
+    Problem422:
+      description: Request failed validation.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:validation-error
+                  status:
+                    const: 422
+    Problem429:
+      description: Rate limit exceeded.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+        X-RateLimit-Limit:
+          $ref: '#/components/headers/XRateLimitLimit'
+        X-RateLimit-Remaining:
+          $ref: '#/components/headers/XRateLimitRemaining'
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:rate-limit
+                  status:
+                    const: 429
+    Problem500:
+      description: Internal server error.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:internal-error
+                  status:
+                    const: 500
+    Problem503:
+      description: Required dependency is unavailable.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  type:
+                    const: urn:bandai:pats:problem:dependency-unavailable
+                  status:
+                    const: 503
