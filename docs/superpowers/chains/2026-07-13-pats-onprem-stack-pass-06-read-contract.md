@@ -8,6 +8,7 @@ Expose one workspace-scoped read-only Product → Model → ModelPart contract w
 
 ## Scope
 - Touch only: `app/pats/catalog/**`, `app/pats/index.ts`, `tests/pats-catalog.contract.spec.ts`, generated OpenAPI inputs for the new read-only route, and focused API documentation.
+- Scope amendment (2026-07-13): also touch `app/create-app.ts`, `Dockerfile`, `package.json`, and `webpack.config.js` only to mount the new PATS module and ensure its already-separated generated Prisma client is produced and packaged. This is required to make the new route reachable and runnable; no existing legacy registration, auth, or build behavior may be removed or changed.
 - Do not touch: legacy `app/product/**`, planning writes, execution scans, reporting, auth/role behavior, workspace membership semantics, seeds, frontend files, or the legacy API registration boundary outside the new PATS module.
 
 ## Instructions
@@ -35,4 +36,3 @@ Agent stops and reports back (does not proceed) if:
 - Workspace scoping cannot be enforced with the existing retained boundary.
 - The schema lacks a confirmed relation needed for the read-only response.
 - The route would need a write operation, legacy product controller, or seed-derived fallback.
-
