@@ -59,8 +59,6 @@ model Product {
   productionSteps     ProductProductionStep[]
   materials           ProductMaterial[]
   costAssumptions     ProductCostAssumption[]
-  demandLines         DemandLine[]
-  demandEstimateLines DemandEstimateLine[]
 
   isDeleted Boolean  @default(false)
   createdAt DateTime @default(now())
