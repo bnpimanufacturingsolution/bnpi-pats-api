@@ -28,8 +28,7 @@
 		"copy-codebase": "ts-node scripts/copy-codebase.ts",
 		"generate": "ts-node scripts/generate-and-export.ts",
 		"api-list": "curl -X GET 'http://localhost:3000/api/docs/api-list?format=json' | jq",
-		"zod-generate": "node scripts/zod-generate.js",
-		"recalculate-estimations": "ts-node scripts/recalculate-estimations.ts"
+		"zod-generate": "node scripts/zod-generate.js"
 	},
 	"prisma": {
 		"seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
