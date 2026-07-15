@@ -1,4 +1,3 @@
-import assert from "assert";
 import jwt from "jsonwebtoken";
 import request from "supertest";
 import { createApp } from "../app/create-app";
@@ -32,29 +31,47 @@ describe("active API surface", function () {
 			.expect(400);
 	});
 
-	it("does not expose quarantined project routes by default", async () => {
-		const app = createApp({ enableLegacyRoutes: false });
+	// Retired 2026-07-15: these route groups had no active frontend, demo, or
+	// external consumer (docs/superpowers/reports/2026-07-13-api-consumer-audit.md)
+	// and no relation to the canonical PATS schema. Their route registration,
+	// source, Prisma schema, seeders, and tests were removed entirely, so they
+	// 404 unconditionally now rather than behind the legacy compatibility switch.
+	const retiredRoutePrefixes = [
+		"/api/template",
+		"/api/project",
+		"/api/estimation",
+		"/api/sequential",
+		"/api/item",
+		"/api/order",
+		"/api/vendor",
+		"/api/payslip",
+		"/api/transaction",
+		"/api/metric",
+		"/api/category",
+		"/api/field",
+		"/api/item-type",
+		"/api/demand-plan",
+		"/api/milestone",
+		"/api/usageCode",
+		"/api/purchase-order",
+		"/api/delivery-order",
+		"/api/invoice",
+		"/api/payment-term",
+		"/api/po-type",
+		"/api/payment-schedule",
+	];
 
-		await request(app)
-			.get("/api/project")
-			.query({ workspaceId: "invalid" })
-			.set("Authorization", `Bearer ${token}`)
-			.expect(404);
-	});
+	for (const prefix of retiredRoutePrefixes) {
+		it(`returns 404 for retired route ${prefix}`, async () => {
+			const app = createApp({ enableLegacyRoutes: false });
 
-	it("does not expose the public template compatibility route by default", async () => {
-		const app = createApp({ enableLegacyRoutes: false });
+			await request(app).get(prefix).set("Authorization", `Bearer ${token}`).expect(404);
+		});
 
-		await request(app).get("/api/template").expect(404);
-	});
+		it(`returns 404 for retired route ${prefix} even with the legacy compatibility switch on`, async () => {
+			const app = createApp({ enableLegacyRoutes: true });
 
-	it("mounts a quarantined route only in explicit compatibility mode", async () => {
-		const app = createApp({ enableLegacyRoutes: true });
-		const response = await request(app)
-			.get("/api/project")
-			.query({ workspaceId: "invalid" })
-			.set("Authorization", `Bearer ${token}`);
-
-		assert.strictEqual(response.status, 400);
-	});
+			await request(app).get(prefix).set("Authorization", `Bearer ${token}`).expect(404);
+		});
+	}
 });
