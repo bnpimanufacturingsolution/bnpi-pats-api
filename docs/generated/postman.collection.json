@@ -13,7 +13,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "7d831cc3-9bfa-46c0-9803-b3efc3b2e18b",
+                                    "id": "aa304f53-ba76-4e8f-b0e9-e5bad3fbc689",
                                     "name": "Get API endpoints list",
                                     "request": {
                                         "name": "Get API endpoints list",
@@ -56,7 +56,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "method",
-                                                    "value": "DELETE"
+                                                    "value": "PUT"
                                                 }
                                             ],
                                             "variable": []
@@ -73,7 +73,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "f4dfb5cf-0ad8-49da-9f65-8442b86deda3",
+                                            "id": "5d5f03b5-11dc-4e85-abb2-756e234d56e6",
                                             "name": "API endpoints list retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -111,7 +111,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "method",
-                                                            "value": "DELETE"
+                                                            "value": "PUT"
                                                         }
                                                     ],
                                                     "variable": []
@@ -146,7 +146,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "4ab16ed4-be70-462d-8a0e-03865baff7a0",
+                                            "id": "269570ac-8695-4ee9-b736-678dc822d597",
                                             "name": "Invalid format or validation error",
                                             "originalRequest": {
                                                 "url": {
@@ -184,7 +184,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "method",
-                                                            "value": "DELETE"
+                                                            "value": "PUT"
                                                         }
                                                     ],
                                                     "variable": []
@@ -209,7 +209,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "7e8a2db8-c662-4f15-9f40-718225aa9833",
+                                            "id": "7eba78ca-20c0-44e2-af2c-ddabd55513ff",
                                             "name": "Endpoints file not found",
                                             "originalRequest": {
                                                 "url": {
@@ -247,7 +247,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "method",
-                                                            "value": "DELETE"
+                                                            "value": "PUT"
                                                         }
                                                     ],
                                                     "variable": []
@@ -284,7 +284,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "f710c68c-4e6e-4218-8b75-a9bfa324b014",
+                                    "id": "34bbbe35-f895-425a-990a-68cf8dd3bad5",
                                     "name": "Get Swagger documentation",
                                     "request": {
                                         "name": "Get Swagger documentation",
@@ -316,7 +316,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "54f843bb-b86a-48cd-ba2c-9775c6d76156",
+                                            "id": "0f952964-a3b3-407d-93ce-b7cfc830f0e4",
                                             "name": "Swagger documentation retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -361,7 +361,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "841d7ee4-59aa-41bc-b906-ec620973ae13",
+                                            "id": "44a834b7-e8e8-4dbc-9ba4-f48bc4d2b34c",
                                             "name": "Swagger file not found",
                                             "originalRequest": {
                                                 "url": {
@@ -408,7 +408,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "50e7c072-52df-4c69-b4ee-6868b14c64ff",
+                                    "id": "3b0d62e3-5ed7-4015-bb6c-56f3cb3dfedd",
                                     "name": "Get Postman collection",
                                     "request": {
                                         "name": "Get Postman collection",
@@ -440,7 +440,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "52efa93f-1c25-4606-9b18-355562208827",
+                                            "id": "7d289dc1-bed8-4abd-baf4-80868dd512cc",
                                             "name": "Postman collection retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -485,7 +485,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "9d5fde48-7b30-49a5-9c4b-18219ec75230",
+                                            "id": "50c3c2af-3568-4c92-96e3-72ea576bd412",
                                             "name": "Postman collection not found",
                                             "originalRequest": {
                                                 "url": {
@@ -532,7 +532,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "0859820a-229c-460f-b168-79c015bb8b55",
+                                    "id": "52e4adcb-1e04-4f30-b4ef-67496bf28607",
                                     "name": "Generate iml files",
                                     "request": {
                                         "name": "Generate iml files",
@@ -592,7 +592,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "773b1707-bd9a-4e30-9099-6631aee80f76",
+                                            "id": "d2949149-1722-4f35-a2a7-c23f264bace7",
                                             "name": "iml files generated successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -665,7 +665,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "da4f4c69-0364-4151-a2bb-ef50840bb24b",
+                                            "id": "280b2bba-6028-40b2-9e0f-745eddc6eba6",
                                             "name": "Internal server error",
                                             "originalRequest": {
                                                 "url": {
@@ -750,7 +750,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "0e03e7b4-edb6-4f66-bcaa-73951a1f24dd",
+                                            "id": "a54f8382-67f5-48ee-9d18-79433cae5b25",
                                             "name": "Check if workspace code is available",
                                             "request": {
                                                 "name": "Check if workspace code is available",
@@ -802,7 +802,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "91a0992d-2fee-40ae-9e96-04a447682085",
+                                                    "id": "3ff58af5-74f5-4fdf-8f3c-e6a9971a1c1a",
                                                     "name": "Code availability status",
                                                     "originalRequest": {
                                                         "url": {
@@ -873,7 +873,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "76fffc16-a1b6-4ccb-aaa0-fce7f4b7685c",
+                                    "id": "c4996fd1-8a79-4f91-b569-c092a7d658d8",
                                     "name": "Get workspace by ID",
                                     "request": {
                                         "name": "Get workspace by ID",
@@ -894,7 +894,7 @@
                                             "variable": [
                                                 {
                                                     "type": "any",
-                                                    "value": "46e963C8cC4eFD77A3A27555",
+                                                    "value": "F8fBEE4B7dBbDbF20F670522",
                                                     "key": "id",
                                                     "disabled": false,
                                                     "description": {
@@ -918,7 +918,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "547954f6-2aa7-4427-ad23-71fc93544bee",
+                                            "id": "09a7ddf1-20cd-498f-b024-66305195b220",
                                             "name": "Workspace retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -939,7 +939,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "46e963C8cC4eFD77A3A27555",
+                                                            "value": "F8fBEE4B7dBbDbF20F670522",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -964,7 +964,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "0e9b3cfc-8ecb-4aa9-8e40-a7e3743f1962",
+                                            "id": "e0912c13-d83a-46ee-bfb9-e4bd11f505a0",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -985,7 +985,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "46e963C8cC4eFD77A3A27555",
+                                                            "value": "F8fBEE4B7dBbDbF20F670522",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -1016,7 +1016,7 @@
                                     }
                                 },
                                 {
-                                    "id": "a593dcb3-4411-4ab5-9ff2-b7de450bdb92",
+                                    "id": "ed859734-4549-4e97-9572-60aa587e9d4e",
                                     "name": "Update workspace",
                                     "request": {
                                         "name": "Update workspace",
@@ -1055,7 +1055,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "68f35521-f005-4ba3-a42b-55ac0062da69",
+                                            "id": "be81dc07-e275-4ee5-aa49-9d210dfaea22",
                                             "name": "Workspace updated successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1096,7 +1096,7 @@
                                     }
                                 },
                                 {
-                                    "id": "493bb5bc-05b1-428f-9575-eb6ed8ca4c52",
+                                    "id": "5f56f62a-da5c-42e3-9148-b696d5ff6fad",
                                     "name": "Delete workspace",
                                     "request": {
                                         "name": "Delete workspace",
@@ -1135,7 +1135,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "cf568f61-2987-4390-87ed-66b88c3bf011",
+                                            "id": "7b13e1aa-97ea-4d4a-a1af-0769169bde9b",
                                             "name": "Workspace deleted successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1178,7 +1178,7 @@
                             ]
                         },
                         {
-                            "id": "ed79df2c-b866-4fa7-9351-f7cc8f6b215c",
+                            "id": "10d051af-63dc-465e-83dc-1545663dc22e",
                             "name": "Get all workspaces",
                             "request": {
                                 "name": "Get all workspaces",
@@ -1211,7 +1211,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "655c56a9-2084-4e0c-b1fa-3cf26cd7fd02",
+                                    "id": "725f4185-1339-484f-a94b-1bbbb02876e6",
                                     "name": "Workspaces retrieved successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1251,7 +1251,7 @@
                             }
                         },
                         {
-                            "id": "097f9780-4716-4a73-b6b4-a0ad548af5c1",
+                            "id": "20386792-ac02-43b3-9f49-800d64ec1c92",
                             "name": "Create new workspace",
                             "request": {
                                 "name": "Create new workspace",
@@ -1284,7 +1284,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "7ccabc2b-08f4-49a0-bb32-2f6cdde5a6e3",
+                                    "id": "ef597efc-605e-4bd1-a1f5-cb4b53e57d20",
                                     "name": "Workspace created successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1334,7 +1334,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "1081a0bb-33d1-4d53-a587-ff78bd16738d",
+                                    "id": "b7c3fe46-49dd-4c55-9049-96d045ec6eba",
                                     "name": "Get current user's workspace membership",
                                     "request": {
                                         "name": "Get current user's workspace membership",
@@ -1365,7 +1365,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "5e9cc39f-29f7-4061-a202-7aee9aed4e0c",
+                                            "id": "7748e735-0412-4edf-bbe0-4ec79a214b57",
                                             "name": "Membership retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1400,7 +1400,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "3b55932a-9978-4b88-9d61-b023620527ee",
+                                            "id": "07b661ac-a5cf-4c72-9da6-d3918b6015a4",
                                             "name": "Not a member of this workspace",
                                             "originalRequest": {
                                                 "url": {
@@ -1447,7 +1447,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "4baf88a1-b66e-4d42-b875-088f3be593d4",
+                                    "id": "42521ed1-c00d-440f-8685-45ddb187f0c4",
                                     "name": "Get workspace member by ID",
                                     "request": {
                                         "name": "Get workspace member by ID",
@@ -1489,7 +1489,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "48190abe-c98d-4577-8e25-9dc0caa2ab64",
+                                            "id": "116bb73e-5d2a-4e05-9065-da9fdf4dafaa",
                                             "name": "Member retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1541,7 +1541,7 @@
                                     }
                                 },
                                 {
-                                    "id": "30a9740c-26aa-478e-9598-9a8e27ae00db",
+                                    "id": "d88aeb9a-5b6e-4204-ac16-d4b2271d0e82",
                                     "name": "Remove workspace member",
                                     "request": {
                                         "name": "Remove workspace member",
@@ -1577,7 +1577,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "86f57cb8-8c7f-4be3-8da5-391551377353",
+                                            "id": "86242e47-9802-4f03-a00d-aa6c883bc235",
                                             "name": "Member removed successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1622,7 +1622,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "976b3ce2-c986-459e-bfef-822e526bf23f",
+                                            "id": "2a00bbcd-153a-410f-a79d-6d8088821f1f",
                                             "name": "Update workspace member role",
                                             "request": {
                                                 "name": "Update workspace member role",
@@ -1659,7 +1659,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "4cdeced3-f906-43f9-9568-9cd9bbc637d9",
+                                                    "id": "95545e56-7a68-47dc-b108-8066ece36043",
                                                     "name": "Role updated successfully",
                                                     "originalRequest": {
                                                         "url": {
@@ -1705,7 +1705,7 @@
                             ]
                         },
                         {
-                            "id": "9a76332c-2882-4663-b50c-6710d563d928",
+                            "id": "f5c2f420-acc0-4f1d-a2b0-7ca7a3d90213",
                             "name": "Get all workspace members",
                             "request": {
                                 "name": "Get all workspace members",
@@ -1735,7 +1735,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "5e80373d-4ee4-4af6-a8c1-c4c53fb3897d",
+                                    "id": "655a160a-6d9f-46f4-a3df-3e873aaedb6e",
                                     "name": "Members retrieved successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1775,7 +1775,7 @@
                             }
                         },
                         {
-                            "id": "97d25203-0941-4f48-a28a-0347e9261e72",
+                            "id": "a9c8d673-14fe-4c25-8a1b-fe7052d73932",
                             "name": "Add a member to workspace",
                             "request": {
                                 "name": "Add a member to workspace",
@@ -1805,7 +1805,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "73c70cd9-76e0-4410-87e6-7c5019c5378e",
+                                    "id": "c5c109ea-6821-4d10-8240-9496e36fe096",
                                     "name": "Member added successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1863,7 +1863,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "14efbb62-29d8-4a6e-99ec-46bb8cad0963",
+                                                    "id": "c465ec46-d11e-45b7-8232-96d05ff78d17",
                                                     "name": "Get current user's role in a project",
                                                     "request": {
                                                         "name": "Get current user's role in a project",
@@ -1907,7 +1907,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "f76bb84c-1717-4dae-9e2b-ecb18087b184",
+                                                            "id": "0a1810f6-5c02-452d-b9e4-fda93ab83d13",
                                                             "name": "Project role retrieved successfully",
                                                             "originalRequest": {
                                                                 "url": {
@@ -1963,7 +1963,7 @@
                                             ]
                                         },
                                         {
-                                            "id": "1b255e59-e50c-4bac-a20d-a31279769221",
+                                            "id": "c99fdb2c-7788-4619-8d2c-6a5c8befaff1",
                                             "name": "Get all members of a project",
                                             "request": {
                                                 "name": "Get all members of a project",
@@ -2006,7 +2006,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "3543e66e-3aeb-4499-bc74-ee605c557ff4",
+                                                    "id": "31a8048a-7fc5-4f75-a3e7-a05e9b9a9f9c",
                                                     "name": "Project members retrieved successfully",
                                                     "originalRequest": {
                                                         "url": {
@@ -2067,7 +2067,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "25ec12b3-474e-4039-9d18-d4aac6e18df6",
+                                    "id": "2f3a9eb4-bfd7-4ee1-8dda-5f2a5bacafba",
                                     "name": "Get project member by ID",
                                     "request": {
                                         "name": "Get project member by ID",
@@ -2109,7 +2109,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "0e6f162a-d6ca-476a-92ef-4ed3adb07538",
+                                            "id": "c5bad615-8593-4718-b367-d88de23f0e5f",
                                             "name": "Member retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -2161,7 +2161,7 @@
                                     }
                                 },
                                 {
-                                    "id": "cd4d85e4-3201-4785-8059-29b614855e5b",
+                                    "id": "cabe948d-9462-4b22-ba39-0a54d04416f5",
                                     "name": "Remove project member",
                                     "request": {
                                         "name": "Remove project member",
@@ -2197,7 +2197,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "2397c34d-086c-4025-8135-d43dd874f731",
+                                            "id": "b0ed6cf6-2871-4267-8783-c4489623ebb8",
                                             "name": "Member removed successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -2242,7 +2242,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "0ebb60f9-fab1-4ae5-a334-5ab3a275c635",
+                                            "id": "a1078989-5452-415f-872b-b781ee45dcfd",
                                             "name": "Update project member role",
                                             "request": {
                                                 "name": "Update project member role",
@@ -2279,7 +2279,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "40253b47-eff5-4f5c-a6ba-a2688d832d75",
+                                                    "id": "53ab9f62-c20b-465f-9399-7e2cb801119a",
                                                     "name": "Role updated successfully",
                                                     "originalRequest": {
                                                         "url": {
@@ -2325,7 +2325,7 @@
                             ]
                         },
                         {
-                            "id": "96913bf5-8072-48fe-a81b-7997c3884ade",
+                            "id": "bb3c5a1d-5351-4799-9bcc-5914c2f739be",
                             "name": "Get all project members in workspace",
                             "request": {
                                 "name": "Get all project members in workspace",
@@ -2355,7 +2355,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "3950c5fe-cecf-449b-99ca-34e5eb0dfd6a",
+                                    "id": "d9563b23-08db-484c-aa9a-901bf86cfe27",
                                     "name": "Members retrieved successfully",
                                     "originalRequest": {
                                         "url": {
@@ -2395,7 +2395,7 @@
                             }
                         },
                         {
-                            "id": "9439e56d-1a31-4ddf-9f33-2d4f24fe715d",
+                            "id": "a449a7ab-576b-4ad8-bf43-235c6f1f44a9",
                             "name": "Add a member to a project",
                             "request": {
                                 "name": "Add a member to a project",
@@ -2425,7 +2425,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "c89bbd1e-09cd-4d8c-a1ba-2691b3ae8190",
+                                    "id": "ccd746bb-c3f1-4b2a-b2f2-9e557e6e1200",
                                     "name": "Member added successfully",
                                     "originalRequest": {
                                         "url": {
@@ -2471,7 +2471,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "57f9ca7e-2bf0-49cc-a7b8-d70d37397dfe",
+                            "id": "bd824ccd-0ad2-4bcc-9a21-1d2a0316bd86",
                             "name": "Get all employees",
                             "request": {
                                 "name": "Get all employees",
@@ -2522,7 +2522,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "status",
-                                            "value": "ACTIVE"
+                                            "value": "SUSPENDED"
                                         },
                                         {
                                             "disabled": false,
@@ -2559,7 +2559,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "853c882d-2f16-4b51-8ae6-9e1a1657b6e0",
+                                    "id": "84b10fa2-3d71-44d6-8771-de23d175c6cd",
                                     "name": "List of employees",
                                     "originalRequest": {
                                         "url": {
@@ -2605,7 +2605,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "status",
-                                                    "value": "ACTIVE"
+                                                    "value": "SUSPENDED"
                                                 },
                                                 {
                                                     "disabled": false,
@@ -2648,7 +2648,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "ef30425d-d1b2-467c-9c98-dd23a9fc7f8c",
+                                    "id": "ca7b067f-6fdd-48df-b0e5-3f38fe8adf5c",
                                     "name": "401",
                                     "originalRequest": {
                                         "url": {
@@ -2694,7 +2694,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "status",
-                                                    "value": "ACTIVE"
+                                                    "value": "SUSPENDED"
                                                 },
                                                 {
                                                     "disabled": false,
@@ -2737,7 +2737,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "a96ec967-d057-4130-8bb5-7f4e8cb7368c",
+                                    "id": "3a00f2a9-8ba5-43c6-979d-a2fb800aaf0c",
                                     "name": "500",
                                     "originalRequest": {
                                         "url": {
@@ -2783,7 +2783,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "status",
-                                                    "value": "ACTIVE"
+                                                    "value": "SUSPENDED"
                                                 },
                                                 {
                                                     "disabled": false,
@@ -2832,7 +2832,7 @@
                             }
                         },
                         {
-                            "id": "f5b1f33a-8fe6-44bc-b9fa-7c60eff1a61b",
+                            "id": "450d56cb-e91d-46a4-b90b-f2cdec2fd27a",
                             "name": "Create a new employee manually",
                             "request": {
                                 "name": "Create a new employee manually",
@@ -2877,7 +2877,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "d2f6eff1-f102-49dc-9eb4-93c5372222e2",
+                                    "id": "eaf03791-d9b4-4331-a801-4192efa4322f",
                                     "name": "Employee created",
                                     "originalRequest": {
                                         "url": {
@@ -2924,7 +2924,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "b852ac35-2e41-49de-8d0b-12c36cf40879",
+                                    "id": "5d573ca0-c75c-479e-8f99-31a14db7be6d",
                                     "name": "400",
                                     "originalRequest": {
                                         "url": {
@@ -2971,7 +2971,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "9c343386-224f-4d11-a338-151cae0c1359",
+                                    "id": "6f9dd026-6fe9-4135-b561-160c67dbb675",
                                     "name": "Duplicate email or employee number",
                                     "originalRequest": {
                                         "url": {
@@ -3028,7 +3028,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "7a96f610-a91d-47f4-8e80-7705053f107a",
+                                    "id": "74ca00c8-38f8-4fa5-bd0b-99bd1d2d78ed",
                                     "name": "Get employee statistics",
                                     "request": {
                                         "name": "Get employee statistics",
@@ -3059,7 +3059,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "8b0ce4f5-dfda-46d9-952c-962b90083799",
+                                            "id": "aa9ac0fa-b160-4567-b2f7-cf7393774bf1",
                                             "name": "Employee statistics by status, department, and sync status",
                                             "originalRequest": {
                                                 "url": {
@@ -3094,7 +3094,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "035e9c85-59be-4a9b-9604-adaae93abb18",
+                                            "id": "4a10489a-4715-4421-8034-96f0170d4c3d",
                                             "name": "401",
                                             "originalRequest": {
                                                 "url": {
@@ -3141,7 +3141,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "cb29267a-31bd-4e45-bf97-bdcea9cdc8a0",
+                                    "id": "d2a5736a-5c5a-4783-b896-aafe02555dcd",
                                     "name": "Trigger employee sync from external API",
                                     "request": {
                                         "name": "Trigger employee sync from external API",
@@ -3190,7 +3190,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "15d1eacf-865c-4aae-bc73-84f3830dc9c7",
+                                            "id": "5c425ee5-5207-483b-8362-3482b386899f",
                                             "name": "Sync result with statistics",
                                             "originalRequest": {
                                                 "url": {
@@ -3238,7 +3238,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "6c20d17d-c6df-4819-bcdd-854a10ead101",
+                                            "id": "118a57f7-1943-436a-a637-d17793fe88ab",
                                             "name": "400",
                                             "originalRequest": {
                                                 "url": {
@@ -3286,7 +3286,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "64ff2cbc-654c-43a8-ab35-578659300f51",
+                                            "id": "2e005adc-369b-4957-815c-7e4f85e9251e",
                                             "name": "401",
                                             "originalRequest": {
                                                 "url": {
@@ -3344,7 +3344,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "91af4898-3fdd-4653-be6b-ac61f5149f41",
+                                            "id": "53835f4c-3d54-4b5d-95cd-257db916bf49",
                                             "name": "Get sync status and health",
                                             "request": {
                                                 "name": "Get sync status and health",
@@ -3376,7 +3376,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "67a11f7a-0bf1-4383-9d3c-d9a3fb7ab4d8",
+                                                    "id": "428d5a8e-e5de-4e10-95c2-ef8e7adc3147",
                                                     "name": "Sync status including any issues",
                                                     "originalRequest": {
                                                         "url": {
@@ -3424,7 +3424,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "465eca1d-08c1-41da-8813-68fcaa5561ed",
+                                            "id": "f984a377-e81d-44eb-84e0-a2e13861c9c5",
                                             "name": "Get employees with sync issues",
                                             "request": {
                                                 "name": "Get employees with sync issues",
@@ -3456,7 +3456,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "5ab7ebb3-0a41-49f3-8ea5-4b46f3ab1f42",
+                                                    "id": "5ebc82eb-de00-4cb8-af64-4545775dfddf",
                                                     "name": "List of employees with FAILED or PENDING sync status",
                                                     "originalRequest": {
                                                         "url": {
@@ -3510,7 +3510,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "9e378dc5-bb00-4dea-804c-8d8ae27a8d3a",
+                                            "id": "c958c9af-43a0-44dd-a3e0-96240b9733bd",
                                             "name": "Get employee by external ID",
                                             "request": {
                                                 "name": "Get employee by external ID",
@@ -3563,7 +3563,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "b40c90f2-9eaf-4ce2-8373-adcdb3306e20",
+                                                    "id": "ab2c9097-ca11-44d2-a956-0623277c9810",
                                                     "name": "Employee details",
                                                     "originalRequest": {
                                                         "url": {
@@ -3620,7 +3620,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "02233e72-a06a-42ec-b916-c174df5acf53",
+                                                    "id": "9bd918bd-f42d-4b06-90c2-d932f36b0f00",
                                                     "name": "404",
                                                     "originalRequest": {
                                                         "url": {
@@ -3691,7 +3691,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "5113c25b-92f1-41e6-933b-c6acd6043f19",
+                                    "id": "7a9a1c66-7c12-41e4-bbc4-537322b24642",
                                     "name": "Get employee by ID",
                                     "request": {
                                         "name": "Get employee by ID",
@@ -3709,7 +3709,7 @@
                                             "variable": [
                                                 {
                                                     "type": "any",
-                                                    "value": "46e963C8cC4eFD77A3A27555",
+                                                    "value": "F8fBEE4B7dBbDbF20F670522",
                                                     "key": "id",
                                                     "disabled": false,
                                                     "description": {
@@ -3733,7 +3733,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "0a69cc1f-5e28-4825-a4d0-2cd94dcd117f",
+                                            "id": "bbba7d8e-d1b0-44a5-a015-baa5110d4aee",
                                             "name": "Employee details",
                                             "originalRequest": {
                                                 "url": {
@@ -3754,7 +3754,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "46e963C8cC4eFD77A3A27555",
+                                                            "value": "F8fBEE4B7dBbDbF20F670522",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -3779,7 +3779,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "123e3502-3317-41a5-b597-cc9282065f65",
+                                            "id": "e8ef9a97-7f7b-448e-8986-4d6367d0e6fd",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -3800,7 +3800,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "46e963C8cC4eFD77A3A27555",
+                                                            "value": "F8fBEE4B7dBbDbF20F670522",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -3831,7 +3831,7 @@
                                     }
                                 },
                                 {
-                                    "id": "ceaf2b89-09e3-4db7-8477-8fd61343bea3",
+                                    "id": "54182ef2-8191-453a-8add-b7329059c6e4",
                                     "name": "Update employee",
                                     "request": {
                                         "name": "Update employee",
@@ -3888,7 +3888,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "c3904dc6-2ae5-4e45-a0d4-38c1ff7cec9a",
+                                            "id": "247389fa-9246-4bc6-839f-4e561beb7199",
                                             "name": "Employee updated",
                                             "originalRequest": {
                                                 "url": {
@@ -3947,7 +3947,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "9ae0a6e1-0d93-4753-846d-b972a5a845d3",
+                                            "id": "63d1d4bc-37dc-4916-9cf1-0a66964105cd",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -4012,7 +4012,7 @@
                                     }
                                 },
                                 {
-                                    "id": "471ba28a-f15d-4f04-99a9-d1cf7d1ba80d",
+                                    "id": "ca2011cc-43ce-4532-8698-7da9927daf2d",
                                     "name": "Delete employee (soft delete)",
                                     "request": {
                                         "name": "Delete employee (soft delete)",
@@ -4054,7 +4054,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "31a8c5d1-b246-44f6-89c1-371044c8e8f7",
+                                            "id": "3a15ae0b-3c5e-46dd-9125-df50d5d373c0",
                                             "name": "Employee deleted",
                                             "originalRequest": {
                                                 "url": {
@@ -4100,7 +4100,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "6006e565-01d1-4e4f-928b-c9d6e0bb5b3b",
+                                            "id": "f45d68bb-aab2-4629-a7a0-31c231fb8a81",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -4164,7 +4164,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "9ab626cf-6aac-4b7b-90f4-82ded6376644",
+                                    "id": "3fc94476-e168-4a71-a186-6fea2f1ef10e",
                                     "name": "Generate product code",
                                     "request": {
                                         "name": "Generate product code",
@@ -4198,7 +4198,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "3b7da180-a61e-461d-b51c-006937d9eb73",
+                                            "id": "a6dd9b3c-0220-409e-be93-0ec66caa2f2f",
                                             "name": "Product code generated successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -4245,7 +4245,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "ecdc0a60-b396-4571-b016-6e4864aca035",
+                                    "id": "d4f2aea5-b08c-420e-adc6-0f1aea2ab4f0",
                                     "name": "Get product by ID",
                                     "request": {
                                         "name": "Get product by ID",
@@ -4289,7 +4289,7 @@
                                     }
                                 },
                                 {
-                                    "id": "2c8751c9-13dd-4a42-866a-9e3ee9a656ad",
+                                    "id": "a411e61b-eea9-4c1c-9bbc-31b727eb3f71",
                                     "name": "Update product",
                                     "request": {
                                         "name": "Update product",
@@ -4333,7 +4333,7 @@
                                     }
                                 },
                                 {
-                                    "id": "b6279f3d-851b-48dc-b172-f63b39460920",
+                                    "id": "45f5a86e-7197-44c1-935e-3fd2d0310dc6",
                                     "name": "Delete product",
                                     "request": {
                                         "name": "Delete product",
@@ -4379,7 +4379,7 @@
                             ]
                         },
                         {
-                            "id": "cd7c9dab-4228-4bf8-b5a8-ed8df70b544c",
+                            "id": "5133f2e6-11a5-43fd-a523-04114ce7d12b",
                             "name": "Get all products",
                             "request": {
                                 "name": "Get all products",
@@ -4417,7 +4417,7 @@
                             }
                         },
                         {
-                            "id": "fbc00eea-61ac-4691-9dd5-e004a4465211",
+                            "id": "5362eb12-9b21-4466-835d-e2cb3a298f14",
                             "name": "Create new product",
                             "request": {
                                 "name": "Create new product",
@@ -4473,7 +4473,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "a1d848d1-620b-4e96-bab5-253401a876cc",
+                                                    "id": "dbed066c-261c-4655-8c2c-3fe812bf1274",
                                                     "name": "Read a workspace-scoped PATS product catalog record",
                                                     "request": {
                                                         "name": "Read a workspace-scoped PATS product catalog record",
@@ -4514,7 +4514,7 @@
                                                                     "type": "text/plain"
                                                                 },
                                                                 "key": "x-workspace-id",
-                                                                "value": "46e963C8cC4eFD77A3A27555"
+                                                                "value": "F8fBEE4B7dBbDbF20F670522"
                                                             }
                                                         ],
                                                         "method": "GET",
@@ -4531,7 +4531,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "4d1fe5ba-8287-4739-bef7-60d2f8acbd37",
+                                                            "id": "38f0fe0c-8532-4674-bdb9-a695cbe513b9",
                                                             "name": "Complete or sparse PATS catalog record",
                                                             "originalRequest": {
                                                                 "url": {
@@ -4567,7 +4567,7 @@
                                                                             "type": "text/plain"
                                                                         },
                                                                         "key": "x-workspace-id",
-                                                                        "value": "46e963C8cC4eFD77A3A27555"
+                                                                        "value": "F8fBEE4B7dBbDbF20F670522"
                                                                     },
                                                                     {
                                                                         "description": {
@@ -4588,7 +4588,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "1459e546-1a14-4a3f-b9e8-e006481cec50",
+                                                            "id": "19913c1c-465d-478f-aa29-7f4a35fd2f36",
                                                             "name": "Workspace header is missing or invalid",
                                                             "originalRequest": {
                                                                 "url": {
@@ -4624,7 +4624,7 @@
                                                                             "type": "text/plain"
                                                                         },
                                                                         "key": "x-workspace-id",
-                                                                        "value": "46e963C8cC4eFD77A3A27555"
+                                                                        "value": "F8fBEE4B7dBbDbF20F670522"
                                                                     },
                                                                     {
                                                                         "description": {
@@ -4645,7 +4645,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "3acac7d7-bec3-4dd2-bfbd-4b0353e6fcac",
+                                                            "id": "e6928170-106d-47aa-8e65-ad7df0d14ff5",
                                                             "name": "Product is not linked to the requested workspace",
                                                             "originalRequest": {
                                                                 "url": {
@@ -4681,7 +4681,7 @@
                                                                             "type": "text/plain"
                                                                         },
                                                                         "key": "x-workspace-id",
-                                                                        "value": "46e963C8cC4eFD77A3A27555"
+                                                                        "value": "F8fBEE4B7dBbDbF20F670522"
                                                                     },
                                                                     {
                                                                         "description": {
@@ -4702,7 +4702,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "6261a479-5ea0-4120-ae25-54f0c3d28294",
+                                                            "id": "9a1c6c5a-95c7-4d61-bffb-c58b0ecc4be5",
                                                             "name": "Private image storage is unavailable",
                                                             "originalRequest": {
                                                                 "url": {
@@ -4738,7 +4738,7 @@
                                                                             "type": "text/plain"
                                                                         },
                                                                         "key": "x-workspace-id",
-                                                                        "value": "46e963C8cC4eFD77A3A27555"
+                                                                        "value": "F8fBEE4B7dBbDbF20F670522"
                                                                     },
                                                                     {
                                                                         "description": {
@@ -4793,7 +4793,7 @@
         }
     ],
     "info": {
-        "_postman_id": "643f09e6-7822-4fe1-af27-7979b719b741",
+        "_postman_id": "e0e60458-7ab9-4749-9da2-8164e150c829",
         "name": "Bandai PATS API",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         "description": {

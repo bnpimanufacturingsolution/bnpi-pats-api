@@ -27,14 +27,6 @@
   ],
   "tags": [
     {
-      "name": "Template",
-      "description": "Template management operations",
-      "externalDocs": {
-        "description": "Find out more about templates",
-        "url": "https://bandai-pats.example/docs/templates"
-      }
-    },
-    {
       "name": "Documentation",
       "description": "API documentation endpoints"
     },
