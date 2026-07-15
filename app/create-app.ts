@@ -14,6 +14,7 @@ import { env } from "../config/env";
 import { registerLegacyRoutes, type LegacyRouteRegistration } from "./legacy/register-legacy-routes";
 import { patsModule } from "./pats";
 import { canonicalRouter } from "./canonical/router";
+import type { IdentityDependencies } from "./identity/types";
 
 interface RequestWithIO extends Request {
 	io?: SocketServer;
@@ -24,32 +25,9 @@ export interface AppOptions {
 	/** Supplied by index.ts so Socket.IO is attached before route handlers. */
 	app?: Application;
 	io?: SocketServer;
+	/** Provider-neutral canonical identity adapter; absent means protected self routes fail closed. */
+	identity?: IdentityDependencies;
 }
-
-const legacyProtectedRegistrations = (baseApiPath: string): readonly LegacyRouteRegistration[] => [
-	{ path: baseApiPath, load: (client) => require("./template")(client) },
-	{ path: baseApiPath, load: (client) => require("./project")(client) },
-	{ path: baseApiPath, load: (client) => require("./estimation")(client) },
-	{ path: baseApiPath, load: (client) => require("./sequential")(client) },
-	{ path: baseApiPath, load: (client) => require("./item")(client) },
-	{ path: baseApiPath, load: (client) => require("./order")(client) },
-	{ path: baseApiPath, load: (client) => require("./vendor")(client) },
-	{ path: baseApiPath, load: (client) => require("./payslip")(client) },
-	{ path: baseApiPath, load: (client) => require("./transaction")(client) },
-	{ path: `${baseApiPath}/metric`, load: (client) => require("./metric")(client) },
-	{ path: baseApiPath, load: (client) => require("./category")(client) },
-	{ path: baseApiPath, load: (client) => require("./field")(client) },
-	{ path: baseApiPath, load: (client) => require("./itemType")(client) },
-	{ path: baseApiPath, load: (client) => require("./demand")(client) },
-	{ path: baseApiPath, load: (client) => require("./milestone")(client) },
-	{ path: baseApiPath, load: (client) => require("./usageCode")(client) },
-	{ path: baseApiPath, load: (client) => require("./purchaseOrder")(client) },
-	{ path: baseApiPath, load: (client) => require("./deliveryOrder")(client) },
-	{ path: baseApiPath, load: (client) => require("./invoice")(client) },
-	{ path: baseApiPath, load: (client) => require("./paymentTerm")(client) },
-	{ path: baseApiPath, load: (client) => require("./poType")(client) },
-	{ path: baseApiPath, load: (client) => require("./paymentSchedule")(client) },
-];
 
 const blockedRegistrations = (baseApiPath: string): readonly LegacyRouteRegistration[] => [
 	{ path: baseApiPath, load: (client) => require("./employee")(client) },
@@ -60,15 +38,13 @@ const blockedRegistrations = (baseApiPath: string): readonly LegacyRouteRegistra
 
 export function createApp(options: AppOptions = {}): Application {
 	const app = options.app ?? express();
-	const enableLegacyRoutes = options.enableLegacyRoutes ?? env.ENABLE_LEGACY_API === "true";
-	const legacyRegistrations = legacyProtectedRegistrations(config.baseApiPath);
 
 	// Request ID tracking (first middleware for all requests)
 	app.use(requestIdMiddleware);
 
 	// Canonical PATS routes are intentionally isolated from legacy parsing,
 	// authentication, and error envelopes.
-	app.use("/api/v1", canonicalRouter());
+	app.use("/api/v1", canonicalRouter({ identity: options.identity }));
 
 	// Body parsing
 	app.use(express.json());
@@ -157,16 +133,11 @@ export function createApp(options: AppOptions = {}): Application {
 	}
 	app.use(`${config.baseApiPath}/auth`, authSecurityMiddleware);
 
-	// Template is public only in explicit compatibility mode, matching the
-	// former ordering before the authentication middleware.
-	if (enableLegacyRoutes) {
-		registerLegacyRoutes(app, prisma, [legacyRegistrations[0]]);
-	}
 	app.use(config.baseApiPath, require("./docs/docs")(prisma, app));
 
 	// Authentication middleware for all API routes not explicitly public.
 	app.use(config.baseApiPath, (req: Request, res: Response, next: NextFunction) => {
-		const publicPaths = ["/docs", "/auth", "/template", "/swagger"];
+		const publicPaths = ["/docs", "/auth", "/swagger"];
 		const isPublicPath = publicPaths.some((path) => req.path.startsWith(path));
 
 		if (isPublicPath) return next();
@@ -195,10 +166,6 @@ export function createApp(options: AppOptions = {}): Application {
 		{ path: config.baseApiPath, load: (client) => require("./workspace")(client) },
 		...blockedRegistrations(config.baseApiPath),
 	]);
-
-	if (enableLegacyRoutes) {
-		registerLegacyRoutes(app, prisma, legacyRegistrations.slice(1));
-	}
 
 	// 404 handler for unmatched routes
 	app.use((req: Request, res: Response) => {
