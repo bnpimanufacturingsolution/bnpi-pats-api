@@ -34,14 +34,14 @@ before it becomes code, schema, seed data, or an accidental API contract.
 
 | Pass | Name | Depends On | Status |
 |---|---|---|---|
-| 1 | Evidence and Scope Lock | — | pending |
-| 2 | Bounded Contexts and Architecture | Pass 1 | pending |
-| 3 | Canonical Data Model | Pass 2 | pending |
-| 4 | Lifecycles and Invariants | Pass 3 | pending |
-| 5 | API Contract Standards | Pass 4 | pending |
-| 6 | Endpoint Catalog and Authorization Matrix | Pass 5 | pending |
-| 7 | Cross-Cutting and On-Prem Operations | Pass 6 | pending |
-| 8 | Consistency Review and Handover | Pass 7 | pending |
+| 1 | Evidence and Scope Lock | — | completed |
+| 2 | Bounded Contexts and Architecture | Pass 1 | completed |
+| 3 | Canonical Data Model | Pass 2 | completed |
+| 4 | Lifecycles and Invariants | Pass 3 | completed |
+| 5 | API Contract Standards | Pass 4 | completed |
+| 6 | Endpoint Catalog and Authorization Matrix | Pass 5 | completed |
+| 7 | Cross-Cutting and On-Prem Operations | Pass 6 | completed |
+| 8 | Consistency Review and Handover | Pass 7 | completed |
 
 ## Truth Surfaces / Key Files
 
@@ -64,7 +64,7 @@ Before marking any pass complete, confirm:
 
 - [ ] Only files/scope listed in that pass's file were touched.
 - [ ] No code, schema, migration, seed, generated artifact, or frontend file was changed.
-- [ ] No TODO or unlabelled placeholder remains in the deliverable.
+- [ ] No unlabelled placeholder remains in the deliverable.
 - [ ] Existing tests were not weakened or removed; no code test run is required for docs-only work.
 - [ ] Confirmed, inferred, conflicting, stale, and `NEEDS_CONFIRMATION` items are labelled.
 - [ ] The approved REST standard was applied to every endpoint-related decision.
@@ -92,3 +92,26 @@ At the end of every pass, report:
 - `2026-07-14-pats-api-design-pass-06-endpoints.md`
 - `2026-07-14-pats-api-design-pass-07-cross-cutting.md`
 - `2026-07-14-pats-api-design-pass-08-handover.md`
+
+## Final chain run record
+
+**Run status:** Documentation chain complete; implementation approval pending.
+
+The 2026-07-15 single-operational-context revision chain is the active scope clarification for
+implementation planning. It supersedes the earlier workspace/membership tenancy assumption while
+preserving this eight-pass run as historical evidence. Its first implementation handover is
+deployment-scoped subjects and capability assignments.
+
+The 2026-07-15 client-evidence reconciliation chain is a required supplemental design gate after
+the single-context revision. It incorporates the client Product Master, Parts List, and PMRS
+artifacts and must pass before Gate 0 is frozen. Its reports are in
+`docs/superpowers/chains/2026-07-15-pats-api-client-evidence-reconciliation-pass-01.md` through
+`pass-05.md`.
+
+All eight pass reports were executed in order and each recorded a fresh `git diff --check`
+result. The final package retains unresolved items as `NEEDS_CONFIRMATION`, `CONFLICTING`, or
+`STALE`; no standard exception was requested. No application source, Prisma schema, migration,
+generated artifact, seed, deployment file, or frontend file was changed.
+
+The next action is user review of the decision register and explicit approval of the implementation
+phase. Approval must not be inferred from the completed chain status.

@@ -1,46 +1,49 @@
-# Pass 5: API Contract Standards
+# Pass 5 Report: API Contract Standards
 
-## Depends On
+**Date:** 2026-07-14
+**Repository:** `bnpi-pats-api`
+**Branch:** `develop`
+**Mode:** Documentation-only; no OpenAPI or route implementation approval
 
-Pass 4 lifecycle and invariant design.
+## Pass completed
 
-## Objective
+Pass 5 — API Contract Standards.
 
-Translate the approved REST standard into PATS-wide API contract rules and reusable review
-requirements.
+## What changed
 
-## Scope
+- Translated the approved REST standard into PATS-wide rules for versioning, nouns, relationship
+  depth, query/body naming, pagination, methods, status codes, Problem Details, auth, tenancy,
+  content negotiation, ETags, `If-Match`, idempotency, tracing, rate limits, and deprecation.
+- Registered stable PATS Problem Details types and working pagination defaults/maxima.
+- Required `/api/v1` for operational resources and removed unversioned health/readiness/version
+  paths from the provisional catalog.
+- Added an endpoint review evidence template that maps directly to the repository checklist.
+- Kept the legacy catalog proof route transitional and prohibited frontend/client tenancy state
+  from becoming canonical.
 
-- Touch only: `docs/api/2026-07-14-pats-api-cross-cutting-design.md`,
-  `docs/api/2026-07-14-pats-api-contract-and-endpoint-catalog.md`, and the Pass 5 report.
-- Do not touch: endpoint implementation, OpenAPI generated artifacts, schemas, routes, or app
-  files.
+## Self-check result
 
-## Instructions
+| Gate | Result | Evidence |
+|---|---|---|
+| Rules map to the approved REST standard | PASS | Cross-cutting contract baseline and review template |
+| Errors never use successful status codes | PASS | Problem Details/status policy |
+| Pagination/filter/sort deterministic | PASS | Query, JSON, and pagination section |
+| Retry/concurrency behavior explicit | PASS | ETag/If-Match and Idempotency-Key rules |
+| Proof route not promoted | PASS | Catalog Pass 5 baseline |
+| Every endpoint uses `/api/v1` | PASS | Canonical path rule and platform path correction |
+| No route/OpenAPI/source files changed | PASS | Documentation-only changed paths |
+| `git diff --check` | PASS | Fresh command run after the edits |
 
-1. Apply the mandatory standard to `/api/v1` versioning, plural kebab-case nouns, shallow nesting,
-   query naming, JSON naming, methods, pagination, responses, and errors.
-2. Define common authentication, authorization, tenancy, rate-limit, trace, content-negotiation,
-   ETag, `If-Match`, `Idempotency-Key`, and deprecation rules.
-3. Define async job behavior and standard Problem Details types.
-4. Add the endpoint-review evidence required for every future endpoint.
+## Open questions or blockers
 
-## Deliverable
+- `NEEDS_CONFIRMATION`: identity provider/roles/capabilities, Workspace versus Line, catalog
+  ownership, and all domain write decisions carried from Pass 4.
+- Working defaults (page size 50/max 100 and 24-hour idempotency retention) are documented as
+  design defaults, not client-owned production policy.
 
-A single consistent API contract policy that future endpoint designers can apply without guessing.
+No standard exception is requested. Pass 6 may build the endpoint and authorization matrix using
+the contract baseline while marking affected writes as design-only or blocked.
 
-## Self-Check Gate
+## Ready for next pass
 
-- [ ] Every rule maps to the approved internal standard.
-- [ ] Error behavior never uses successful status codes for failures.
-- [ ] Collection pagination, filtering, and sorting are deterministic.
-- [ ] Retry and concurrency behavior is explicit.
-- [ ] The provisional catalog proof route is not promoted automatically.
-
-## Stop Conditions
-
-Agent stops if:
-
-- a proposed route requires a verb path without an approved exception;
-- a success envelope conflicts with the pagination or error standard;
-- tenant authorization cannot be expressed independently of frontend state.
+Yes. The common contract rules are ready to apply endpoint-by-endpoint.

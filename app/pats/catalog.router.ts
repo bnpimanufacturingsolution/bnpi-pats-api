@@ -8,6 +8,7 @@ export const catalogRouter = (
 	patsPrisma: Pick<PatsPrismaClient, "product">,
 	objectStorage: ObjectStorage,
 	workspaceAccess: RequestHandler,
+	options: { canonical?: boolean } = {},
 ): Router => {
 	const router = Router();
 
@@ -46,7 +47,7 @@ export const catalogRouter = (
 		"/pats/catalog/products/:productId",
 		validateWorkspaceId,
 		workspaceAccess,
-		catalogController(patsPrisma, objectStorage),
+		catalogController(patsPrisma, objectStorage, { canonical: options.canonical }),
 	);
 
 	return router;

@@ -4,6 +4,12 @@ import { ObjectStorageNotFoundError, type ObjectStorage } from "../storage/objec
 
 type PatsProductClient = Pick<PatsPrismaClient, "product">;
 
+export interface PatsCatalogControllerOptions {
+	/** A value means the transitional route is workspace-scoped; omitted means deployment-scoped. */
+	workspaceId?: string;
+	canonical?: boolean;
+}
+
 export class PatsCatalogStorageUnavailableError extends Error {
 	public readonly code = "PATS_IMAGE_STORAGE_UNAVAILABLE";
 
@@ -16,17 +22,17 @@ export class PatsCatalogStorageUnavailableError extends Error {
 export function catalogController(
 	patsPrisma: PatsProductClient,
 	objectStorage: ObjectStorage,
+	options: PatsCatalogControllerOptions = {},
 ) {
 	return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-		const workspaceId = (req as Request & { workspaceId?: string }).workspaceId;
 		const productId = req.params.productId;
 
 		try {
+			const workspaceId = options.workspaceId ?? (req as Request & { workspaceId?: string }).workspaceId;
 			const product = await patsPrisma.product.findFirst({
-				where: {
-					id: productId,
-					projects: { some: { workspaceId } },
-				},
+				where: workspaceId
+					? { id: productId, projects: { some: { workspaceId } } }
+					: { id: productId },
 				include: {
 					models: {
 						orderBy: { modelNumber: "asc" },
@@ -36,6 +42,17 @@ export function catalogController(
 			});
 
 			if (!product) {
+				if (options.canonical) {
+					res.type("application/problem+json").status(404).json({
+						type: "urn:bandai:pats:problem:not-found",
+						title: "Not Found",
+						status: 404,
+						detail: "The requested PATS catalog product was not found.",
+						instance: req.originalUrl.split("?", 1)[0],
+					});
+					return;
+				}
+
 				res.status(404).json({
 					success: false,
 					message: "PATS product not found in this workspace",
@@ -93,6 +110,17 @@ export function catalogController(
 			});
 		} catch (error) {
 			if (error instanceof PatsCatalogStorageUnavailableError) {
+				if (options.canonical) {
+					res.type("application/problem+json").status(503).json({
+						type: "urn:bandai:pats:problem:dependency-unavailable",
+						title: "Dependency Unavailable",
+						status: 503,
+						detail: error.message,
+						instance: req.originalUrl.split("?", 1)[0],
+					});
+					return;
+				}
+
 				res.status(503).json({
 					success: false,
 					message: error.message,

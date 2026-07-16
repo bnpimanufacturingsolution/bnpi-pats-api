@@ -16,7 +16,7 @@
 - Query parameters use `snake_case`; JSON request and response fields use `camelCase`.
 - Paginated collections use only the standard `data` and `pagination` envelope.
 - Errors use RFC 9457 Problem Details and are never returned as successful responses.
-- Tenancy and object-level authorization are explicit and server-verified.
+- Operational context and object-level authorization are explicit and server-verified.
 - Core relationships use PostgreSQL constraints; JSON is limited to bounded metadata.
 - Operational ledgers are append-oriented and projections are rebuildable.
 - No frontend integration is required during API design or initial API implementation.
@@ -43,7 +43,7 @@ transaction ownership, outbox position, and Docker-first deployment assumptions.
 
 ### Task 3: Canonical data model
 
-Design entities, value boundaries, relations, indexes, lifecycle ownership, tenant scope,
+Design entities, value boundaries, relations, indexes, lifecycle ownership, operational scope,
 versioning, deletion behavior, audit fields, event evidence, and JSON metadata limits. Reconcile
 the current draft's project-scoped workflow, part-scoped lot, mutable batch position, PMRS
 placeholder, actor fields, asset linkage, and missing audit/outbox models.
@@ -71,7 +71,7 @@ evidence for the catalog.
 ### Task 6: Endpoint catalog and authorization matrix
 
 Inventory read and write resources by bounded context. For every proposed endpoint define its
-owner, tenant scope, authorization rule, request/response responsibility, side effects, status
+owner, operational scope, authorization rule, request/response responsibility, side effects, status
 codes, problem types, pagination, concurrency, retry behavior, audit, outbox, and OpenAPI
 operation identity. Do not implement routes.
 
@@ -100,8 +100,8 @@ Implementation starts only after the design chain and blocking decisions are app
 
 1. Common HTTP contract: versioned routing, content negotiation, Problem Details, validation,
    pagination, trace context, rate limits, and standard response helpers.
-2. Identity and tenancy: subject mapping, workspace/line membership, role policy, object-level
-   authorization, and provider adapter.
+2. Identity and authorization: subject mapping, deployment-scoped capability assignments, role
+   policy, object ownership, and provider adapter.
 3. PostgreSQL boundary: final Prisma schema, migration strategy, constraints, indexes, audit,
    idempotency, and outbox tables.
 4. Catalog: Products, Models, ModelParts, workflow catalog, stations, work instructions, asset
@@ -120,3 +120,114 @@ Implementation starts only after the design chain and blocking decisions are app
 
 Each implementation phase must use TDD, complete the endpoint review checklist, update OpenAPI,
 and commit only its scoped files.
+
+## Final dependency-ordered implementation backlog
+
+This backlog is executable only after the design chain is complete, the blocking decisions are
+accepted, and the user explicitly approves the implementation phase. It is not an authorization
+to modify code during the current session.
+
+### Gate 0: Accept design decisions and freeze the contract
+
+Resolve or explicitly defer with owner/review condition D-001, D-005, D-006, D-008, D-009, D-010,
+D-014, D-017, D-020, D-021, D-024, D-025, D-026, D-027, D-028, D-029, D-030, D-031, D-032,
+D-033, D-034, D-035, and D-036 where applicable. Freeze the accepted
+names, deployment operational context, capability matrix, route version, unit/variance policy,
+asset lifecycle, retention, and on-prem ownership before write implementation. Do not introduce
+Workspace tenancy or membership administration unless D-001/D-029 explicitly establishes a
+multi-line shared-database requirement.
+
+**Gate:** signed decision record; no conflicting identity/route/lifecycle statement across the
+design package; explicit migration/rollback impact for each accepted change.
+
+### Gate 1: Common HTTP contract
+
+Implement only shared transport infrastructure: `/api/v1` routing, JSON content negotiation,
+RFC 9457 errors, validation, pagination, sorting, ETag/If-Match, Idempotency-Key storage/replay,
+trace context, request correlation, rate-limit headers, deprecation headers, and OpenAPI 3.1
+components.
+
+**Gate:** contract tests cover all common statuses/headers, malformed and domain validation,
+same-key replay/conflict, stale precondition, pagination envelopes, trace propagation, and no
+successful error envelopes.
+
+### Gate 2: Identity and authorization
+
+Implement subject verification through the accepted provider adapter, deployment-scoped capability
+assignments, capability policy, object ownership checks, and audit actor references. The first
+deployment has one server-resolved operational context; it has no workspace selector, membership
+tenancy, or cross-tenant HTTP behavior. A future ProductionLine scope requires an explicit
+decision and migration boundary.
+
+**Gate:** authorization tests cover every capability, missing/revoked/disabled assignments,
+object ownership, provider timeout/fail-closed behavior, and actor audit snapshots.
+
+### Gate 3: PostgreSQL persistence boundary
+
+Translate the accepted conceptual model into the PATS Prisma schema and reviewed migrations:
+deployment-scoped relational ownership, catalog/planning/execution/inventory relations, state constraints, append ledgers,
+audit, idempotency, outbox, jobs, assets, indexes, and projection checkpoints. Do not alter
+legacy Mongo schema or data without a separate approved migration plan.
+
+**Gate:** isolated PostgreSQL migration, rollback-compatibility, constraint, transaction
+atomicity, and projection-rebuild tests pass; no production database is used.
+
+### Gate 4: Catalog and configuration
+
+Implement canonical catalog reads/writes, configuration versioning, station bindings, work
+instructions, asset references, and published/retired behavior according to D-005/D-008.
+
+**Gate:** endpoint checklist, OpenAPI, object authorization, If-Match, publish immutability,
+deployment-context tests, asset privacy tests, and generated-doc validation pass.
+
+### Gate 5: Planning
+
+Implement the accepted planning aggregate noun and route resources: catalog snapshots, PMRS
+reference boundary, model allocations, PlanParts, PartsListVersions/RouteSteps, Lot and
+LotPartAllocation, release/publish transitions, quantity/unit rules, and plan concurrency.
+
+**Gate:** state-machine/domain tests, route-version immutability, Lot cardinality, release
+validation, idempotent creation, audit/outbox, and persistence/object-ownership integration tests pass.
+
+### Gate 6: Execution
+
+Implement Batches, BatchPartLines, station command policy, StageEvents, route validation, current
+position projection, holds, closure, scrap, and approved correction/rework behavior. Do not add
+verb paths such as scan/advance.
+
+**Gate:** scan/event contract tests, route violation evidence, duplicate retry, terminal-state,
+station authorization, projection rebuild, concurrency, and audit/outbox tests pass.
+
+### Gate 7: Inventory and traceability
+
+Implement Receiving/Issuance ledger commands, Withdrawal Form reference policy, unit/variance
+rules, quantity projections, trace queries, and report freshness under D-020/D-021.
+
+**Gate:** ledger immutability, source/target ownership, balance/variance, retry, correction,
+withdrawal-reference, traceability, and dependency-failure tests pass.
+
+### Gate 8: Exceptions, audit, and assets/jobs
+
+Implement exception resolution/process-change policy, audit queries, transactional outbox
+delivery, private MinIO lifecycle, asset upload/finalization, async Job resource, retry and
+quarantine behavior.
+
+**Gate:** RFC 9457 job failures, asset checksum/private URL, quarantine, retention hooks, audit
+redaction, outbox deduplication/dead-letter, and authorization tests pass.
+
+### Gate 9: Reporting and operations
+
+Implement rebuildable reports/projections, health/readiness/version, structured observability,
+backup/restore hooks, offline image verification, migration runbook, and Compose-first delivery.
+
+**Gate:** operational fault injection, readiness, non-root image, air-gap audit, backup/restore
+rehearsal, upgrade/rollback compatibility, projection rebuild, and release evidence pass.
+
+### Gate 10: Release and handover
+
+Run the full endpoint checklist and OpenAPI diff, contract/domain/persistence/integration/
+authorization/operational suite, then promote through the accepted on-prem environments in the
+approved order. Record remaining risks, deprecations, and next decisions.
+
+**Gate:** explicit release approval, generated docs match reviewed OpenAPI, no unresolved blocking
+decision is hidden in code, and the implementation handover names the exact next task.

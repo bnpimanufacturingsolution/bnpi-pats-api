@@ -3,6 +3,7 @@ import type { Application } from "express";
 import swaggerUi from "swagger-ui-express";
 import type { Server as SocketServer } from "socket.io";
 import { prisma } from "../config/prisma";
+import { PrismaClient as PatsPrismaClient } from "../generated/pats-client";
 import { config } from "../config/config";
 import openApiSpecs from "../docs/openApiSpecs";
 import verifyToken from "../middleware/verifyToken";
@@ -13,8 +14,12 @@ import { AppError } from "../errors";
 import { env } from "../config/env";
 import { registerLegacyRoutes, type LegacyRouteRegistration } from "./legacy/register-legacy-routes";
 import { patsModule } from "./pats";
+import { catalogController } from "./pats/catalog";
+import { createMinioObjectStorage } from "./storage/minio-object-storage";
 import { canonicalRouter } from "./canonical/router";
 import type { IdentityDependencies } from "./identity/types";
+import { createLocalAuthDependencies, type LocalAuthDependencies } from "./identity/local-auth";
+import { prismaSubjectRepository } from "./identity/prisma-subject-repository";
 
 interface RequestWithIO extends Request {
 	io?: SocketServer;
@@ -27,6 +32,8 @@ export interface AppOptions {
 	io?: SocketServer;
 	/** Provider-neutral canonical identity adapter; absent means protected self routes fail closed. */
 	identity?: IdentityDependencies;
+	/** PATS-local account login and signed-token adapter. */
+	localAuth?: LocalAuthDependencies;
 }
 
 const blockedRegistrations = (baseApiPath: string): readonly LegacyRouteRegistration[] => [
@@ -38,13 +45,35 @@ const blockedRegistrations = (baseApiPath: string): readonly LegacyRouteRegistra
 
 export function createApp(options: AppOptions = {}): Application {
 	const app = options.app ?? express();
+	const patsPrisma = new PatsPrismaClient();
+	const localAuth = options.localAuth ?? (() => {
+		const repository = prismaSubjectRepository(patsPrisma);
+		return createLocalAuthDependencies(repository, repository, env.JWT_SECRET);
+	})();
+	const patsObjectStorage = createMinioObjectStorage({
+		endpoint: process.env.MINIO_ENDPOINT ?? "http://localhost:9000",
+		accessKeyId: process.env.MINIO_ACCESS_KEY ?? "pats-minio",
+		secretAccessKey: process.env.MINIO_SECRET_KEY ?? "change-me-minio",
+		bucket: process.env.MINIO_BUCKET ?? "pats-private",
+		tls: process.env.MINIO_USE_TLS === "true",
+	});
 
 	// Request ID tracking (first middleware for all requests)
 	app.use(requestIdMiddleware);
 
 	// Canonical PATS routes are intentionally isolated from legacy parsing,
 	// authentication, and error envelopes.
-	app.use("/api/v1", canonicalRouter({ identity: options.identity }));
+	app.use(
+		"/api/v1",
+		canonicalRouter({
+			identity: options.identity ?? localAuth,
+			localAuth,
+			catalog: {
+				requiredCapability: "catalog.read",
+				handler: catalogController(patsPrisma, patsObjectStorage, { canonical: true }),
+			},
+		}),
+	);
 
 	// Body parsing
 	app.use(express.json());
@@ -158,7 +187,7 @@ export function createApp(options: AppOptions = {}): Application {
 
 	// PATS is a separate PostgreSQL-backed read surface. It is mounted after the
 	// shared authentication boundary and before legacy compatibility routes.
-	app.use(config.baseApiPath, patsModule());
+	app.use(config.baseApiPath, patsModule({ patsPrisma, objectStorage: patsObjectStorage }));
 
 	// Retained platform and blocked-review routes stay mounted in the default
 	// application. They are not part of the quarantine compatibility switch.

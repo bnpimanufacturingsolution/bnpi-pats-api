@@ -42,7 +42,9 @@ explicit, case-specific exception that records:
 - JSON request and response fields use `camelCase`.
 - Paginated collections use the standard `data` and `pagination` envelope.
 - Errors use RFC 9457 Problem Details and are never represented as successful responses.
-- Workspace/line tenancy and object-level authorization are explicit endpoint concerns.
+- Server-resolved operational context and object-level authorization are explicit endpoint
+  concerns. A `ProductionLine` scope is tested only when D-001/D-029 accepts it; no endpoint may
+  fabricate Workspace tenancy.
 - Commands that may be retried use the standard idempotency behavior.
 - Mutable resources use HTTP validators where concurrent updates are possible.
 - OpenAPI is the contract source and must match the endpoint behavior.

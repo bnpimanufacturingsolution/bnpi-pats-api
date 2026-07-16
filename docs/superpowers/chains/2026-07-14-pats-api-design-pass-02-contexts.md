@@ -1,46 +1,49 @@
-# Pass 2: Bounded Contexts and Architecture
+# Pass 2 Report: Bounded Contexts and Architecture
 
-## Depends On
+**Date:** 2026-07-14
+**Repository:** `bnpi-pats-api`
+**Branch:** `develop`
+**Mode:** Documentation-only; no implementation approval
 
-Pass 1 evidence baseline and decision register.
+## Pass completed
 
-## Objective
+Pass 2 — Bounded Contexts and Architecture.
 
-Define the PATS bounded contexts, ownership, dependency direction, consistency boundaries, and
-on-prem deployment shape.
+## What changed
 
-## Scope
+- Defined ownership, capabilities, ports, allowed dependencies, and forbidden imports for the
+  nine bounded contexts.
+- Added an acyclic dependency graph and explicit modular-monolith layer rules.
+- Defined transaction coordination for stage events, inventory entries, audit, idempotency, and
+  outbox records, while keeping projections rebuildable.
+- Recorded Docker-first, PostgreSQL/private-MinIO, air-gapped runtime constraints without
+  inventing production topology or recovery objectives.
+- Added the unresolved planning aggregate noun as a visible `NEEDS_CONFIRMATION` architecture
+  item and tightened the target-design completion gate.
 
-- Touch only: `docs/architecture/2026-07-14-pats-api-target-architecture.md`, the master spec,
-  and the Pass 2 report.
-- Do not touch: source code, Prisma schema, migrations, endpoints, frontend files, or seeds.
+## Self-check result
 
-## Instructions
+| Gate | Result | Evidence |
+|---|---|---|
+| Every context has one ownership boundary | PASS | Architecture context ownership map |
+| Dependency direction is acyclic | PASS | Architecture dependency graph and import rules |
+| Write-side truth is distinct from projections | PASS | Transaction/consistency boundaries |
+| Architecture remains a modular monolith | PASS | Recommendation and layer model |
+| Open identity/role/tenancy decisions remain labelled | PASS | D-001, D-005, D-006, D-008, candidate D-024 |
+| No code/schema/deployment files changed | PASS | Changed paths limited to architecture, spec, and report |
+| `git diff --check` | PASS | Fresh command run after the edits |
 
-1. Define Identity/Tenancy, Catalog, Planning, Execution, Inventory/Traceability,
-   Exceptions/Audit, Assets, Reporting/Projections, and Platform contexts.
-2. For each context define owned records, public use cases, ports, downstream dependencies, and
-   forbidden imports.
-3. Define transaction boundaries, append-ledger behavior, projections, outbox position, and
-   Docker-first on-prem assumptions.
-4. Record architecture decisions that require user confirmation.
+## Open questions or blockers
 
-## Deliverable
+- `NEEDS_CONFIRMATION`: `Workspace` versus `Line` API noun.
+- `NEEDS_CONFIRMATION`: `Project` versus `ProductionPlan` canonical planning aggregate noun.
+- `NEEDS_CONFIRMATION`: catalog ownership/layering, identity provider, station granularity,
+  correction/rework policy, and operational ownership decisions from Pass 1.
 
-A bounded-context map and architecture boundary document usable by an implementation agent.
+No blocker prevents Pass 3 conceptual data-model design; affected write contracts remain gated.
 
-## Self-Check Gate
+## Ready for next pass
 
-- [ ] Every proposed context has one ownership boundary.
-- [ ] Dependency direction does not form a cycle.
-- [ ] Write-side truth is distinguished from projections.
-- [ ] The architecture remains a modular monolith.
-- [ ] No code or schema files changed.
-
-## Stop Conditions
-
-Agent stops if:
-
-- a domain record has multiple competing owners;
-- a context boundary requires a role or identity decision that is not recorded;
-- the architecture requires a premature message broker or service split.
+Yes. Pass 3 may define the canonical relational model, provided it does not turn the open planning
+noun, Lot cardinality, PMRS, asset ownership, or variance policy into silently accepted schema
+behavior.

@@ -1,0 +1,47 @@
+name: PATS foundation
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    env:
+      PATS_DATABASE_URL: postgresql://pats:pats@localhost:55432/pats
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run type-check
+      - run: pnpm run prisma:pats:validate
+      - run: pnpm test
+      - run: pnpm run build
+      - run: docker compose --profile pats config --quiet
+
+      - name: Compose health smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --profile pats up -d --build
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:3000/api/v1/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose --profile pats ps
+          exit 1
+
+      - name: Compose cleanup
+        if: always()
+        run: docker compose --profile pats down

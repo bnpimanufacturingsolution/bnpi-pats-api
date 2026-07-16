@@ -1,47 +1,48 @@
-# Pass 3: Canonical Data Model
+# Pass 3 Report: Canonical Data Model
 
-## Depends On
+**Date:** 2026-07-14
+**Repository:** `bnpi-pats-api`
+**Branch:** `develop`
+**Mode:** Documentation-only; no Prisma or migration approval
 
-Pass 2 bounded contexts and architecture boundaries.
+## Pass completed
 
-## Objective
+Pass 3 — Canonical Data Model.
 
-Define the canonical relational entity model, relationships, constraints, metadata boundaries, and
-unresolved data decisions without editing Prisma.
+## What changed
 
-## Scope
+- Replaced the provisional data-model note with a context-owned conceptual relational model.
+- Defined identity, tenant scope, lifecycle/deletion boundary, relationships, constraints,
+  indexes, quantity/metadata boundaries, and correction/retention rules.
+- Added the decision-neutral `LotPartAllocation` boundary so Lot cardinality is not silently
+  collapsed to the current draft's required `partId`.
+- Kept PMRS as a reference boundary, separated catalog definitions from planning snapshots, and
+  made stage/inventory ledgers, audit, outbox, assets, jobs, and projections first-class concepts.
+- Added D-024 for the Project/ProductionPlan noun conflict and D-025 for stable actor identity.
 
-- Touch only: `docs/data/2026-07-14-pats-api-data-model-design.md`,
-  `docs/decisions/2026-07-14-pats-api-design-decision-register.md`, and the Pass 3 report.
-- Do not touch: `prisma/**`, generated clients, routes, controllers, seeds, or app files.
+## Self-check result
 
-## Instructions
+| Gate | Result | Evidence |
+|---|---|---|
+| No initials, display names, or filenames as identity | PASS | Relational design rules and entity tables |
+| Every relationship has one clear owner | PASS | Context model and relationship map |
+| Mutable state separated from append-only evidence | PASS | Execution, inventory, exception, audit, and correction sections |
+| Flexible JSON has bounded purpose | PASS | Metadata and sensitive-data boundary |
+| Blocking unresolved decisions are in the register | PASS | D-001, D-005–D-010, D-014, D-017, D-020, D-021, D-024, D-025 |
+| Existing Prisma draft not edited | PASS | No changes under `prisma/**` |
+| `git diff --check` | PASS | Fresh command run after the edits |
 
-1. For each entity define identity, owner context, tenant scope, lifecycle, timestamps, deletion
-   behavior, and sensitive fields.
-2. Define relationships, unique constraints, foreign keys, indexes, and quantity/unit rules at a
-   conceptual level.
-3. Separate catalog definitions, planning snapshots, execution records, append ledgers, audit,
-   assets, outbox, and projections.
-4. Reconcile current draft gaps: workflow scope, Lot cardinality, Parts List versioning, batch
-   position, PMRS, actor identity, assets, audit, and outbox.
+## Open questions or blockers
 
-## Deliverable
+- `NEEDS_CONFIRMATION`: Lot cardinality and whether Lots may be created outside planning.
+- `NEEDS_CONFIRMATION`: Project versus ProductionPlan canonical noun.
+- `NEEDS_CONFIRMATION`: PMRS structure, actor subject mapping, quantity/unit/variance policy,
+  catalog ownership, station granularity, asset ownership, and retention.
 
-A canonical conceptual data model and a migration-risk/open-question list.
+Pass 4 can define lifecycle rules over these decision-neutral boundaries. It must stop short of
+approving transitions that depend on unresolved business policy.
 
-## Self-Check Gate
+## Ready for next pass
 
-- [ ] No entity uses initials, display names, or filenames as identity.
-- [ ] Every relationship has one clear owner.
-- [ ] Mutable state and append-only evidence are distinguished.
-- [ ] Flexible JSON fields have bounded purposes.
-- [ ] Blocking unresolved decisions are in the decision register.
-
-## Stop Conditions
-
-Agent stops if:
-
-- Lot, Part, Batch, or route version semantics cannot be stated without guessing;
-- PMRS is expanded beyond confirmed business evidence;
-- a relational invariant is proposed only as an unvalidated JSON blob.
+Yes. The model is sufficiently explicit for lifecycle/invariant analysis without changing schema
+or implementation artifacts.

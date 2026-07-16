@@ -50,9 +50,27 @@ implementation begins:
 - Decisions: `docs/decisions/2026-07-14-pats-api-design-decision-register.md`
 - Chain prompts: `docs/superpowers/chains/2026-07-14-pats-api-design-chain.md`
 - Handover prompt: `docs/superpowers/prompts/2026-07-14-pats-api-design-handover.md`
+- Active single-context revision: `docs/superpowers/chains/2026-07-15-pats-api-single-operational-context-revision-chain.md`
+- Active client-evidence reconciliation: `docs/superpowers/chains/2026-07-15-pats-api-client-evidence-reconciliation-chain.md`
+- Client-evidence plan: `docs/superpowers/plans/2026-07-15-pats-api-client-evidence-reconciliation-plan.md`
+- Client-evidence decision resolution: `docs/superpowers/chains/2026-07-15-pats-api-client-evidence-decision-resolution.md`
+- Active schema-normalization revision: `docs/superpowers/chains/2026-07-15-pats-api-schema-normalization-revision-chain.md`
+- Schema-normalization revision plan: `docs/superpowers/plans/2026-07-15-pats-api-schema-normalization-revision-plan.md`
+- Schema-normalization revision handover: `docs/superpowers/prompts/2026-07-15-pats-api-schema-normalization-revision-handover.md`
+- Schema-normalization revision completion handover: `docs/superpowers/prompts/2026-07-15-pats-api-schema-normalization-revision-completion-handover.md`
+- Active Gate 0 freeze chain: `docs/superpowers/chains/2026-07-15-pats-api-gate-0-freeze-chain.md`
+- Gate 0 review record: `docs/decisions/2026-07-15-pats-api-gate-0-review-record.md`
+- Gate 0 implementation-approval handover: `docs/superpowers/prompts/2026-07-15-pats-api-gate-0-implementation-approval-handover.md`
+- Gate 0 decisive target resolution: `docs/superpowers/chains/2026-07-15-pats-api-gate-0-decisive-target-resolution.md`
+- Gate 2 identity/authorization implementation plan: `docs/superpowers/plans/2026-07-15-pats-api-gate-2-identity-authorization-implementation-plan.md`
+- Gate 2 identity/authorization chain: `docs/superpowers/chains/2026-07-15-pats-api-gate-2-identity-authorization-chain.md`
+- Gate 2 identity/authorization handover: `docs/superpowers/prompts/2026-07-15-pats-api-gate-2-identity-authorization-handover.md`
 
-Until the chain's final consistency gate passes and the user approves implementation, agents must
-not add new business endpoints or change the PATS schema.
+Gate 0 is now frozen and implementation is approved by the user as recorded in
+`docs/decisions/2026-07-15-pats-api-gate-0-review-record.md`. Begin implementation through the
+separate Gate 1 chain. Do not add business endpoints or change the PATS schema outside that chain,
+and do not silently alter frozen target decisions. Corrected source revisions remain release
+gates for affected production data.
 
 ## Architecture and Scope Rules
 
@@ -72,7 +90,7 @@ not add new business endpoints or change the PATS schema.
 Every endpoint design or implementation handoff must state:
 
 - standard sections reviewed;
-- resource and tenancy scope;
+- resource and operational scope (deployment context; line scope only if accepted);
 - request and response contract;
 - status codes and RFC 9457 problem types;
 - authorization and object-level access checks;

@@ -1,46 +1,50 @@
-# Pass 1: Evidence and Scope Lock
+# Pass 1 Report: Evidence and Scope Lock
 
-## Depends On
+**Date:** 2026-07-14
+**Repository:** `bnpi-pats-api`
+**Branch:** `develop`
+**Mode:** Documentation-only; no implementation approval
 
-None.
+## Pass completed
 
-## Objective
+Pass 1 — Evidence and Scope Lock.
 
-Produce the evidence-led design baseline that separates canonical decisions from implementation
-reality, alignment evidence, and unresolved conflict.
+## What changed
 
-## Scope
+- Extended the design context with repository, business, frontend-alignment, and on-prem
+  evidence classifications.
+- Locked the design-only file boundary and the source-precedence rules for later passes.
+- Added evidence-led decisions D-019 through D-023 for legacy/PATS conflict, Withdrawal Forms,
+  variance policy, prototype release state, and on-prem ownership gaps.
+- Replaced this pass instruction shell with the executed report.
 
-- Touch only: `docs/superpowers/context/2026-07-14-pats-api-design-context.md`,
-  `docs/decisions/2026-07-14-pats-api-design-decision-register.md`, and the Pass 1 report.
-- Do not touch: application source, Prisma schemas, migrations, routes, seeds, generated docs,
-  frontend files, or the approved REST standard.
+## Self-check result
 
-## Instructions
+| Gate | Result | Evidence |
+|---|---|---|
+| Source precedence is explicit | PASS | Context source-precedence and evidence-classification sections |
+| Legacy/seeded data is not canonical | PASS | Context legacy and frontend alignment boundary |
+| Conflicts have labels and evidence | PASS | Decision register D-001, D-005 through D-010, D-014, D-017, D-019 through D-023 |
+| No code/schema files changed | PASS | `git status` scope review after edit |
+| Scope stayed within Pass 1 | PASS | Context, decision register, and this report only |
+| REST standard remains untouched | PASS | No diff under `docs/standards/**` |
+| No code tests required | PASS | Documentation-only pass; no tests weakened or removed |
+| `git diff --check` | PASS | Fresh command run after the edits |
 
-1. Read `AGENTS.md`, the approved REST standard, the principle, and the endpoint checklist.
-2. Inspect API code/config/tests, the PATS schema, on-prem documents, and app requirements only as
-   alignment evidence.
-3. Record source precedence, confirmed facts, inferred facts, conflicts, stale material,
-   non-goals, and design blockers.
-4. Mark every unresolved decision explicitly in the decision register.
+## Open questions or blockers
 
-## Deliverable
+- `NEEDS_CONFIRMATION`: canonical `Workspace` versus `Line` noun and the project-to-tenant
+  relationship.
+- `NEEDS_CONFIRMATION`: identity provider/subject mapping, catalog ownership, station
+  granularity, Lot cardinality, PMRS, rework/correction policy, asset ownership, and backup/
+  recovery ownership.
+- `CONFLICTING`: draft `+/-5%` variance language versus the schema's per-Part threshold draft.
+- `STALE`: frontend localStorage release state and seeded/demo identifiers.
 
-An evidence-led context and decision register with no unlabelled assumptions.
+These do not block read-only architecture and contract design, but they block approval of affected
+write endpoints and implementation.
 
-## Self-Check Gate
+## Ready for next pass
 
-- [ ] Source precedence is explicit.
-- [ ] Legacy and seeded data are not treated as canonical.
-- [ ] All discovered conflicts have a status label and evidence source.
-- [ ] No code or schema files changed.
-- [ ] No scope creep beyond the listed documents.
-
-## Stop Conditions
-
-Agent stops if:
-
-- approved sources conflict without a recorded decision owner;
-- the user-facing domain cannot be separated from legacy PMS terminology;
-- endpoint standard requirements cannot be applied without an explicit exception.
+Yes. Pass 2 may define bounded contexts and dependency direction while preserving the open
+decision labels.

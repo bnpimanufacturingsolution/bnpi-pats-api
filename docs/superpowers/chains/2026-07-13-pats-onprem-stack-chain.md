@@ -29,6 +29,14 @@ Establish a reproducible, on-premises PATS foundation using Node/Express, Postgr
 | 7 | Frontend Adapter and On-Prem Verification | Pass 6 | pending |
 | 8 | CI, Backup/Restore, and Delivery Report | Pass 7 | pending |
 
+## Current Closure Amendment (2026-07-15)
+
+The historical pass table above is preserved. The current foundation state is recorded in
+[`2026-07-15-pats-foundation-closure-report.md`](../reports/2026-07-15-pats-foundation-closure-report.md).
+Passes 1 through 7 are complete for the local app/API integration boundary, and Pass 8 is complete
+for repeatable CI/runbook evidence. Production backup ownership, RPO/RTO, retention, encryption,
+and off-host copy remain `NEEDS_CONFIRMATION` and are not silently treated as solved.
+
 ## Truth Surfaces / Key Files
 
 - `README.md`
@@ -85,4 +93,3 @@ Agent reports back in this shape:
 - [Pass 6: First Read-Only PATS Contract](./2026-07-13-pats-onprem-stack-pass-06-read-contract.md)
 - [Pass 7: Frontend Adapter and On-Prem Verification](./2026-07-13-pats-onprem-stack-pass-07-frontend.md)
 - [Pass 8: CI, Backup/Restore, and Delivery Report](./2026-07-13-pats-onprem-stack-pass-08-operations.md)
-

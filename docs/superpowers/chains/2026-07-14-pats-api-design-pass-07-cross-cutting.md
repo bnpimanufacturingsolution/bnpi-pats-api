@@ -1,47 +1,50 @@
-# Pass 7: Cross-Cutting and On-Prem Operations
+# Pass 7 Report: Cross-Cutting and On-Prem Operations
 
-## Depends On
+**Date:** 2026-07-14
+**Repository:** `bnpi-pats-api`
+**Branch:** `develop`
+**Mode:** Documentation-only; no deployment/configuration implementation approval
 
-Pass 6 endpoint catalog and authorization matrix.
+## Pass completed
 
-## Objective
+Pass 7 — Cross-Cutting and On-Prem Operations.
 
-Complete the cross-cutting, storage, audit, observability, testing, backup, restore, and on-prem
-delivery design needed to implement and operate the API safely.
+## What changed
 
-## Scope
+- Defined private MinIO asset creation, upload, checksum, quarantine, read-URL, retention, and
+  ownership boundaries.
+- Separated domain records, audit evidence, transactional outbox, idempotency, and rebuildable
+  projections, including freshness and at-least-once delivery behavior.
+- Defined dependency failure behavior for PostgreSQL, MinIO, identity, outbox, Redis, projections,
+  and scanner/printer adapters; added structured logging and redaction requirements.
+- Defined stateless rate-limit posture, health/readiness separation, backup/restore scope and
+  sequence, forward-compatible migration/rollback rules, air-gapped artifact delivery, and
+  promotion order without inventing RPO/RTO, retention, topology, or ownership values.
+- Added the contract/domain/authorization/persistence/integration/operational/acceptance test
+  layers and logged D-027/D-028 for asset backup and deployment ownership gaps.
 
-- Touch only: `docs/api/2026-07-14-pats-api-cross-cutting-design.md`,
-  `docs/architecture/2026-07-14-pats-api-target-architecture.md`, the decision register, and the
-  Pass 7 report.
-- Do not touch: Docker configuration, CI, source code, Prisma schemas, migrations, or app files.
+## Self-check result
 
-## Instructions
+| Gate | Result | Evidence |
+|---|---|---|
+| No production topology or recovery objective invented | PASS | Explicit D-017/D-023/D-027/D-028 gates and operational boundary |
+| Private storage and non-root/runtime controls explicit | PASS | Asset and migration/delivery sections |
+| Audit/outbox not conflated with domain events | PASS | Audit/outbox/projection section |
+| External dependency failure/retry behavior defined | PASS | Failure-isolation table and outbox/job rules |
+| Operational requirements testable in isolation | PASS | Dependency fault tests and operational test layer |
+| No code/deployment files changed | PASS | Changed paths limited to design docs, decisions, report |
+| `git diff --check` | PASS | Fresh command run after the edits |
 
-1. Define private MinIO asset lifecycle, upload/download boundaries, checksums, and retention
-   decisions.
-2. Define audit, outbox, projection freshness, trace propagation, structured logging, and
-   dependency failure behavior.
-3. Define health/readiness, migration/rollback compatibility, PostgreSQL backup/restore, MinIO
-   backup/restore, offline delivery, and upgrade order without inventing client-owned RPO/RTO.
-4. Define contract, domain, persistence, integration, and operational test layers.
+## Open questions or blockers
 
-## Deliverable
+- `NEEDS_CONFIRMATION` D-014/D-027: asset owner, object retention, backup pairing, and cleanup.
+- `NEEDS_CONFIRMATION` D-017/D-023/D-028: backup owner, retention, RPO/RTO, secret custody,
+  topology, promotion owner, and restore rehearsal acceptance.
+- `NEEDS_CONFIRMATION` D-006/D-025: identity dependency and actor identity policy.
 
-A cross-cutting and on-prem operational design with explicit ownership and open decisions.
+These are operational approval gates, not reasons to invent values in the design.
 
-## Self-Check Gate
+## Ready for next pass
 
-- [ ] No production topology or recovery objective is invented.
-- [ ] Private storage and non-root runtime requirements are explicit.
-- [ ] Audit and outbox behavior are not conflated with domain events.
-- [ ] Failure/retry behavior is defined for external dependencies.
-- [ ] No code or deployment files changed.
-
-## Stop Conditions
-
-Agent stops if:
-
-- backup/restore ownership or retention is assumed without evidence;
-- asset ownership requires changing the domain model without a decision;
-- an operational requirement cannot be tested safely in an isolated environment.
+Yes. Pass 8 may perform the cross-document consistency review and produce the implementation
+backlog/handover, retaining these open decisions visibly.

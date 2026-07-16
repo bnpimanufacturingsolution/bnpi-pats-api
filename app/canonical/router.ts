@@ -1,4 +1,14 @@
-import express, { type NextFunction, type Request, type Response, Router } from "express";
+import express, { type NextFunction, type Request, type RequestHandler, type Response, Router } from "express";
+import { rateLimit } from "express-rate-limit";
+import {
+	IdentityProviderUnavailableError,
+	type IdentityDependencies,
+	type SubjectAssignmentRecord,
+	type SubjectRecord,
+} from "../identity/types";
+import type { LocalAuthDependencies } from "../identity/local-auth";
+import { effectiveCapabilities } from "../identity/policy";
+import { hasCapability } from "../identity/policy";
 
 const PROBLEM_TYPES = {
 	internalError: "urn:bandai:pats:problem:internal-error",
@@ -7,7 +17,11 @@ const PROBLEM_TYPES = {
 	notAcceptable: "urn:bandai:pats:problem:not-acceptable",
 	notFound: "urn:bandai:pats:problem:not-found",
 	payloadTooLarge: "urn:bandai:pats:problem:payload-too-large",
+	authenticationRequired: "urn:bandai:pats:problem:authentication-required",
+	authorizationDenied: "urn:bandai:pats:problem:authorization-denied",
+	dependencyUnavailable: "urn:bandai:pats:problem:dependency-unavailable",
 	unsupportedMediaType: "urn:bandai:pats:problem:unsupported-media-type",
+	rateLimit: "urn:bandai:pats:problem:rate-limit",
 } as const;
 
 interface ProblemDetails {
@@ -16,6 +30,7 @@ interface ProblemDetails {
 	status: number;
 	detail: string;
 	instance: string;
+	errors?: Array<{ field: string; message: string }>;
 }
 
 interface AcceptMediaRange {
@@ -26,6 +41,20 @@ interface AcceptMediaRange {
 export interface CanonicalRouterOptions {
 	/** Internal composition seam for deterministic canonical error-boundary tests. */
 	healthHandler?: (req: Request, res: Response) => void;
+	/** Provider-neutral identity seam; production composition must provide a real adapter. */
+	identity?: IdentityDependencies;
+	/** PATS-local username/password authentication; absent means login fails closed. */
+	localAuth?: LocalAuthDependencies;
+	/** Optional deployment-scoped read-only catalog boundary. */
+	catalog?: {
+		handler: RequestHandler;
+		requiredCapability?: string;
+	};
+}
+
+interface CanonicalIdentityRequest extends Request {
+	canonicalSubject?: SubjectRecord;
+	canonicalAssignments?: SubjectAssignmentRecord[];
 }
 
 function requestInstance(req: Request): string {
@@ -34,6 +63,102 @@ function requestInstance(req: Request): string {
 
 function sendProblem(res: Response, problem: ProblemDetails): void {
 	res.type("application/problem+json").status(problem.status).json(problem);
+}
+
+function identityUnavailable(req: Request, res: Response): void {
+	sendProblem(res, {
+		type: PROBLEM_TYPES.dependencyUnavailable,
+		title: "Dependency Unavailable",
+		status: 503,
+		detail: "The canonical identity adapter is not configured for this deployment.",
+		instance: requestInstance(req),
+	});
+}
+
+function canonicalMethodNotAllowed(req: Request, res: Response, allow: string): void {
+	res.setHeader("Allow", allow);
+	sendProblem(res, {
+		type: PROBLEM_TYPES.methodNotAllowed,
+		title: "Method Not Allowed",
+		status: 405,
+		detail: "The requested method is not supported for this canonical route.",
+		instance: requestInstance(req),
+	});
+}
+
+function requireCanonicalIdentity(identity: IdentityDependencies): (req: Request, res: Response, next: NextFunction) => void {
+	return (req: Request, res: Response, next: NextFunction) => {
+		void (async () => {
+			try {
+				const verified = await identity.authenticator.authenticate(req);
+				if (!verified) {
+					res.setHeader("WWW-Authenticate", "Bearer");
+					sendProblem(res, {
+						type: PROBLEM_TYPES.authenticationRequired,
+						title: "Authentication Required",
+						status: 401,
+						detail: "A valid canonical identity is required.",
+						instance: requestInstance(req),
+					});
+					return;
+				}
+
+				const subject = await identity.subjects.resolve(verified);
+				if (subject.status !== "ACTIVE") {
+					sendProblem(res, {
+						type: PROBLEM_TYPES.authorizationDenied,
+						title: "Forbidden",
+						status: 403,
+						detail: "The authenticated subject is disabled.",
+						instance: requestInstance(req),
+					});
+					return;
+				}
+
+				const assignments = await identity.subjects.listAssignments(subject.id);
+				const canonicalRequest = req as CanonicalIdentityRequest;
+				canonicalRequest.canonicalSubject = subject;
+				canonicalRequest.canonicalAssignments = assignments;
+				next();
+			} catch (error) {
+				if (error instanceof IdentityProviderUnavailableError) {
+					sendProblem(res, {
+						type: PROBLEM_TYPES.dependencyUnavailable,
+						title: "Dependency Unavailable",
+						status: 503,
+						detail: error.message,
+						instance: requestInstance(req),
+					});
+					return;
+				}
+
+				sendProblem(res, {
+					type: PROBLEM_TYPES.dependencyUnavailable,
+					title: "Dependency Unavailable",
+					status: 503,
+					detail: "The canonical identity service is unavailable.",
+					instance: requestInstance(req),
+				});
+			}
+		})();
+	};
+}
+
+function requireCanonicalCapability(capability: string): (req: Request, res: Response, next: NextFunction) => void {
+	return (req: Request, res: Response, next: NextFunction) => {
+		const canonicalRequest = req as CanonicalIdentityRequest;
+		if (!canonicalRequest.canonicalAssignments || !hasCapability(canonicalRequest.canonicalAssignments, capability)) {
+			sendProblem(res, {
+				type: PROBLEM_TYPES.authorizationDenied,
+				title: "Forbidden",
+				status: 403,
+				detail: "The authenticated subject does not have the required capability.",
+				instance: requestInstance(req),
+			});
+			return;
+		}
+		next();
+	};
 }
 
 function acceptsCanonicalJson(req: Request): boolean {
@@ -215,6 +340,146 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			instance: requestInstance(req),
 		});
 	});
+
+	const localAuth = options.localAuth;
+	const loginRateLimiter = rateLimit({
+		windowMs: 60_000,
+		limit: 10,
+		standardHeaders: true,
+		legacyHeaders: false,
+		handler: (req: Request, res: Response) => {
+			res.setHeader("Retry-After", "60");
+			sendProblem(res, {
+				type: PROBLEM_TYPES.rateLimit,
+				title: "Too Many Requests",
+				status: 429,
+				detail: "Too many login attempts. Retry after the indicated delay.",
+				instance: requestInstance(req),
+			});
+		},
+	});
+	if (localAuth) {
+		router.post("/auth/login", loginRateLimiter, async (req: Request, res: Response) => {
+			const body = req.body as { username?: unknown; password?: unknown };
+			const username = body?.username;
+			const password = body?.password;
+			if (typeof username !== "string" || typeof password !== "string" || username.trim() === "" || password.length === 0) {
+				sendProblem(res, {
+					type: "urn:bandai:pats:problem:validation-error",
+					title: "Validation Failed",
+					status: 422,
+					detail: "username and password are required.",
+					instance: requestInstance(req),
+					errors: [
+						{ field: "username", message: "Must be a non-empty string." },
+						{ field: "password", message: "Must be a non-empty string." },
+					],
+				});
+				return;
+			}
+
+			try {
+				const result = await localAuth.login(username, password);
+				if (!result) {
+					res.setHeader("WWW-Authenticate", "Bearer");
+					sendProblem(res, {
+						type: PROBLEM_TYPES.authenticationRequired,
+						title: "Authentication Required",
+						status: 401,
+						detail: "Invalid username or password.",
+						instance: requestInstance(req),
+					});
+					return;
+				}
+
+				res.type("application/json").status(200).json(result);
+			} catch {
+				identityUnavailable(req, res);
+			}
+		});
+	} else {
+		router.post("/auth/login", loginRateLimiter, identityUnavailable);
+	}
+	router.all("/auth/login", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "POST"));
+
+	const identityMiddleware = options.identity ? requireCanonicalIdentity(options.identity) : undefined;
+	if (identityMiddleware) {
+		router.get("/users/me", identityMiddleware, (req: Request, res: Response) => {
+			const canonicalRequest = req as CanonicalIdentityRequest;
+			const subject = canonicalRequest.canonicalSubject;
+			if (!subject) {
+				identityUnavailable(req, res);
+				return;
+			}
+
+			res.type("application/json").status(200).json({
+				id: subject.id,
+				displayName: subject.displayNameSnapshot ?? null,
+				email: subject.emailSnapshot ?? null,
+		});
+		});
+		router.all("/users/me", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "GET"));
+
+		router.get("/users/me/capabilities", identityMiddleware, (req: Request, res: Response) => {
+			const canonicalRequest = req as CanonicalIdentityRequest;
+			if (!canonicalRequest.canonicalSubject || !canonicalRequest.canonicalAssignments) {
+				identityUnavailable(req, res);
+				return;
+			}
+
+			res.type("application/json").status(200).json({
+				capabilities: effectiveCapabilities(canonicalRequest.canonicalAssignments),
+			});
+		});
+		router.all("/users/me/capabilities", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "GET"));
+	} else {
+		router.get("/users/me", identityUnavailable);
+		router.all("/users/me", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "GET"));
+		router.get("/users/me/capabilities", identityUnavailable);
+		router.all("/users/me/capabilities", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "GET"));
+	}
+
+	if (options.catalog) {
+		const catalogIdentity = identityMiddleware ?? ((_req: Request, res: Response) => identityUnavailable(_req, res));
+		/**
+		 * @openapi
+		 * /api/v1/catalog/products/{productId}:
+		 *   get:
+		 *     operationId: catalogProductGet
+		 *     summary: Read a deployment-scoped PATS catalog product
+		 *     tags: [PATS Catalog]
+		 *     security:
+		 *       - bearerAuth: []
+		 *     parameters:
+		 *       - in: path
+		 *         name: productId
+		 *         required: true
+		 *         schema:
+		 *           type: string
+		 *     responses:
+		 *       200:
+		 *         description: Complete or sparse Product to Model to ModelPart record
+		 *       401:
+		 *         description: Authentication required
+		 *       403:
+		 *         description: catalog.read capability required
+		 *       404:
+		 *         description: Product not found
+		 *       429:
+		 *         description: Request rate limit exceeded
+		 *       503:
+		 *         description: Private image storage unavailable
+		 */
+		router.get(
+			"/catalog/products/:productId",
+			catalogIdentity,
+			options.catalog.requiredCapability
+				? requireCanonicalCapability(options.catalog.requiredCapability)
+				: (_req, _res, next) => next(),
+			options.catalog.handler,
+		);
+		router.all("/catalog/products/:productId", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "GET"));
+	}
 
 	router.use((req: Request, res: Response) => {
 		sendProblem(res, {

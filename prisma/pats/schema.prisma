@@ -477,6 +477,72 @@ enum Locale {
   FIL
 }
 
+// Gate 2 identity is deployment-scoped. It intentionally has no Workspace,
+// membership-tenancy, or client-selected ProductionLine relation.
+enum SubjectStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum SubjectAssignmentKind {
+  CAPABILITY
+  ROLE_BUNDLE
+}
+
+enum SubjectAssignmentStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+model Subject {
+  id                  String               @id @default(uuid())
+  provider            String
+  issuer              String
+  providerSubject     String
+  displayNameSnapshot String?
+  emailSnapshot       String?
+  status              SubjectStatus       @default(ACTIVE)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  assignments         SubjectAssignment[]
+  credential          SubjectCredential?
+
+  @@unique([provider, issuer, providerSubject])
+  @@index([status])
+}
+
+model SubjectCredential {
+  id           String   @id @default(uuid())
+  subjectId    String   @unique
+  subject      Subject  @relation(fields: [subjectId], references: [id])
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lastLoginAt  DateTime?
+
+  @@index([username])
+}
+
+model SubjectAssignment {
+  id          String                   @id @default(uuid())
+  subjectId   String
+  subject     Subject                  @relation(fields: [subjectId], references: [id])
+  kind        SubjectAssignmentKind
+  key         String
+  status      SubjectAssignmentStatus  @default(ACTIVE)
+  assignedAt  DateTime                 @default(now())
+  suspendedAt DateTime?
+  revokedAt   DateTime?
+  version     Int                      @default(1)
+  updatedAt   DateTime                 @updatedAt
+
+  @@unique([subjectId, kind, key])
+  @@index([subjectId, status])
+  @@index([kind, key, status])
+}
+
 model UserPreference {
   userId         String   @id
   locale         Locale   @default(EN)

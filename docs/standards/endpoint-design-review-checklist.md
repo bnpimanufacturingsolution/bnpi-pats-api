@@ -42,11 +42,12 @@ implementation. `N/A` requires a short reason.
 - [ ] Conflict, precondition, unsupported media type, rate limit, and service-unavailable cases
   are defined where applicable.
 
-## Security and tenancy
+## Security and operational scope
 
 - [ ] Authentication requirements are documented.
 - [ ] Object-level authorization is enforced for every protected resource.
-- [ ] Workspace/line tenancy scope is explicit and tested.
+- [ ] Server-resolved operational scope is explicit and tested; `ProductionLine` scope is included
+  only if D-001/D-029 has accepted it.
 - [ ] HTTPS/TLS requirements and content types are documented.
 - [ ] Rate limiting and required response headers are defined where needed.
 - [ ] Sensitive fields, internal IDs, storage keys, and implementation details are not leaked.
@@ -65,7 +66,7 @@ implementation. `N/A` requires a short reason.
 - [ ] Timestamps are ISO 8601 UTC.
 - [ ] Content negotiation and unsupported media behavior are documented.
 - [ ] `traceparent` propagation and optional human-readable request correlation are defined.
-- [ ] Audit requirements identify actor, tenant, time, action, and affected resource.
+- [ ] Audit requirements identify actor, operational context, time, action, and affected resource.
 
 ## Documentation and verification
 
@@ -73,6 +74,6 @@ implementation. `N/A` requires a short reason.
 - [ ] Request, response, status, auth, pagination, and error schemas are documented.
 - [ ] Focused contract tests cover success, validation, authorization, not-found, conflict, and
   retry behavior applicable to the endpoint.
-- [ ] Integration tests cover persistence and tenancy boundaries where applicable.
+- [ ] Integration tests cover persistence and operational-context/line boundaries where applicable.
 - [ ] Generated documentation matches the reviewed OpenAPI contract.
 - [ ] Any exception is recorded with owner, reason, and expiry/review condition.
