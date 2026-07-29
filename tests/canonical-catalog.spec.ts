@@ -41,6 +41,9 @@ describe("canonical deployment-scoped catalog", () => {
 			id: productId,
 			productCode: "B251",
 			productName: "Machibouke Hamburger Shop",
+			lifecycleStatus: "DRAFT",
+			evidenceStatus: "NEEDS_CONFIRMATION",
+			rowVersion: 1,
 			createdAt: new Date("2026-07-15T00:00:00.000Z"),
 			updatedAt: new Date("2026-07-15T00:00:00.000Z"),
 			models: [],
@@ -67,7 +70,13 @@ describe("canonical deployment-scoped catalog", () => {
 			.set("Authorization", "Bearer foundation-test-token");
 
 		expect(response.status).to.equal(200);
-		expect(response.body.data).to.include({ productId, productCode: "B251" });
+		expect(response.body.data).to.include({
+			productId,
+			productCode: "B251",
+			lifecycleStatus: "DRAFT",
+			evidenceStatus: "NEEDS_CONFIRMATION",
+			rowVersion: 1,
+		});
 	});
 
 	it("denies catalog access without the read capability", async () => {

@@ -202,6 +202,13 @@ export function catalogController(
 					productId: product.id,
 					productCode: product.productCode,
 					productName: product.productName,
+					...(options.canonical
+						? {
+								lifecycleStatus: product.lifecycleStatus,
+								evidenceStatus: product.evidenceStatus,
+								rowVersion: product.rowVersion,
+							}
+						: {}),
 					createdAt: product.createdAt.toISOString(),
 					updatedAt: product.updatedAt.toISOString(),
 					models,
