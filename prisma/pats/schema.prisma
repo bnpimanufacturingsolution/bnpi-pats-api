@@ -53,14 +53,60 @@ enum ProductSourceStatus {
   MANUAL
 }
 
+enum CatalogLifecycleStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+enum CanonicalEvidenceStatus {
+  CONFIRMED
+  INFERRED
+  PROVISIONAL
+  SOURCE_ANOMALY
+  UNAVAILABLE_DEPENDENCY
+  NEEDS_CONFIRMATION
+  CONFLICTING
+  STALE
+}
+
+enum SourceEvidenceLocatorType {
+  WORKBOOK_CELL
+  WORKBOOK_RANGE
+  PDF_PAGE
+  PDF_TEXT
+  OTHER
+}
+
+enum CanonicalEvidenceSubjectType {
+  PRODUCT
+  MODEL
+  MODEL_PART
+  BOM_DEFINITION
+  BOM_LINE
+  PROCESS_ROUTE
+  ROUTE_STAGE
+}
+
+enum BomRelationshipKind {
+  COMPONENT
+  ASSEMBLY_COMPONENT
+  DECORATION_INPUT
+  PACKAGING_COMPONENT
+  OTHER
+}
+
 model Product {
-  id          String    @id @default(uuid())
-  productCode String    @unique
-  productName String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  models      Model[]
-  projects    Project[]
+  id              String                  @id @default(uuid())
+  productCode     String                  @unique
+  productName     String
+  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion      Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  models          Model[]
+  projects        Project[]
 }
 
 model Model {
@@ -71,10 +117,16 @@ model Model {
   modelName       String?
   sourceStatus    ProductSourceStatus
   sourceReference Json?
-  skuCode         String
+  skuCode         String?
   pinned          Boolean                  @default(false)
+  lifecycleStatus CatalogLifecycleStatus   @default(DRAFT)
+  evidenceStatus  CanonicalEvidenceStatus  @default(NEEDS_CONFIRMATION)
+  rowVersion      Int                      @default(1)
+  createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
   modelParts      ModelPart[]
+  bomDefinitions  BomDefinition[]
+  processRoutes   ProcessRoute[]
   allocations     ProjectModelAllocation[]
   projectParts    Part[]                   @relation("ModelProjectParts")
 
@@ -83,18 +135,105 @@ model Model {
 }
 
 model ModelPart {
-  id           String @id @default(uuid())
-  modelId      String
-  model        Model  @relation(fields: [modelId], references: [id])
-  partCode     String
-  partName     String
+  id              String                  @id @default(uuid())
+  modelId         String
+  model           Model                   @relation(fields: [modelId], references: [id])
+  partCode        String
+  partName        String
+  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion      Int                     @default(1)
+  createdAt       DateTime                @default(now())
   // Ordered catalog-level StageStepRef[] template. Promotion into a versioned PartsList is
   // intentionally application-controlled until the template contract is confirmed.
-  routingSteps Json
-  projectParts Part[] @relation("ModelPartProjectParts")
+  routingSteps    Json
+  projectParts    Part[]                  @relation("ModelPartProjectParts")
+  bomLines        BomLine[]
 
   @@unique([modelId, partCode])
   @@index([modelId])
+}
+
+// A versioned material relationship for one reusable catalog model. Quantity and UOM remain
+// nullable because the analyzed client sources do not consistently provide a convertible basis.
+model BomDefinition {
+  id              String                  @id @default(uuid())
+  modelId         String
+  model           Model                   @relation(fields: [modelId], references: [id])
+  revision        Int
+  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion      Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  lines           BomLine[]
+
+  @@unique([modelId, revision])
+  @@index([modelId])
+}
+
+model BomLine {
+  id                   String                  @id @default(uuid())
+  bomDefinitionId      String
+  bomDefinition        BomDefinition           @relation(fields: [bomDefinitionId], references: [id])
+  modelPartId          String
+  modelPart            ModelPart               @relation(fields: [modelPartId], references: [id])
+  lineNumber           Int
+  relationshipKind     BomRelationshipKind
+  quantityMagnitude    Float?
+  quantityUom          String?
+  usageBasis           String?
+  sourceRepresentation String?
+  lifecycleStatus      CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus       CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion           Int                     @default(1)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@unique([bomDefinitionId, lineNumber])
+  @@index([bomDefinitionId])
+  @@index([modelPartId])
+}
+
+// A versioned, model-applicable process definition. Stage ownership remains an explicit mapping
+// seam because the existing Stage/SubStage tables are project-bound in this draft schema.
+model ProcessRoute {
+  id              String                  @id @default(uuid())
+  modelId         String
+  model           Model                   @relation(fields: [modelId], references: [id])
+  revision        Int
+  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion      Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  stages          ProcessRouteStage[]
+
+  @@unique([modelId, revision])
+  @@index([modelId])
+}
+
+model ProcessRouteStage {
+  id                   String                  @id @default(uuid())
+  processRouteId       String
+  processRoute         ProcessRoute            @relation(fields: [processRouteId], references: [id])
+  sequence             Int
+  stageKey             String?
+  stageName            String?
+  stageDefinitionId    String?
+  subStageKey          String?
+  subStageName         String?
+  operationCode        String?
+  operationName        String?
+  sourceRepresentation String?
+  lifecycleStatus      CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus       CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion           Int                     @default(1)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@unique([processRouteId, sequence])
+  @@index([processRouteId])
 }
 
 model WorkflowGroup {
@@ -496,15 +635,15 @@ enum SubjectAssignmentStatus {
 }
 
 model Subject {
-  id                  String               @id @default(uuid())
+  id                  String              @id @default(uuid())
   provider            String
   issuer              String
   providerSubject     String
   displayNameSnapshot String?
   emailSnapshot       String?
   status              SubjectStatus       @default(ACTIVE)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
   assignments         SubjectAssignment[]
   credential          SubjectCredential?
 
@@ -513,30 +652,30 @@ model Subject {
 }
 
 model SubjectCredential {
-  id           String   @id @default(uuid())
-  subjectId    String   @unique
-  subject      Subject  @relation(fields: [subjectId], references: [id])
-  username     String   @unique
+  id           String    @id @default(uuid())
+  subjectId    String    @unique
+  subject      Subject   @relation(fields: [subjectId], references: [id])
+  username     String    @unique
   passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   lastLoginAt  DateTime?
 
   @@index([username])
 }
 
 model SubjectAssignment {
-  id          String                   @id @default(uuid())
+  id          String                  @id @default(uuid())
   subjectId   String
-  subject     Subject                  @relation(fields: [subjectId], references: [id])
+  subject     Subject                 @relation(fields: [subjectId], references: [id])
   kind        SubjectAssignmentKind
   key         String
-  status      SubjectAssignmentStatus  @default(ACTIVE)
-  assignedAt  DateTime                 @default(now())
+  status      SubjectAssignmentStatus @default(ACTIVE)
+  assignedAt  DateTime                @default(now())
   suspendedAt DateTime?
   revokedAt   DateTime?
-  version     Int                      @default(1)
-  updatedAt   DateTime                 @updatedAt
+  version     Int                     @default(1)
+  updatedAt   DateTime                @updatedAt
 
   @@unique([subjectId, kind, key])
   @@index([subjectId, status])
@@ -549,4 +688,160 @@ model UserPreference {
   // Completed walkthrough tour keys, e.g. ["dashboard", "station"].
   completedTours String[]
   updatedAt      DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Source-backed client intake (raw file bytes stay in Drive/object storage)
+// ---------------------------------------------------------------------------
+
+enum SourceRunStatus {
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+enum SourceArtifactType {
+  WORKBOOK
+  PDF
+  OTHER
+}
+
+enum SourceExtractionStatus {
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+model SourceRun {
+  id          String           @id @default(uuid())
+  workspaceId String
+  sourceLabel String
+  status      SourceRunStatus  @default(RUNNING)
+  startedAt   DateTime         @default(now())
+  completedAt DateTime?
+  artifacts   SourceArtifact[]
+
+  @@index([workspaceId, startedAt])
+}
+
+model SourceArtifact {
+  id               String                 @id @default(uuid())
+  sourceRunId      String
+  sourceRun        SourceRun              @relation(fields: [sourceRunId], references: [id])
+  fileName         String
+  artifactType     SourceArtifactType
+  mimeType         String
+  sizeBytes        Int
+  sha256           String
+  productCode      String?
+  extractionStatus SourceExtractionStatus
+  analysis         Json
+  reportMarkdown   String
+  createdAt        DateTime               @default(now())
+  issues           SourceIssue[]
+  evidence         SourceEvidence[]
+
+  @@unique([sourceRunId, fileName])
+  @@index([sourceRunId])
+  @@index([sha256])
+}
+
+model SourceIssue {
+  id               String           @id @default(uuid())
+  sourceArtifactId String
+  sourceArtifact   SourceArtifact   @relation(fields: [sourceArtifactId], references: [id])
+  code             String
+  status           String
+  severity         String
+  message          String
+  sheet            String?
+  address          String?
+  value            Json?
+  canonicalValue   Json?
+  createdAt        DateTime         @default(now())
+  evidence         SourceEvidence[]
+
+  @@index([sourceArtifactId])
+  @@index([code, status])
+}
+
+// Immutable source coordinates and values used by canonical catalog records. Raw bytes remain in
+// Drive/object storage; this table stores only traceable extracted evidence.
+model SourceEvidence {
+  id               String                    @id @default(uuid())
+  sourceArtifactId String
+  sourceArtifact   SourceArtifact            @relation(fields: [sourceArtifactId], references: [id])
+  sourceIssueId    String?
+  sourceIssue      SourceIssue?              @relation(fields: [sourceIssueId], references: [id])
+  locatorType      SourceEvidenceLocatorType
+  sheet            String?
+  address          String?
+  page             Int?
+  rawValue         Json?
+  formulaText      String?
+  cachedValue      Json?
+  normalizedValue  Json?
+  quantityBasis    String?
+  dependencyState  String?
+  evidenceStatus   CanonicalEvidenceStatus
+  createdAt        DateTime                  @default(now())
+  canonicalLinks   CanonicalEvidenceLink[]
+  crosswalks       CanonicalCrosswalk[]
+
+  @@index([sourceArtifactId])
+  @@index([sourceIssueId])
+  @@index([evidenceStatus])
+}
+
+// The subject type is bounded and validated by the catalog application service. This link spans
+// the already-existing catalog tables and keeps source evidence reusable without storing arbitrary
+// workbook-shaped JSON on Product, Model, or ModelPart.
+model CanonicalEvidenceLink {
+  id               String                       @id @default(uuid())
+  sourceEvidenceId String
+  sourceEvidence   SourceEvidence               @relation(fields: [sourceEvidenceId], references: [id])
+  subjectType      CanonicalEvidenceSubjectType
+  subjectId        String
+  relation         String
+  createdAt        DateTime                     @default(now())
+
+  @@unique([sourceEvidenceId, subjectType, subjectId, relation])
+  @@index([subjectType, subjectId])
+}
+
+model CanonicalCrosswalk {
+  id               String                       @id @default(uuid())
+  sourceEvidenceId String
+  sourceEvidence   SourceEvidence               @relation(fields: [sourceEvidenceId], references: [id])
+  subjectType      CanonicalEvidenceSubjectType
+  subjectId        String
+  rawValue         String
+  canonicalValue   String
+  ruleCode         String
+  confidence       Float?
+  rationale        String?
+  status           CanonicalEvidenceStatus
+  createdAt        DateTime                     @default(now())
+
+  @@index([subjectType, subjectId])
+  @@index([rawValue])
+}
+
+// Durable retry record for canonical draft writes. A row is claimed before the business
+// transaction and completed only after the response is known; concurrent reuse is rejected.
+model CatalogIdempotencyRecord {
+  id              String    @id @default(uuid())
+  actorId         String
+  operation       String
+  idempotencyKey  String
+  requestHash     String
+  status          Int?
+  responseBody    Json?
+  responseHeaders Json?
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@unique([actorId, operation, idempotencyKey])
+  @@index([createdAt])
 }

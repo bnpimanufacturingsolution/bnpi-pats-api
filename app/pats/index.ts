@@ -3,7 +3,9 @@ import { requireWorkspaceRole } from "../../middleware/workspaceAuth";
 import { createMinioObjectStorage } from "../storage/minio-object-storage";
 import type { ObjectStorage } from "../storage/object-storage";
 import { catalogRouter } from "./catalog.router";
-import type { RequestHandler, Router } from "express";
+import { workbookIntakeRouter } from "../intake/workbook.router";
+import { sourceRunRouter } from "../intake/source-run.router";
+import { Router, type RequestHandler } from "express";
 
 export interface PatsModuleDependencies {
 	patsPrisma?: PatsPrismaClient;
@@ -22,5 +24,8 @@ export function patsModule(dependencies: PatsModuleDependencies = {}): Router {
 	});
 	const workspaceAccess = dependencies.workspaceAccess ?? requireWorkspaceRole(["OWNER", "ADMIN", "MEMBER", "VIEWER"]);
 
-	return catalogRouter(patsPrisma, objectStorage, workspaceAccess);
+	return Router()
+		.use(catalogRouter(patsPrisma, objectStorage, workspaceAccess))
+		.use(workbookIntakeRouter(workspaceAccess))
+		.use(sourceRunRouter(patsPrisma, workspaceAccess));
 }

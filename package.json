@@ -29,6 +29,8 @@
 		"copy-codebase": "ts-node scripts/copy-codebase.ts",
 		"generate": "ts-node scripts/generate-and-export.ts",
 		"api-list": "curl -X GET 'http://localhost:3000/api/docs/api-list?format=json' | jq",
+		"analyze:intake": "ts-node scripts/analyze-workbooks.ts",
+		"analyze:source": "ts-node scripts/analyze-source-run.ts",
 		"zod-generate": "node scripts/zod-generate.js"
 	},
 	"prisma": {

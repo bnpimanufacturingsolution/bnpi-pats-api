@@ -1,4 +1,10 @@
-import express, { type NextFunction, type Request, type RequestHandler, type Response, Router } from "express";
+import express, {
+	type NextFunction,
+	type Request,
+	type RequestHandler,
+	type Response,
+	Router,
+} from "express";
 import { rateLimit } from "express-rate-limit";
 import {
 	IdentityProviderUnavailableError,
@@ -50,6 +56,11 @@ export interface CanonicalRouterOptions {
 		handler: RequestHandler;
 		requiredCapability?: string;
 	};
+	/** Optional catalog draft-write boundary. It is mounted behind canonical identity and capability checks. */
+	catalogMutations?: {
+		router: Router;
+		requiredCapability: string;
+	};
 }
 
 interface CanonicalIdentityRequest extends Request {
@@ -86,7 +97,9 @@ function canonicalMethodNotAllowed(req: Request, res: Response, allow: string): 
 	});
 }
 
-function requireCanonicalIdentity(identity: IdentityDependencies): (req: Request, res: Response, next: NextFunction) => void {
+function requireCanonicalIdentity(
+	identity: IdentityDependencies,
+): (req: Request, res: Response, next: NextFunction) => void {
 	return (req: Request, res: Response, next: NextFunction) => {
 		void (async () => {
 			try {
@@ -144,10 +157,15 @@ function requireCanonicalIdentity(identity: IdentityDependencies): (req: Request
 	};
 }
 
-function requireCanonicalCapability(capability: string): (req: Request, res: Response, next: NextFunction) => void {
+function requireCanonicalCapability(
+	capability: string,
+): (req: Request, res: Response, next: NextFunction) => void {
 	return (req: Request, res: Response, next: NextFunction) => {
 		const canonicalRequest = req as CanonicalIdentityRequest;
-		if (!canonicalRequest.canonicalAssignments || !hasCapability(canonicalRequest.canonicalAssignments, capability)) {
+		if (
+			!canonicalRequest.canonicalAssignments ||
+			!hasCapability(canonicalRequest.canonicalAssignments, capability)
+		) {
 			sendProblem(res, {
 				type: PROBLEM_TYPES.authorizationDenied,
 				title: "Forbidden",
@@ -214,7 +232,10 @@ function isValidTracestate(value: string): boolean {
 		const memberValue = listMember.slice(separator + 1);
 		const isSimpleKey = /^[a-z][a-z0-9_*/-]{0,255}$/.test(key);
 		const isMultiTenantKey = /^[a-z0-9][a-z0-9_*/-]{0,240}@[a-z][a-z0-9_*/-]{0,13}$/.test(key);
-		const hasValidValue = /^(?:[\x20\x21-\x2b\x2d-\x3c\x3e-\x7e]{0,255})[\x21-\x2b\x2d-\x3c\x3e-\x7e]$/.test(memberValue);
+		const hasValidValue =
+			/^(?:[\x20\x21-\x2b\x2d-\x3c\x3e-\x7e]{0,255})[\x21-\x2b\x2d-\x3c\x3e-\x7e]$/.test(
+				memberValue,
+			);
 		if ((!isSimpleKey && !isMultiTenantKey) || !hasValidValue || keys.has(key)) return false;
 
 		keys.add(key);
@@ -228,7 +249,8 @@ function setTraceContext(req: Request, res: Response): void {
 
 	res.setHeader("traceparent", traceparent);
 	const tracestate = req.header("tracestate");
-	if (tracestate !== undefined && isValidTracestate(tracestate)) res.setHeader("tracestate", tracestate);
+	if (tracestate !== undefined && isValidTracestate(tracestate))
+		res.setHeader("tracestate", tracestate);
 }
 
 function isMalformedJson(error: unknown): boolean {
@@ -264,7 +286,14 @@ function sendCanonicalError(error: unknown, req: Request, res: Response): void {
 		return;
 	}
 
-	if (hasErrorType(error, ["charset.unsupported", "encoding.unsupported", "unsupported.media.type", "unsupported_media_type"])) {
+	if (
+		hasErrorType(error, [
+			"charset.unsupported",
+			"encoding.unsupported",
+			"unsupported.media.type",
+			"unsupported_media_type",
+		])
+	) {
 		sendProblem(res, {
 			type: PROBLEM_TYPES.unsupportedMediaType,
 			title: "Unsupported Media Type",
@@ -286,9 +315,11 @@ function sendCanonicalError(error: unknown, req: Request, res: Response): void {
 
 export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 	const router = Router();
-	const healthHandler = options.healthHandler ?? ((_req: Request, res: Response) => {
-		res.type("application/json").status(200).json({ status: "healthy" });
-	});
+	const healthHandler =
+		options.healthHandler ??
+		((_req: Request, res: Response) => {
+			res.type("application/json").status(200).json({ status: "healthy" });
+		});
 
 	router.use((req: Request, res: Response, next: NextFunction) => {
 		res.removeHeader("X-Powered-By");
@@ -323,7 +354,8 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 		next();
 	});
 
-	router.use(express.json());
+	// Canonical catalog writes carry bounded evidence metadata, never raw workbook payloads.
+	router.use(express.json({ limit: "256kb" }));
 
 	router.all("/health", (req: Request, res: Response) => {
 		if (["GET", "HEAD"].includes(req.method)) {
@@ -363,7 +395,12 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			const body = req.body as { username?: unknown; password?: unknown };
 			const username = body?.username;
 			const password = body?.password;
-			if (typeof username !== "string" || typeof password !== "string" || username.trim() === "" || password.length === 0) {
+			if (
+				typeof username !== "string" ||
+				typeof password !== "string" ||
+				username.trim() === "" ||
+				password.length === 0
+			) {
 				sendProblem(res, {
 					type: "urn:bandai:pats:problem:validation-error",
 					title: "Validation Failed",
@@ -400,9 +437,13 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 	} else {
 		router.post("/auth/login", loginRateLimiter, identityUnavailable);
 	}
-	router.all("/auth/login", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "POST"));
+	router.all("/auth/login", (req: Request, res: Response) =>
+		canonicalMethodNotAllowed(req, res, "POST"),
+	);
 
-	const identityMiddleware = options.identity ? requireCanonicalIdentity(options.identity) : undefined;
+	const identityMiddleware = options.identity
+		? requireCanonicalIdentity(options.identity)
+		: undefined;
 	if (identityMiddleware) {
 		router.get("/users/me", identityMiddleware, (req: Request, res: Response) => {
 			const canonicalRequest = req as CanonicalIdentityRequest;
@@ -412,13 +453,17 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 				return;
 			}
 
-			res.type("application/json").status(200).json({
-				id: subject.id,
-				displayName: subject.displayNameSnapshot ?? null,
-				email: subject.emailSnapshot ?? null,
+			res.type("application/json")
+				.status(200)
+				.json({
+					id: subject.id,
+					displayName: subject.displayNameSnapshot ?? null,
+					email: subject.emailSnapshot ?? null,
+				});
 		});
-		});
-		router.all("/users/me", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "GET"));
+		router.all("/users/me", (req: Request, res: Response) =>
+			canonicalMethodNotAllowed(req, res, "GET"),
+		);
 
 		router.get("/users/me/capabilities", identityMiddleware, (req: Request, res: Response) => {
 			const canonicalRequest = req as CanonicalIdentityRequest;
@@ -427,20 +472,53 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 				return;
 			}
 
-			res.type("application/json").status(200).json({
-				capabilities: effectiveCapabilities(canonicalRequest.canonicalAssignments),
-			});
+			res.type("application/json")
+				.status(200)
+				.json({
+					capabilities: effectiveCapabilities(canonicalRequest.canonicalAssignments),
+				});
 		});
-		router.all("/users/me/capabilities", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "GET"));
+		router.all("/users/me/capabilities", (req: Request, res: Response) =>
+			canonicalMethodNotAllowed(req, res, "GET"),
+		);
 	} else {
 		router.get("/users/me", identityUnavailable);
-		router.all("/users/me", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "GET"));
+		router.all("/users/me", (req: Request, res: Response) =>
+			canonicalMethodNotAllowed(req, res, "GET"),
+		);
 		router.get("/users/me/capabilities", identityUnavailable);
-		router.all("/users/me/capabilities", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "GET"));
+		router.all("/users/me/capabilities", (req: Request, res: Response) =>
+			canonicalMethodNotAllowed(req, res, "GET"),
+		);
+	}
+
+	if (options.catalogMutations) {
+		const catalogMutationIdentity =
+			identityMiddleware ??
+			((_req: Request, res: Response) => identityUnavailable(_req, res));
+		const catalogMutationGate: RequestHandler = (req, res, next) => {
+			if (req.method === "GET" && /^\/products\/[^/]+$/.test(req.path)) {
+				next();
+				return;
+			}
+
+			catalogMutationIdentity(req, res, (identityError?: unknown) => {
+				if (identityError) {
+					next(identityError);
+					return;
+				}
+				requireCanonicalCapability(
+					options.catalogMutations?.requiredCapability ?? "catalog.manage",
+				)(req, res, next);
+			});
+		};
+		router.use("/catalog", catalogMutationGate, options.catalogMutations.router);
 	}
 
 	if (options.catalog) {
-		const catalogIdentity = identityMiddleware ?? ((_req: Request, res: Response) => identityUnavailable(_req, res));
+		const catalogIdentity =
+			identityMiddleware ??
+			((_req: Request, res: Response) => identityUnavailable(_req, res));
 		/**
 		 * @openapi
 		 * /api/v1/catalog/products/{productId}:
@@ -478,7 +556,9 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 				: (_req, _res, next) => next(),
 			options.catalog.handler,
 		);
-		router.all("/catalog/products/:productId", (req: Request, res: Response) => canonicalMethodNotAllowed(req, res, "GET"));
+		router.all("/catalog/products/:productId", (req: Request, res: Response) =>
+			canonicalMethodNotAllowed(req, res, "GET"),
+		);
 	}
 
 	router.use((req: Request, res: Response) => {

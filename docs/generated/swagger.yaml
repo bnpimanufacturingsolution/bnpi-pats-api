@@ -822,3 +822,296 @@ paths:
           description: Product is not linked to the requested workspace
         "503":
           description: Private image storage is unavailable
+  /api/v1/catalog/products:
+    post:
+      operationId: catalogProductCreate
+      summary: Create a draft catalog product
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Draft product created
+        "409":
+          description: Duplicate product or idempotency payload conflict
+        "422":
+          description: Invalid product or source evidence
+  /api/v1/catalog/models:
+    post:
+      operationId: catalogModelCreate
+      summary: Create a draft catalog model
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Draft model created
+        "404":
+          description: Parent product not found
+        "422":
+          description: Invalid model or source evidence
+  /api/v1/catalog/model-parts:
+    post:
+      operationId: catalogModelPartCreate
+      summary: Create a draft catalog model part
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Draft model part created
+        "404":
+          description: Parent model not found
+        "422":
+          description: Invalid model part or source evidence
+  /api/v1/catalog/products/{productId}:
+    patch:
+      operationId: catalogProductPatch
+      summary: Update a draft catalog product
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Updated draft product
+        "412":
+          description: Stale or missing If-Match
+    get:
+      operationId: catalogProductGet
+      summary: Read a deployment-scoped PATS catalog product
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Complete or sparse Product to Model to ModelPart record
+        "401":
+          description: Authentication required
+        "403":
+          description: catalog.read capability required
+        "404":
+          description: Product not found
+        "429":
+          description: Request rate limit exceeded
+        "503":
+          description: Private image storage unavailable
+  /api/v1/catalog/models/{modelId}:
+    patch:
+      operationId: catalogModelPatch
+      summary: Update a draft catalog model
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: modelId
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Updated draft model
+        "412":
+          description: Stale or missing If-Match
+  /api/v1/catalog/model-parts/{modelPartId}:
+    patch:
+      operationId: catalogModelPartPatch
+      summary: Update a draft catalog model part
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: modelPartId
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Updated draft model part
+        "412":
+          description: Stale or missing If-Match
+  /api/v1/catalog/bom-definitions:
+    post:
+      operationId: catalogBomDefinitionCreate
+      summary: Create a draft BOM revision
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Draft BOM revision created
+        "404":
+          description: Parent model not found
+        "409":
+          description: Duplicate BOM revision or idempotency conflict
+        "422":
+          description: Invalid BOM revision or source evidence
+  /api/v1/catalog/bom-lines:
+    post:
+      operationId: catalogBomLineCreate
+      summary: Add an ordered model-part line to a draft BOM
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Draft BOM line created
+        "404":
+          description: BOM or model part not found
+        "409":
+          description: Duplicate line or idempotency conflict
+        "422":
+          description: Cross-model or invalid BOM line
+  /api/v1/catalog/bom-definitions/{bomDefinitionId}:
+    patch:
+      operationId: catalogBomDefinitionPatch
+      summary: Update draft BOM evidence status
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: bomDefinitionId
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Updated draft BOM revision
+        "412":
+          description: Stale or missing If-Match
+  /api/v1/catalog/bom-lines/{bomLineId}:
+    patch:
+      operationId: catalogBomLinePatch
+      summary: Correct a draft BOM line without silent quantity conversion
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: bomLineId
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Updated draft BOM line
+        "412":
+          description: Stale or missing If-Match
+  /api/v1/catalog/process-routes:
+    post:
+      operationId: catalogProcessRouteCreate
+      summary: Create a draft process route revision
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Draft process route created
+        "404":
+          description: Parent model not found
+        "409":
+          description: Duplicate route revision or idempotency conflict
+        "422":
+          description: Invalid route or source evidence
+  /api/v1/catalog/route-stages:
+    post:
+      operationId: catalogRouteStageCreate
+      summary: Add an ordered stage to a draft process route
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Draft route stage created
+        "404":
+          description: Parent route not found
+        "409":
+          description: Duplicate stage sequence or idempotency conflict
+        "422":
+          description: Missing stage identity or invalid route stage
+  /api/v1/catalog/process-routes/{processRouteId}:
+    patch:
+      operationId: catalogProcessRoutePatch
+      summary: Update draft process route evidence status
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: processRouteId
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Updated draft process route
+        "412":
+          description: Stale or missing If-Match
+  /api/v1/catalog/route-stages/{routeStageId}:
+    patch:
+      operationId: catalogRouteStagePatch
+      summary: Correct draft route stage order or metadata
+      tags:
+        - PATS Catalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: routeStageId
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Updated draft route stage
+        "412":
+          description: Stale or missing If-Match
