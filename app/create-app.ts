@@ -21,7 +21,7 @@ import {
 	type LegacyRouteRegistration,
 } from "./legacy/register-legacy-routes";
 import { patsModule } from "./pats";
-import { catalogController } from "./pats/catalog";
+import { catalogController, catalogProductCollectionController } from "./pats/catalog";
 import { catalogFoundationRouter } from "./pats/catalog-foundation";
 import { bomFoundationRouter } from "./pats/bom-foundation";
 import { processRouteFoundationRouter } from "./pats/process-route-foundation";
@@ -85,6 +85,10 @@ export function createApp(options: AppOptions = {}): Application {
 			catalog: {
 				requiredCapability: "catalog.read",
 				handler: catalogController(patsPrisma, patsObjectStorage, { canonical: true }),
+			},
+			catalogCollection: {
+				requiredCapability: "catalog.read",
+				handler: catalogProductCollectionController(patsPrisma),
 			},
 			catalogMutations: {
 				requiredCapability: "catalog.manage",

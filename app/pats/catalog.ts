@@ -1,8 +1,29 @@
 import type { NextFunction, Request, Response } from "express";
 import type { PrismaClient as PatsPrismaClient } from "../../generated/pats-client";
+import {
+	buildOffsetPage,
+	parseOffsetPagination,
+	parseSort,
+	type SortField,
+} from "../canonical/collection";
 import { ObjectStorageNotFoundError, type ObjectStorage } from "../storage/object-storage";
 
 type PatsProductClient = Pick<PatsPrismaClient, "product">;
+
+const PRODUCT_SORT_FIELDS = [
+	"product_code",
+	"product_name",
+	"created_at",
+	"updated_at",
+] as const;
+
+const PRODUCT_SORT_COLUMNS: Record<string, string> = {
+	product_code: "productCode",
+	product_name: "productName",
+	created_at: "createdAt",
+	updated_at: "updatedAt",
+	id: "id",
+};
 
 export interface PatsCatalogControllerOptions {
 	/** A value means the transitional route is workspace-scoped; omitted means deployment-scoped. */
@@ -17,6 +38,84 @@ export class PatsCatalogStorageUnavailableError extends Error {
 		super("PATS image storage is unavailable");
 		this.name = "PatsCatalogStorageUnavailableError";
 	}
+}
+
+/**
+ * Canonical deployment-scoped product summaries. This deliberately exposes
+ * only normalized catalog fields; models and private evidence references are
+ * read through the product detail resource.
+ */
+export function catalogProductCollectionController(patsPrisma: PatsProductClient) {
+	return async (req: Request, res: Response): Promise<void> => {
+		const query = req.query as Record<string, string | string[] | undefined>;
+		const unsupportedQueryKey = Object.keys(query).find(
+			(key) => !["page", "limit", "sort"].includes(key),
+		);
+		const sortQuery = query.sort;
+		const pagination = parseOffsetPagination({ page: query.page, limit: query.limit });
+		const sorting = Array.isArray(sortQuery)
+			? { ok: false as const, problemType: "urn:bandai:pats:problem:malformed-request", status: 400 as const }
+			: parseSort(sortQuery, PRODUCT_SORT_FIELDS);
+
+		if (
+			unsupportedQueryKey ||
+			"ok" in pagination ||
+			"ok" in sorting
+		) {
+			res.type("application/problem+json").status(400).json({
+				type: "urn:bandai:pats:problem:malformed-request",
+				title: "Bad Request",
+				status: 400,
+				detail: "The catalog collection query is invalid.",
+				instance: req.originalUrl.split("?", 1)[0],
+			});
+			return;
+		}
+
+		const orderBy = (sorting as SortField[]).map(({ field, direction }) => ({
+			[PRODUCT_SORT_COLUMNS[field]]: direction,
+		}));
+
+		try {
+			const [totalItems, products] = await Promise.all([
+				patsPrisma.product.count(),
+				patsPrisma.product.findMany({
+					skip: (pagination.page - 1) * pagination.limit,
+					take: pagination.limit,
+					orderBy: orderBy as never,
+					select: {
+						id: true,
+						productCode: true,
+						productName: true,
+						lifecycleStatus: true,
+						evidenceStatus: true,
+						createdAt: true,
+						updatedAt: true,
+					},
+				}),
+			]);
+
+			const data = products.map((product) => ({
+				productId: product.id,
+				productCode: product.productCode,
+				productName: product.productName,
+				lifecycleStatus: product.lifecycleStatus,
+				evidenceStatus: product.evidenceStatus,
+				createdAt: product.createdAt.toISOString(),
+				updatedAt: product.updatedAt.toISOString(),
+			}));
+
+			res.type("application/json").status(200).json(buildOffsetPage(data, pagination, totalItems));
+		} catch {
+			res.type("application/problem+json").status(503).json({
+				type: "urn:bandai:pats:problem:dependency-unavailable",
+				title: "Dependency Unavailable",
+				status: 503,
+				detail: "PATS catalog data is unavailable.",
+				instance: req.originalUrl.split("?", 1)[0],
+			});
+		}
+	};
 }
 
 export function catalogController(

@@ -1350,6 +1350,67 @@
             "description": "Invalid product or source evidence"
           }
         }
+      },
+      "get": {
+        "operationId": "catalogProductCollectionGet",
+        "summary": "List deployment-scoped PATS catalog products",
+        "tags": [
+          "PATS Catalog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "description": "Comma-separated product_code, product_name, created_at, updated_at fields; prefix with - for descending order.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated normalized product summaries"
+          },
+          "400": {
+            "description": "Malformed pagination or sort query"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "catalog.read capability required"
+          },
+          "429": {
+            "description": "Request rate limit exceeded"
+          },
+          "503": {
+            "description": "Catalog persistence unavailable"
+          }
+        }
       }
     },
     "/api/v1/catalog/models": {

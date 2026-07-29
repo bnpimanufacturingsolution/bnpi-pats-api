@@ -56,6 +56,11 @@ export interface CanonicalRouterOptions {
 		handler: RequestHandler;
 		requiredCapability?: string;
 	};
+	/** Optional deployment-scoped product collection boundary. */
+	catalogCollection?: {
+		handler: RequestHandler;
+		requiredCapability?: string;
+	};
 	/** Optional catalog draft-write boundary. It is mounted behind canonical identity and capability checks. */
 	catalogMutations?: {
 		router: Router;
@@ -497,7 +502,10 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			identityMiddleware ??
 			((_req: Request, res: Response) => identityUnavailable(_req, res));
 		const catalogMutationGate: RequestHandler = (req, res, next) => {
-			if (req.method === "GET" && /^\/products\/[^/]+$/.test(req.path)) {
+			if (
+				["GET", "HEAD"].includes(req.method) &&
+				(req.path === "/products" || /^\/products\/[^/]+$/.test(req.path))
+			) {
 				next();
 				return;
 			}
@@ -513,6 +521,62 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			});
 		};
 		router.use("/catalog", catalogMutationGate, options.catalogMutations.router);
+	}
+
+	if (options.catalogCollection) {
+		const catalogCollectionIdentity =
+			identityMiddleware ??
+			((_req: Request, res: Response) => identityUnavailable(_req, res));
+		/**
+		 * @openapi
+		 * /api/v1/catalog/products:
+		 *   get:
+		 *     operationId: catalogProductCollectionGet
+		 *     summary: List deployment-scoped PATS catalog products
+		 *     tags: [PATS Catalog]
+		 *     security:
+		 *       - bearerAuth: []
+		 *     parameters:
+		 *       - in: query
+		 *         name: page
+		 *         schema:
+		 *           type: integer
+		 *           minimum: 1
+		 *           default: 1
+		 *       - in: query
+		 *         name: limit
+		 *         schema:
+		 *           type: integer
+		 *           minimum: 1
+		 *           maximum: 100
+		 *           default: 50
+		 *       - in: query
+		 *         name: sort
+		 *         description: Comma-separated product_code, product_name, created_at, updated_at fields; prefix with - for descending order.
+		 *         schema:
+		 *           type: string
+		 *     responses:
+		 *       200:
+		 *         description: Paginated normalized product summaries
+		 *       400:
+		 *         description: Malformed pagination or sort query
+		 *       401:
+		 *         description: Authentication required
+		 *       403:
+		 *         description: catalog.read capability required
+		 *       429:
+		 *         description: Request rate limit exceeded
+		 *       503:
+		 *         description: Catalog persistence unavailable
+		 */
+		router.get(
+			"/catalog/products",
+			catalogCollectionIdentity,
+			options.catalogCollection.requiredCapability
+				? requireCanonicalCapability(options.catalogCollection.requiredCapability)
+				: (_req, _res, next) => next(),
+			options.catalogCollection.handler,
+		);
 	}
 
 	if (options.catalog) {
@@ -557,6 +621,11 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			options.catalog.handler,
 		);
 		router.all("/catalog/products/:productId", (req: Request, res: Response) =>
+			canonicalMethodNotAllowed(req, res, "GET"),
+		);
+	}
+	if (options.catalogCollection) {
+		router.all("/catalog/products", (req: Request, res: Response) =>
 			canonicalMethodNotAllowed(req, res, "GET"),
 		);
 	}
