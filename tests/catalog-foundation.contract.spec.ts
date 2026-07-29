@@ -232,6 +232,20 @@ describe("canonical catalog foundation writes", () => {
 		expect(updated.headers.etag).to.equal('"2"');
 	});
 
+	it("updates a draft Model pin through the guarded patch contract", async () => {
+		const { app } = appWith([{ kind: "CAPABILITY", key: "catalog.manage", status: "ACTIVE" }]);
+
+		const updated = await request(app)
+			.patch("/api/v1/catalog/models/model-b243-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"')
+			.send({ pinned: true });
+
+		expect(updated.status).to.equal(200);
+		expect(updated.headers.etag).to.equal('"2"');
+		expect(updated.body.pinned).to.equal(true);
+	});
+
 	it("does not mutate a published Product through the draft API", async () => {
 		const { app, product } = appWith([
 			{ kind: "CAPABILITY", key: "catalog.manage", status: "ACTIVE" },

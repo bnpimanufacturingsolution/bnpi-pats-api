@@ -72,6 +72,7 @@ const modelPatchSchema = z
 		modelNumber: z.string().trim().min(1).max(120).optional(),
 		modelName: z.string().trim().max(240).nullable().optional(),
 		skuCode: z.string().trim().max(120).nullable().optional(),
+		pinned: z.boolean().optional(),
 		evidenceStatus: evidenceStatusSchema.optional(),
 	})
 	.strict()
@@ -664,6 +665,7 @@ export function catalogFoundationRouter(
 					...(body.modelNumber === undefined ? {} : { modelNumber: body.modelNumber }),
 					...(body.modelName === undefined ? {} : { modelName: body.modelName }),
 					...(body.skuCode === undefined ? {} : { skuCode: body.skuCode }),
+					...(body.pinned === undefined ? {} : { pinned: body.pinned }),
 					...(body.evidenceStatus === undefined
 						? {}
 						: { evidenceStatus: evidenceStatus(body.evidenceStatus) }),
@@ -800,6 +802,7 @@ function toModelResource(
 		modelNumber: string;
 		modelName: string | null;
 		skuCode: string | null;
+		pinned: boolean;
 		sourceStatus: ProductSourceStatus;
 		lifecycleStatus: CatalogLifecycleStatus;
 		evidenceStatus: CanonicalEvidenceStatus;
@@ -815,6 +818,7 @@ function toModelResource(
 		modelNumber: model.modelNumber,
 		modelName: model.modelName,
 		skuCode: model.skuCode,
+		pinned: model.pinned,
 		sourceStatus: model.sourceStatus,
 		lifecycleStatus: model.lifecycleStatus,
 		evidenceStatus: model.evidenceStatus,

@@ -183,6 +183,13 @@ export function catalogController(
 					sourceStatus: toApiSourceStatus(model.sourceStatus),
 					sourceReference,
 					skuCode: model.skuCode,
+					...(options.canonical
+						? {
+								lifecycleStatus: model.lifecycleStatus,
+								evidenceStatus: model.evidenceStatus,
+								rowVersion: model.rowVersion,
+							}
+						: {}),
 					imageUrl,
 					pinned: model.pinned,
 					updatedAt: model.updatedAt.toISOString(),
@@ -191,6 +198,13 @@ export function catalogController(
 						modelId: part.modelId,
 						partCode: part.partCode,
 						partName: part.partName,
+						...(options.canonical
+							? {
+									lifecycleStatus: part.lifecycleStatus,
+									evidenceStatus: part.evidenceStatus,
+									rowVersion: part.rowVersion,
+								}
+							: {}),
 						routingSteps: normalizeRoutingSteps(part.routingSteps),
 					})),
 				};
