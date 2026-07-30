@@ -68,6 +68,7 @@
 		"./app/pats/bom-foundation.ts",
 		"./app/pats/process-route-foundation.ts",
 		"./docs/openapi/2026-07-31-pats-api-v1-domain-reads.yaml",
+		"./docs/openapi/2026-07-31-pats-api-v1-domain-writes.yaml",
 		"./app/canonical/router.ts"
 	]
 }

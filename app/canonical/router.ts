@@ -80,6 +80,10 @@ export interface CanonicalRouterOptions {
 	domainReads?: {
 		router: Router;
 	};
+	/** Optional deployment-scoped operational command boundary. */
+	domainCommands?: {
+		router: Router;
+	};
 }
 
 interface CanonicalIdentityRequest extends Request {
@@ -762,6 +766,33 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			next();
 		};
 		router.use(domainReadIdentityGate, options.domainReads.router);
+	}
+
+	if (options.domainCommands) {
+		const domainCommandIdentity =
+			identityMiddleware ??
+			((_req: Request, res: Response) => identityUnavailable(_req, res));
+		const domainCommandPrefixes = [
+			"/production-plans",
+			"/stages",
+			"/sub-stages",
+			"/stations",
+			"/station-steps",
+			"/work-instructions",
+			"/batches",
+			"/stage-events",
+			"/inventory-transactions",
+			"/quality-inspections",
+			"/routing-violations",
+		];
+		const domainCommandIdentityGate: RequestHandler = (req, res, next) => {
+			if (domainCommandPrefixes.some((prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`))) {
+				domainCommandIdentity(req, res, next);
+				return;
+			}
+			next();
+		};
+		router.use(domainCommandIdentityGate, options.domainCommands.router);
 	}
 
 	router.use((req: Request, res: Response) => {

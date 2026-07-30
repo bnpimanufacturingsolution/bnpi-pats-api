@@ -953,18 +953,19 @@ model OutboxMessage {
 }
 
 model IdempotencyRecord {
-  id             String                  @id @default(uuid())
-  subjectId      String
-  subject        Subject                 @relation(fields: [subjectId], references: [id])
-  operation      String
-  idempotencyKey String
-  requestHash    String
-  status         IdempotencyRecordStatus @default(PENDING)
-  responseStatus Int?
-  responseBody   Json?
-  expiresAt      DateTime?
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  id              String                  @id @default(uuid())
+  subjectId       String
+  subject         Subject                 @relation(fields: [subjectId], references: [id])
+  operation       String
+  idempotencyKey  String
+  requestHash     String
+  status          IdempotencyRecordStatus @default(PENDING)
+  responseStatus  Int?
+  responseBody    Json?
+  responseHeaders Json?
+  expiresAt       DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
 
   @@unique([subjectId, operation, idempotencyKey])
   @@index([expiresAt])

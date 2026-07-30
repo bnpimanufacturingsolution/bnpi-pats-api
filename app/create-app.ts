@@ -22,6 +22,7 @@ import {
 } from "./legacy/register-legacy-routes";
 import { patsModule } from "./pats";
 import { domainReadRouter } from "./pats/domain-read";
+import { commandRouter } from "./pats/command-router";
 import { catalogController, catalogProductCollectionController } from "./pats/catalog";
 import { catalogFoundationRouter } from "./pats/catalog-foundation";
 import { bomFoundationRouter } from "./pats/bom-foundation";
@@ -134,6 +135,9 @@ export function createApp(options: AppOptions = {}): Application {
 			},
 			domainReads: {
 				router: domainReadRouter(patsPrisma, requireCanonicalCapability),
+			},
+			domainCommands: {
+				router: commandRouter(patsPrisma, requireCanonicalCapability),
 			},
 		}),
 	);

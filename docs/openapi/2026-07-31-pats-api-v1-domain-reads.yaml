@@ -140,6 +140,8 @@ components:
     Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
     BatchId: { name: batch_id, in: query, schema: { type: string, minLength: 1 } }
     PlanId: { name: planId, in: path, required: true, schema: { type: string, minLength: 1 } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+    IfMatch: { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[0-9]+"$' } }
   responses:
     CollectionRead:
       description: Collection of server-owned resources

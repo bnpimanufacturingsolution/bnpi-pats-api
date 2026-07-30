@@ -1,0 +1,137 @@
+openapi: 3.1.0
+info:
+  title: Bandai PATS API v1 Operational Command Contracts
+  version: 2026-07-31
+  description: Retry-safe commands for planning, execution, inventory, quality, and exception resolution.
+servers:
+  - url: /api/v1
+paths:
+  /stages:
+    post:
+      operationId: stageCreate
+      summary: Add a configured production stage
+      tags: [PATS Configuration]
+      x-required-capability: operations.manage
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' } }
+  /sub-stages:
+    post:
+      operationId: subStageCreate
+      summary: Add a configured production substage
+      tags: [PATS Configuration]
+      x-required-capability: operations.manage
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' } }
+  /stations:
+    post:
+      operationId: stationCreate
+      summary: Add a physical production station
+      tags: [PATS Configuration]
+      x-required-capability: operations.manage
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' } }
+  /station-steps:
+    post:
+      operationId: stationStepCreate
+      summary: Bind a station to an explicit stage step
+      tags: [PATS Configuration]
+      x-required-capability: operations.manage
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' } }
+  /work-instructions:
+    post:
+      operationId: workInstructionCreate
+      summary: Add a versioned work instruction
+      tags: [PATS Configuration]
+      x-required-capability: operations.manage
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' } }
+  /production-plans:
+    post:
+      operationId: productionPlanCreate
+      summary: Create a draft production plan
+      tags: [PATS Planning]
+      x-required-capability: planning.manage
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+  /production-plans/{planId}:
+    patch:
+      operationId: productionPlanPatch
+      summary: Update a draft production plan
+      tags: [PATS Planning]
+      x-required-capability: planning.manage
+      parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '200': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+  /production-plans/{planId}/release:
+    post:
+      operationId: productionPlanRelease
+      summary: Release a draft or ready production plan
+      tags: [PATS Planning]
+      x-required-capability: planning.manage
+      parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '200': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' } }
+  /production-plans/{planId}/lots:
+    post:
+      operationId: productionPlanLotCreate
+      summary: Create a planned lot and its part allocation
+      tags: [PATS Planning]
+      x-required-capability: planning.manage
+      parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+  /batches:
+    post:
+      operationId: batchCreate
+      summary: Create a planned batch and initial position projection
+      tags: [PATS Execution]
+      x-required-capability: planning.manage
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+  /stage-events:
+    post:
+      operationId: stageEventCreate
+      summary: Record a forward-only stage event or routing violation
+      tags: [PATS Execution]
+      x-required-capability: execution.write
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+  /inventory-transactions:
+    post:
+      operationId: inventoryTransactionCreate
+      summary: Record receiving or issuance evidence
+      tags: [PATS Inventory]
+      x-required-capability: inventory.issue
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+  /quality-inspections:
+    post:
+      operationId: qualityInspectionCreate
+      summary: Open a quality inspection for a batch
+      tags: [PATS Quality]
+      x-required-capability: quality.resolve
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+  /quality-inspections/{inspectionId}/decisions:
+    post:
+      operationId: qualityDecisionCreate
+      summary: Record a quality decision and close or hold the inspection
+      tags: [PATS Quality]
+      x-required-capability: quality.resolve
+      parameters: [{ name: inspectionId, in: path, required: true, schema: { type: string } }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' } }
+  /routing-violations/{violationId}/resolve:
+    post:
+      operationId: routingViolationResolve
+      summary: Resolve a routing violation with an operator note
+      tags: [PATS Exceptions]
+      x-required-capability: reconciliation.resolve
+      parameters: [{ name: violationId, in: path, required: true, schema: { type: string } }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '200': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+components:
+  parameters:
+    PlanId: { name: planId, in: path, required: true, schema: { type: string, minLength: 1 } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+    IfMatch: { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[0-9]+"$' } }
+  responses:
+    CommandRead:
+      description: Command result and resource projection
+      content: { application/json: { schema: { type: object } } }
