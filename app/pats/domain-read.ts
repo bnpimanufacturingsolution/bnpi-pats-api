@@ -365,14 +365,28 @@ export function domainReadRouter(
 
 	router.get("/dashboard-summaries", requireCapability("execution.read"), async (req, res) => {
 		try {
-			const [plans, activeBatches, openViolations, qualityHolds, inventoryTransactions] = await Promise.all([
+			const [plans, activeBatchRows, openViolations, qualityHolds, inventoryTransactions] = await Promise.all([
 				database.project.count(),
-				database.batch.count({ where: { status: "ACTIVE" } }),
+				database.batch.findMany({
+					where: { status: "ACTIVE" },
+					select: { lot: { select: { id: true, projectId: true } } },
+				}),
 				database.routingViolation.count({ where: { status: "OPEN" } }),
 				database.qualityDecision.count({ where: { decision: "HOLD" } }),
 				database.inventoryTransaction.count(),
 			]);
-			res.setHeader("Cache-Control", "no-store").json({ generatedAt: new Date().toISOString(), plans, activeBatches, openViolations, qualityHolds, inventoryTransactions });
+			const activeLots = new Set(activeBatchRows.map((row) => row.lot.id));
+			const activeProjects = new Set(activeBatchRows.map((row) => row.lot.projectId));
+			res.setHeader("Cache-Control", "no-store").json({
+				generatedAt: new Date().toISOString(),
+				plans,
+				activeProjects: activeProjects.size,
+				activeLots: activeLots.size,
+				activeBatches: activeBatchRows.length,
+				openViolations,
+				qualityHolds,
+				inventoryTransactions,
+			});
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS dashboard data is unavailable.");
 		}

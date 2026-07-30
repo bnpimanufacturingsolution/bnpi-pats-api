@@ -125,6 +125,38 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.data).to.deep.equal([{ id: "stage-1", name: "Injection", workflowGroup: { id: "group-1", name: "Factory" }, subStageLinks: [] }]);
 	});
 
+	it("returns dashboard counts from active server batches and their lot ownership", async () => {
+		const app = appFor({
+			project: { count: async () => 4 },
+			batch: {
+				findMany: async () => [
+					{ lot: { id: "lot-1", projectId: "project-1" } },
+					{ lot: { id: "lot-1", projectId: "project-1" } },
+					{ lot: { id: "lot-2", projectId: "project-2" } },
+				],
+			},
+			routingViolation: { count: async () => 2 },
+			qualityDecision: { count: async () => 1 },
+			inventoryTransaction: { count: async () => 7 },
+		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/dashboard-summaries")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.include({
+			plans: 4,
+			activeProjects: 2,
+			activeLots: 2,
+			activeBatches: 3,
+			openViolations: 2,
+			qualityHolds: 1,
+			inventoryTransactions: 7,
+		});
+		expect(response.body.generatedAt).to.be.a("string");
+	});
+
 	it("fails planning reads closed when the subject lacks planning.read", async () => {
 		const app = appFor({ project: { count: async () => 0, findMany: async () => [] } }, [
 			{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" },

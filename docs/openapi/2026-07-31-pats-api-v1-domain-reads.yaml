@@ -126,7 +126,7 @@ paths:
       summary: Read dashboard counts derived from server ledgers
       tags: [PATS Reporting]
       x-required-capability: execution.read
-      responses: { '200': { $ref: '#/components/responses/ResourceRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
+      responses: { '200': { $ref: '#/components/responses/DashboardRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
   /reports/line:
     get:
       operationId: lineReportGet
@@ -152,7 +152,22 @@ components:
     ResourceRead:
       description: Server-owned resource or projection
       content: { application/json: { schema: { type: object } } }
+    DashboardRead:
+      description: Server-owned dashboard counts derived from operational ledgers
+      content: { application/json: { schema: { $ref: '#/components/schemas/DashboardSummary' } } }
   schemas:
+    DashboardSummary:
+      type: object
+      required: [generatedAt, plans, activeProjects, activeLots, activeBatches, openViolations, qualityHolds, inventoryTransactions]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        plans: { type: integer, minimum: 0 }
+        activeProjects: { type: integer, minimum: 0 }
+        activeLots: { type: integer, minimum: 0 }
+        activeBatches: { type: integer, minimum: 0 }
+        openViolations: { type: integer, minimum: 0 }
+        qualityHolds: { type: integer, minimum: 0 }
+        inventoryTransactions: { type: integer, minimum: 0 }
     CollectionEnvelope:
       type: object
       required: [data]
