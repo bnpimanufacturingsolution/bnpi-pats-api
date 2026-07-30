@@ -168,6 +168,28 @@ components:
         openViolations: { type: integer, minimum: 0 }
         qualityHolds: { type: integer, minimum: 0 }
         inventoryTransactions: { type: integer, minimum: 0 }
+        productionProgress:
+          type: array
+          items:
+            type: object
+            required: [projectId, projectName, productName, plannedQuantity, activeQuantity, activeBatchCount, segments]
+            properties:
+              projectId: { type: string }
+              projectName: { type: string }
+              productName: { type: string }
+              plannedQuantity: { type: number, minimum: 0 }
+              activeQuantity: { type: number, minimum: 0 }
+              activeBatchCount: { type: integer, minimum: 0 }
+              segments:
+                type: array
+                items:
+                  type: object
+                  required: [kind, stageId, stageName, quantity]
+                  properties:
+                    kind: { type: string, enum: [stage, blocked, remaining] }
+                    stageId: { type: string }
+                    stageName: { type: string }
+                    quantity: { type: number, minimum: 0 }
     CollectionEnvelope:
       type: object
       required: [data]

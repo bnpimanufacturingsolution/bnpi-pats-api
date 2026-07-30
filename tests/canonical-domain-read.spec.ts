@@ -130,12 +130,13 @@ describe("canonical PATS domain read contract", () => {
 			project: { count: async () => 4 },
 			batch: {
 				findMany: async () => [
-					{ lot: { id: "lot-1", projectId: "project-1" } },
-					{ lot: { id: "lot-1", projectId: "project-1" } },
-					{ lot: { id: "lot-2", projectId: "project-2" } },
+					{ id: "batch-1", plannedQuantity: 40, lot: { id: "lot-1", projectId: "project-1", requiredProductionQuantity: 100, project: { name: "Plan 1", product: { productName: "Product 1" } } }, positionProjection: { stageId: "stage-1", quantityMagnitude: "40" } },
+					{ id: "batch-2", plannedQuantity: 20, lot: { id: "lot-1", projectId: "project-1", requiredProductionQuantity: 100, project: { name: "Plan 1", product: { productName: "Product 1" } } }, positionProjection: { stageId: "stage-1", quantityMagnitude: "20" } },
+					{ id: "batch-3", plannedQuantity: 30, lot: { id: "lot-2", projectId: "project-2", requiredProductionQuantity: 60, project: { name: "Plan 2", product: null } }, positionProjection: { stageId: "stage-2", quantityMagnitude: "30" } },
 				],
 			},
-			routingViolation: { count: async () => 2 },
+			stage: { findMany: async () => [{ id: "stage-1", name: "Injection", displayOrder: 1 }, { id: "stage-2", name: "Decoration", displayOrder: 2 }] },
+			routingViolation: { findMany: async () => [{ batchId: "batch-2", attemptedStageId: "stage-2" }, { batchId: "batch-3", attemptedStageId: "stage-1" }] },
 			qualityDecision: { count: async () => 1 },
 			inventoryTransaction: { count: async () => 7 },
 		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
@@ -155,6 +156,33 @@ describe("canonical PATS domain read contract", () => {
 			inventoryTransactions: 7,
 		});
 		expect(response.body.generatedAt).to.be.a("string");
+		expect(response.body.productionProgress).to.deep.equal([
+			{
+				projectId: "project-1",
+				projectName: "Plan 1",
+				productName: "Product 1",
+				plannedQuantity: 100,
+				activeQuantity: 60,
+				activeBatchCount: 2,
+				segments: [
+					{ kind: "stage", stageId: "stage-1", stageName: "Injection", quantity: 40 },
+					{ kind: "blocked", stageId: "stage-1", stageName: "Injection", quantity: 20 },
+					{ kind: "remaining", stageId: "remaining", stageName: "Not started", quantity: 40 },
+				],
+			},
+			{
+				projectId: "project-2",
+				projectName: "Plan 2",
+				productName: "Plan 2",
+				plannedQuantity: 60,
+				activeQuantity: 30,
+				activeBatchCount: 1,
+				segments: [
+					{ kind: "blocked", stageId: "stage-2", stageName: "Decoration", quantity: 30 },
+					{ kind: "remaining", stageId: "remaining", stageName: "Not started", quantity: 30 },
+				],
+			},
+		]);
 	});
 
 	it("fails planning reads closed when the subject lacks planning.read", async () => {
