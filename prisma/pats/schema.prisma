@@ -59,6 +59,103 @@ enum CatalogLifecycleStatus {
   RETIRED
 }
 
+// Canonical planning and execution lifecycle vocabularies. The older draft models remain
+// physical compatibility tables while the API exposes the canonical resource names.
+enum PlanLifecycleStatus {
+  DRAFT
+  READY
+  RELEASED
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum AllocationLifecycleStatus {
+  DRAFT
+  COMMITTED
+  SUPERSEDED
+}
+
+enum RouteVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum LotStatus {
+  PLANNED
+  ACTIVE
+  HELD
+  COMPLETED
+  CANCELLED
+}
+
+enum LotPartAllocationStatus {
+  PLANNED
+  COMMITTED
+  CLOSED
+}
+
+enum MaterialRequirementStatus {
+  DRAFT
+  APPROVED
+  ORDERED
+  PARTIALLY_ISSUED
+  FULFILLED
+  CANCELLED
+}
+
+enum StageEventStatus {
+  RECORDED
+  ACCEPTED
+  BLOCKED
+  CORRECTED
+}
+
+enum InventoryTransactionStatus {
+  RECORDED
+  ACCEPTED
+  CORRECTED
+}
+
+enum RoutingViolationStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  WAIVED
+}
+
+enum QualityInspectionStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum QualityDecisionType {
+  PASSED
+  FAILED
+  HOLD
+}
+
+enum AuditOutcome {
+  SUCCESS
+  FAILURE
+}
+
+enum OutboxMessageStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+  DEAD_LETTERED
+}
+
+enum IdempotencyRecordStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
 enum CanonicalEvidenceStatus {
   CONFIRMED
   INFERRED
@@ -110,25 +207,26 @@ model Product {
 }
 
 model Model {
-  id              String                   @id @default(uuid())
-  productId       String
-  product         Product                  @relation(fields: [productId], references: [id])
-  modelNumber     String
-  modelName       String?
-  sourceStatus    ProductSourceStatus
-  sourceReference Json?
-  skuCode         String?
-  pinned          Boolean                  @default(false)
-  lifecycleStatus CatalogLifecycleStatus   @default(DRAFT)
-  evidenceStatus  CanonicalEvidenceStatus  @default(NEEDS_CONFIRMATION)
-  rowVersion      Int                      @default(1)
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-  modelParts      ModelPart[]
-  bomDefinitions  BomDefinition[]
-  processRoutes   ProcessRoute[]
-  allocations     ProjectModelAllocation[]
-  projectParts    Part[]                   @relation("ModelProjectParts")
+  id                String                   @id @default(uuid())
+  productId         String
+  product           Product                  @relation(fields: [productId], references: [id])
+  modelNumber       String
+  modelName         String?
+  sourceStatus      ProductSourceStatus
+  sourceReference   Json?
+  skuCode           String?
+  pinned            Boolean                  @default(false)
+  lifecycleStatus   CatalogLifecycleStatus   @default(DRAFT)
+  evidenceStatus    CanonicalEvidenceStatus  @default(NEEDS_CONFIRMATION)
+  rowVersion        Int                      @default(1)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  modelParts        ModelPart[]
+  bomDefinitions    BomDefinition[]
+  processRoutes     ProcessRoute[]
+  allocations       ProjectModelAllocation[]
+  demandAllocations PlanDemandAllocation[]
+  projectParts      Part[]                   @relation("ModelProjectParts")
 
   @@unique([productId, modelNumber])
   @@index([productId])
@@ -218,6 +316,10 @@ model ProcessRouteStage {
   processRouteId       String
   processRoute         ProcessRoute            @relation(fields: [processRouteId], references: [id])
   sequence             Int
+  stageId              String?
+  stage                Stage?                  @relation("ProcessRouteStageStage", fields: [stageId], references: [id])
+  subStageId           String?
+  subStage             SubStage?               @relation("ProcessRouteStageSubStage", fields: [subStageId], references: [id])
   stageKey             String?
   stageName            String?
   stageDefinitionId    String?
@@ -237,28 +339,33 @@ model ProcessRouteStage {
 }
 
 model WorkflowGroup {
-  id           String      @id @default(uuid())
-  projectId    String
-  project      Project     @relation(fields: [projectId], references: [id])
-  name         String
-  linkageMode  LinkageMode
-  displayOrder Int
-  isSystemSeed Boolean     @default(false)
-  stages       Stage[]
+  id              String                 @id @default(uuid())
+  // Compatibility-only link from the original draft. New configuration is deployment-owned and
+  // does not require a planning record.
+  projectId       String?
+  project         Project?               @relation(fields: [projectId], references: [id])
+  name            String
+  linkageMode     LinkageMode
+  displayOrder    Int
+  isSystemSeed    Boolean                @default(false)
+  lifecycleStatus CatalogLifecycleStatus @default(DRAFT)
+  stages          Stage[]
 
   @@index([projectId])
 }
 
 model Stage {
-  id              String                @id @default(uuid())
-  workflowGroupId String
-  workflowGroup   WorkflowGroup         @relation(fields: [workflowGroupId], references: [id])
-  name            String
+  id                 String                @id @default(uuid())
+  workflowGroupId    String
+  workflowGroup      WorkflowGroup         @relation(fields: [workflowGroupId], references: [id])
+  name               String
   // Optional per-locale name overrides: { ja?: string, fil?: string }
-  nameLocalized   Json?
-  displayOrder    Int
-  isSystemSeed    Boolean               @default(false)
-  subStageLinks   SubStageEligibility[]
+  nameLocalized      Json?
+  displayOrder       Int
+  isSystemSeed       Boolean               @default(false)
+  subStageLinks      SubStageEligibility[]
+  stationSteps       StationStep[]
+  processRouteStages ProcessRouteStage[]   @relation("ProcessRouteStageStage")
 
   @@index([workflowGroupId])
 }
@@ -277,6 +384,8 @@ model SubStage {
   subProcessGroup               String?
   isDisabled                    Boolean               @default(false)
   eligibleStages                SubStageEligibility[]
+  stationSteps                  StationStep[]
+  processRouteStages            ProcessRouteStage[]   @relation("ProcessRouteStageSubStage")
 }
 
 // A SubStage can be eligible under more than one Stage (the Capsulation/Assortment
@@ -300,12 +409,19 @@ model Project {
   projectCode                String                   @unique
   name                       String
   requiredProductionQuantity Int
+  status                     PlanLifecycleStatus      @default(DRAFT)
+  rowVersion                 Int                      @default(1)
+  releasedAt                 DateTime?
+  releasedBySubjectId        String?
+  releasedBySubject          Subject?                 @relation("PlanReleaseActor", fields: [releasedBySubjectId], references: [id])
   productId                  String?
   product                    Product?                 @relation(fields: [productId], references: [id])
   createdAt                  DateTime                 @default(now())
   productSpecification       ProductSpecification?
   pmrs                       Pmrs?
   modelAllocations           ProjectModelAllocation[]
+  demandAllocations          PlanDemandAllocation[]
+  materialRequirements       MaterialRequirement[]
   partsLists                 PartsList[]
   workflowGroups             WorkflowGroup[]
   parts                      Part[]
@@ -317,14 +433,22 @@ model Project {
 }
 
 model ProjectModelAllocation {
-  id              String   @id @default(uuid())
-  projectId       String
-  project         Project  @relation(fields: [projectId], references: [id])
-  modelId         String
-  model           Model    @relation(fields: [modelId], references: [id])
-  plannedQuantity Int
-  createdAt       DateTime @default(now())
-  batches         Batch[]
+  id                String                    @id @default(uuid())
+  projectId         String
+  project           Project                   @relation(fields: [projectId], references: [id])
+  modelId           String
+  model             Model                     @relation(fields: [modelId], references: [id])
+  plannedQuantity   Int
+  quantityMagnitude Decimal?                  @db.Decimal(18, 6)
+  quantityUom       String?
+  usageBasis        String?
+  marketRegion      String?
+  demandPurpose     String?
+  sourceRevisionRef String?
+  lifecycleStatus   AllocationLifecycleStatus @default(DRAFT)
+  rowVersion        Int                       @default(1)
+  createdAt         DateTime                  @default(now())
+  batches           Batch[]
 
   @@unique([projectId, modelId])
   @@index([projectId])
@@ -338,25 +462,35 @@ model ProductSpecification {
   skuCode              String
   productName          String
   trayQuantityStandard Int
+  sourceRevisionRef    String?
+  rowVersion           Int      @default(1)
   createdAt            DateTime @default(now())
 }
 
 // Minimal placeholder — PMRS structure remains NEEDS_CONFIRMATION (BRD Open Question #2).
 // Do not extend without stakeholder confirmation.
 model Pmrs {
-  id          String  @id @default(uuid())
-  projectId   String  @unique
-  project     Project @relation(fields: [projectId], references: [id])
-  partsListId String?
+  id                    String  @id @default(uuid())
+  projectId             String  @unique
+  project               Project @relation(fields: [projectId], references: [id])
+  partsListId           String?
+  externalControlNumber String?
+  revisionLabel         String?
+  status                String  @default("attached")
+  sourceReference       Json?
 }
 
 model PartsList {
-  id        String        @id @default(uuid())
-  projectId String
-  project   Project       @relation(fields: [projectId], references: [id])
-  version   Int
-  createdAt DateTime      @default(now())
-  steps     RoutingStep[]
+  id                String             @id @default(uuid())
+  projectId         String
+  project           Project            @relation(fields: [projectId], references: [id])
+  version           Int
+  status            RouteVersionStatus @default(DRAFT)
+  sourceRevisionRef String?
+  publishedAt       DateTime?
+  rowVersion        Int                @default(1)
+  createdAt         DateTime           @default(now())
+  steps             RoutingStep[]
 
   @@unique([projectId, version])
 }
@@ -365,36 +499,42 @@ model PartsList {
 // PartsListEntry.routingSteps flattened into rows. Ordering is the point: an unordered set
 // cannot express "Full Spray -> Mask Spray -> Tampo".
 model RoutingStep {
-  id          String    @id @default(uuid())
+  id          String       @id @default(uuid())
   partsListId String
-  partsList   PartsList @relation(fields: [partsListId], references: [id])
+  partsList   PartsList    @relation(fields: [partsListId], references: [id])
   partId      String
-  part        Part      @relation(fields: [partId], references: [id])
+  part        Part         @relation(fields: [partId], references: [id])
   stageId     String
   subStageId  String?
   stepOrder   Int
+  stageEvents StageEvent[]
 
   @@unique([partsListId, partId, stepOrder])
   @@index([partId])
 }
 
 model Part {
-  id                       String          @id @default(uuid())
+  id                       String                 @id @default(uuid())
   projectId                String
-  project                  Project         @relation(fields: [projectId], references: [id])
+  project                  Project                @relation(fields: [projectId], references: [id])
   partCode                 String
   partName                 String
   sourceModelId            String?
-  sourceModel              Model?          @relation("ModelProjectParts", fields: [sourceModelId], references: [id])
+  sourceModel              Model?                 @relation("ModelProjectParts", fields: [sourceModelId], references: [id])
   sourceModelPartId        String?
-  sourceModelPart          ModelPart?      @relation("ModelPartProjectParts", fields: [sourceModelPartId], references: [id])
+  sourceModelPart          ModelPart?             @relation("ModelPartProjectParts", fields: [sourceModelPartId], references: [id])
   // Hybrid per-part variance tolerance — either, both, or neither bound may be set;
   // application falls back to the system default (5%) when both are null.
   variancePercentThreshold Float?
   varianceAbsoluteFloor    Int?
+  lifecycleStatus          CatalogLifecycleStatus @default(DRAFT)
+  rowVersion               Int                    @default(1)
   routingSteps             RoutingStep[]
   lots                     Lot[]
   batchPartLines           BatchPartLine[]
+  lotPartAllocations       LotPartAllocation[]
+  inventoryTransactions    InventoryTransaction[]
+  materialRequirements     MaterialRequirement[]
 
   @@unique([projectId, partCode])
   @@index([sourceModelId])
@@ -402,25 +542,30 @@ model Part {
 }
 
 model Lot {
-  id                         String   @id @default(uuid())
+  id                         String              @id @default(uuid())
   projectId                  String
-  project                    Project  @relation(fields: [projectId], references: [id])
-  lotCode                    String   @unique
+  project                    Project             @relation(fields: [projectId], references: [id])
+  lotCode                    String              @unique
   lotName                    String
   partsListId                String
   partsListVersion           Int
   partId                     String
-  part                       Part     @relation(fields: [partId], references: [id])
+  part                       Part                @relation(fields: [partId], references: [id])
   partName                   String
   requiredProductionQuantity Int
+  status                     LotStatus           @default(PLANNED)
+  quantityMagnitude          Decimal?            @db.Decimal(18, 6)
+  quantityUom                String?
+  usageBasis                 String?
   // Structured replacement for the PRD's free-text labelBreakdown (whiteboard stage-1 math:
   // requiredProductionQuantity / labelPackSize = countable labels, e.g. 100,000 / 200 = 500). Label counts
   // are derived by the application, never stored.
   labelPackSize              Int
   // Lot numbers are assigned once at Planning and never reassigned (client doc, stage 1).
-  createdAtStage             String   @default("Planning")
-  createdAt                  DateTime @default(now())
+  createdAtStage             String              @default("Planning")
+  createdAt                  DateTime            @default(now())
   batches                    Batch[]
+  partAllocations            LotPartAllocation[]
 }
 
 // ---------------------------------------------------------------------------
@@ -436,20 +581,25 @@ enum BatchStatus {
 }
 
 model Batch {
-  id                       String                  @id @default(uuid())
-  batchCode                String                  @unique
-  barcodeValue             String                  @unique
+  id                       String                   @id @default(uuid())
+  batchCode                String                   @unique
+  barcodeValue             String                   @unique
   lotId                    String
-  lot                      Lot                     @relation(fields: [lotId], references: [id])
+  lot                      Lot                      @relation(fields: [lotId], references: [id])
   plannedQuantity          Int
   labelPackSize            Int
   projectModelAllocationId String?
-  projectModelAllocation   ProjectModelAllocation? @relation(fields: [projectModelAllocationId], references: [id])
+  projectModelAllocation   ProjectModelAllocation?  @relation(fields: [projectModelAllocationId], references: [id])
   currentStageId           String
   currentSubStageId        String?
-  status                   BatchStatus             @default(PLANNED)
-  createdAt                DateTime                @default(now())
+  status                   BatchStatus              @default(PLANNED)
+  rowVersion               Int                      @default(1)
+  createdBySubjectId       String?
+  createdBySubject         Subject?                 @relation("BatchCreator", fields: [createdBySubjectId], references: [id])
+  createdAt                DateTime                 @default(now())
   parts                    BatchPartLine[]
+  positionProjection       BatchPositionProjection?
+  qualityInspections       QualityInspection[]
 
   @@index([lotId])
   @@index([projectModelAllocationId])
@@ -459,11 +609,15 @@ model Batch {
 // Batch <-> Part cardinality is unconfirmed (domain foundation, Section 8) — modeled
 // many-per-batch as the more general reading, same as the frontend.
 model BatchPartLine {
-  batchId  String
-  batch    Batch  @relation(fields: [batchId], references: [id])
-  partId   String
-  part     Part   @relation(fields: [partId], references: [id])
-  quantity Int
+  batchId             String
+  batch               Batch              @relation(fields: [batchId], references: [id])
+  partId              String
+  part                Part               @relation(fields: [partId], references: [id])
+  quantity            Int
+  lotPartAllocationId String?
+  lotPartAllocation   LotPartAllocation? @relation(fields: [lotPartAllocationId], references: [id])
+  quantityMagnitude   Decimal?           @db.Decimal(18, 6)
+  quantityUom         String?
 
   @@id([batchId, partId])
 }
@@ -481,18 +635,27 @@ enum StageEventType {
 }
 
 model StageEvent {
-  id                 String            @id @default(uuid())
-  stageId            String
-  subStageId         String?
-  eventType          StageEventType
-  batchId            String
-  lotId              String
-  partId             String?
-  quantity           Int?
-  occurredAt         DateTime
-  actor              String
-  isRoutingViolation Boolean           @default(false)
-  routingViolation   RoutingViolation?
+  id                   String            @id @default(uuid())
+  stageId              String
+  subStageId           String?
+  eventType            StageEventType
+  batchId              String
+  lotId                String
+  partId               String?
+  quantity             Int?
+  occurredAt           DateTime
+  actor                String
+  isRoutingViolation   Boolean           @default(false)
+  status               StageEventStatus  @default(RECORDED)
+  routeStepId          String?
+  routeStep            RoutingStep?      @relation(fields: [routeStepId], references: [id])
+  actorSubjectId       String?
+  actorSubject         Subject?          @relation("StageEventActor", fields: [actorSubjectId], references: [id])
+  quantityMagnitude    Decimal?          @db.Decimal(18, 6)
+  quantityUom          String?
+  usageBasis           String?
+  sourceRepresentation String?
+  routingViolation     RoutingViolation?
 
   @@index([batchId, occurredAt])
   @@index([stageId])
@@ -504,29 +667,40 @@ enum InventoryTransactionType {
 }
 
 model InventoryTransaction {
-  id                String                   @id @default(uuid())
-  transactionType   InventoryTransactionType
-  batchId           String
-  partId            String
-  lotId             String
-  fromStageId       String?
-  fromSubStageId    String?
-  toStageId         String
-  toSubStageId      String?
-  expectedQuantity  Int
-  actualQuantity    Int
-  withdrawalFormRef String?
-  recordedAt        DateTime
-  recordedBy        String
+  id                        String                     @id @default(uuid())
+  transactionType           InventoryTransactionType
+  batchId                   String
+  part                      Part                       @relation(fields: [partId], references: [id])
+  partId                    String
+  lotId                     String
+  fromStageId               String?
+  fromSubStageId            String?
+  toStageId                 String
+  toSubStageId              String?
+  expectedQuantity          Int
+  actualQuantity            Int
+  withdrawalFormRef         String?
+  recordedAt                DateTime
+  recordedBy                String
+  status                    InventoryTransactionStatus @default(RECORDED)
+  expectedQuantityMagnitude Decimal?                   @db.Decimal(18, 6)
+  actualQuantityMagnitude   Decimal?                   @db.Decimal(18, 6)
+  quantityUom               String?
+  usageBasis                String?
+  sourceRepresentation      String?
+  recordedBySubjectId       String?
+  recordedBySubject         Subject?                   @relation("InventoryTransactionRecorder", fields: [recordedBySubjectId], references: [id])
+  materialRequirementId     String?
+  materialRequirement       MaterialRequirement?       @relation(fields: [materialRequirementId], references: [id])
 
   @@index([batchId, recordedAt])
   @@index([lotId])
 }
 
 model RoutingViolation {
-  id                  String     @id @default(uuid())
-  stageEventId        String     @unique
-  stageEvent          StageEvent @relation(fields: [stageEventId], references: [id])
+  id                  String                 @id @default(uuid())
+  stageEventId        String                 @unique
+  stageEvent          StageEvent             @relation(fields: [stageEventId], references: [id])
   batchId             String
   lotId               String
   partId              String
@@ -536,9 +710,12 @@ model RoutingViolation {
   // violation stays auditable even after the PartsList is versioned forward.
   expectedSteps       Json
   detectedAt          DateTime
-  resolved            Boolean    @default(false)
+  resolved            Boolean                @default(false)
+  status              RoutingViolationStatus @default(OPEN)
   resolvedAt          DateTime?
   resolvedBy          String?
+  resolvedBySubjectId String?
+  resolvedBySubject   Subject?               @relation("RoutingViolationResolver", fields: [resolvedBySubjectId], references: [id])
   resolutionNote      String?
 
   @@index([batchId])
@@ -557,6 +734,8 @@ model ProcessChangeLog {
   newStageId         String
   newSubStageId      String?
   actor              String
+  actorSubjectId     String?
+  actorSubject       Subject? @relation("ProcessChangeActor", fields: [actorSubjectId], references: [id])
   reason             String
   changedAt          DateTime
 
@@ -573,41 +752,222 @@ enum ScreenType {
 }
 
 model Station {
-  id              String        @id @default(uuid())
-  workspaceId     String
-  name            String
-  stageId         String
-  screenType      ScreenType    @default(COMPUTER)
-  scannerAttached Boolean       @default(true)
-  printerAttached Boolean       @default(true)
-  displayOrder    Int
-  isEnabled       Boolean       @default(true)
-  boundSteps      StationStep[]
+  id                    String        @id @default(uuid())
+  workspaceId           String
+  name                  String
+  // Nullable during the compatibility bridge; all new API-created stations require a code.
+  stationCode           String?       @unique
+  operationalContextKey String        @default("PATS")
+  stageId               String
+  screenType            ScreenType    @default(COMPUTER)
+  scannerAttached       Boolean       @default(true)
+  printerAttached       Boolean       @default(true)
+  displayOrder          Int
+  isEnabled             Boolean       @default(true)
+  boundSteps            StationStep[]
 
   @@index([workspaceId])
 }
 
 model StationStep {
   stationId  String
-  station    Station @relation(fields: [stationId], references: [id])
+  station    Station   @relation(fields: [stationId], references: [id])
   stageId    String
+  stage      Stage     @relation(fields: [stageId], references: [id])
   subStageId String?
+  subStage   SubStage? @relation(fields: [subStageId], references: [id])
   // Composite id needs a non-null member for subStageId-null base steps.
-  id         String  @id @default(uuid())
+  id         String    @id @default(uuid())
 
   @@unique([stationId, stageId, subStageId])
 }
 
 model WorkInstruction {
-  id         String   @id @default(uuid())
-  stageId    String
-  subStageId String?
+  id                String             @id @default(uuid())
+  stageId           String
+  subStageId        String?
   // Ordered steps, each a LocalizedText: [{ en, ja?, fil? }, ...]
-  steps      Json
-  version    Int      @default(1)
-  updatedAt  DateTime @updatedAt
+  steps             Json
+  version           Int                @default(1)
+  status            RouteVersionStatus @default(DRAFT)
+  sourceRevisionRef String?
+  updatedAt         DateTime           @updatedAt
 
   @@unique([stageId, subStageId, version])
+}
+
+// ---------------------------------------------------------------------------
+// Canonical planning, projections, quality, and platform records
+// ---------------------------------------------------------------------------
+
+model PlanDemandAllocation {
+  id                String                    @id @default(uuid())
+  projectId         String
+  project           Project                   @relation(fields: [projectId], references: [id])
+  modelId           String
+  model             Model                     @relation(fields: [modelId], references: [id])
+  marketRegion      String
+  demandPurpose     String
+  quantityMagnitude Decimal                   @db.Decimal(18, 6)
+  quantityUom       String
+  usageBasis        String?
+  sourceRevisionRef String?
+  lifecycleStatus   AllocationLifecycleStatus @default(DRAFT)
+  rowVersion        Int                       @default(1)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@index([projectId, lifecycleStatus])
+  @@index([modelId, marketRegion, demandPurpose])
+}
+
+model MaterialRequirement {
+  id                String                    @id @default(uuid())
+  projectId         String
+  project           Project                   @relation(fields: [projectId], references: [id])
+  partId            String?
+  part              Part?                     @relation(fields: [partId], references: [id])
+  externalReference String?
+  quantityMagnitude Decimal                   @db.Decimal(18, 6)
+  quantityUom       String
+  usageBasis        String?
+  sourceRevisionRef String?
+  status            MaterialRequirementStatus @default(DRAFT)
+  rowVersion        Int                       @default(1)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  transactions      InventoryTransaction[]
+
+  @@index([projectId, status])
+  @@index([partId])
+}
+
+model LotPartAllocation {
+  id                String                  @id @default(uuid())
+  lotId             String
+  lot               Lot                     @relation(fields: [lotId], references: [id])
+  partId            String
+  part              Part                    @relation(fields: [partId], references: [id])
+  quantityMagnitude Decimal                 @db.Decimal(18, 6)
+  quantityUom       String
+  usageBasis        String?
+  status            LotPartAllocationStatus @default(PLANNED)
+  rowVersion        Int                     @default(1)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  batchPartLines    BatchPartLine[]
+
+  @@unique([lotId, partId])
+  @@index([partId])
+}
+
+model BatchPositionProjection {
+  batchId           String           @id
+  batch             Batch            @relation(fields: [batchId], references: [id])
+  stageId           String
+  subStageId        String?
+  routeStepId       String?
+  lastEventId       String?          @unique
+  positionStatus    StageEventStatus @default(ACCEPTED)
+  quantityMagnitude Decimal?         @db.Decimal(18, 6)
+  quantityUom       String?
+  projectionVersion Int              @default(1)
+  updatedAt         DateTime         @updatedAt
+
+  @@index([stageId, subStageId])
+}
+
+model QualityInspection {
+  id                   String                  @id @default(uuid())
+  batchId              String
+  batch                Batch                   @relation(fields: [batchId], references: [id])
+  stageId              String
+  subStageId           String?
+  stationId            String?
+  inspectedQuantity    Decimal?                @db.Decimal(18, 6)
+  quantityUom          String?
+  status               QualityInspectionStatus @default(OPEN)
+  inspectedBySubjectId String?
+  inspectedBySubject   Subject?                @relation("QualityInspectionInspector", fields: [inspectedBySubjectId], references: [id])
+  evidence             Json?
+  startedAt            DateTime                @default(now())
+  completedAt          DateTime?
+  rowVersion           Int                     @default(1)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  decisions            QualityDecision[]
+
+  @@index([batchId, createdAt])
+  @@index([status, createdAt])
+}
+
+model QualityDecision {
+  id                 String              @id @default(uuid())
+  inspectionId       String
+  inspection         QualityInspection   @relation(fields: [inspectionId], references: [id])
+  decision           QualityDecisionType
+  reasonCode         String?
+  reasonNote         String?
+  decidedBySubjectId String?
+  decidedBySubject   Subject?            @relation("QualityDecisionActor", fields: [decidedBySubjectId], references: [id])
+  decidedAt          DateTime            @default(now())
+
+  @@index([inspectionId, decidedAt])
+}
+
+model AuditRecord {
+  id             String       @id @default(uuid())
+  actorSubjectId String?
+  actorSubject   Subject?     @relation("AuditActor", fields: [actorSubjectId], references: [id])
+  action         String
+  resourceType   String
+  resourceId     String
+  outcome        AuditOutcome
+  reason         String?
+  correlationId  String?
+  detail         Json?
+  occurredAt     DateTime     @default(now())
+
+  @@index([resourceType, resourceId, occurredAt])
+  @@index([actorSubjectId, occurredAt])
+  @@index([correlationId])
+}
+
+model OutboxMessage {
+  id            String              @id @default(uuid())
+  aggregateType String
+  aggregateId   String
+  eventType     String
+  schemaVersion Int                 @default(1)
+  payload       Json
+  status        OutboxMessageStatus @default(PENDING)
+  availableAt   DateTime            @default(now())
+  publishedAt   DateTime?
+  attempts      Int                 @default(0)
+  lastError     String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([status, availableAt])
+  @@index([aggregateType, aggregateId, createdAt])
+}
+
+model IdempotencyRecord {
+  id             String                  @id @default(uuid())
+  subjectId      String
+  subject        Subject                 @relation(fields: [subjectId], references: [id])
+  operation      String
+  idempotencyKey String
+  requestHash    String
+  status         IdempotencyRecordStatus @default(PENDING)
+  responseStatus Int?
+  responseBody   Json?
+  expiresAt      DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@unique([subjectId, operation, idempotencyKey])
+  @@index([expiresAt])
 }
 
 enum Locale {
@@ -635,17 +995,27 @@ enum SubjectAssignmentStatus {
 }
 
 model Subject {
-  id                  String              @id @default(uuid())
-  provider            String
-  issuer              String
-  providerSubject     String
-  displayNameSnapshot String?
-  emailSnapshot       String?
-  status              SubjectStatus       @default(ACTIVE)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  assignments         SubjectAssignment[]
-  credential          SubjectCredential?
+  id                          String                 @id @default(uuid())
+  provider                    String
+  issuer                      String
+  providerSubject             String
+  displayNameSnapshot         String?
+  emailSnapshot               String?
+  status                      SubjectStatus          @default(ACTIVE)
+  createdAt                   DateTime               @default(now())
+  updatedAt                   DateTime               @updatedAt
+  assignments                 SubjectAssignment[]
+  credential                  SubjectCredential?
+  stageEventActorRecords      StageEvent[]           @relation("StageEventActor")
+  inventoryTransactionRecords InventoryTransaction[] @relation("InventoryTransactionRecorder")
+  routingViolationResolutions RoutingViolation[]     @relation("RoutingViolationResolver")
+  processChangeRecords        ProcessChangeLog[]     @relation("ProcessChangeActor")
+  qualityInspections          QualityInspection[]    @relation("QualityInspectionInspector")
+  qualityDecisions            QualityDecision[]      @relation("QualityDecisionActor")
+  releasedPlans               Project[]              @relation("PlanReleaseActor")
+  createdBatches              Batch[]                @relation("BatchCreator")
+  auditRecords                AuditRecord[]          @relation("AuditActor")
+  idempotencyRecords          IdempotencyRecord[]
 
   @@unique([provider, issuer, providerSubject])
   @@index([status])
