@@ -47,6 +47,7 @@ export class PatsCatalogStorageUnavailableError extends Error {
  */
 export function catalogProductCollectionController(patsPrisma: PatsProductClient) {
 	return async (req: Request, res: Response): Promise<void> => {
+		res.setHeader("Cache-Control", "no-store");
 		const query = req.query as Record<string, string | string[] | undefined>;
 		const unsupportedQueryKey = Object.keys(query).find(
 			(key) => !["page", "limit", "sort"].includes(key),
@@ -124,6 +125,7 @@ export function catalogController(
 	options: PatsCatalogControllerOptions = {},
 ) {
 	return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+		res.setHeader("Cache-Control", "no-store");
 		const productId = req.params.productId;
 
 		try {

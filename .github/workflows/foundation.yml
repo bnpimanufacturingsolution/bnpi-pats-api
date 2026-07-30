@@ -37,19 +37,40 @@ jobs:
       - run: pnpm run build
       - run: docker compose --profile pats config --quiet
 
+      - name: Start PATS dependencies
+        run: docker compose up -d postgres minio minio-init
+
+      - name: Apply PATS migrations
+        run: pnpm run prisma:pats:migrate:deploy
+
       - name: Compose health smoke
         shell: bash
         run: |
           set -euo pipefail
           docker compose --profile pats up -d --build
+          healthy=false
           for attempt in {1..30}; do
             if curl --fail --silent http://localhost:3000/api/v1/health >/dev/null; then
-              exit 0
+              healthy=true
+              break
             fi
             sleep 2
           done
-          docker compose --profile pats ps
-          exit 1
+          if [[ "$healthy" != "true" ]]; then
+            docker compose --profile pats ps
+            exit 1
+          fi
+
+          preflight_headers="$(mktemp)"
+          trap 'rm -f "$preflight_headers"' EXIT
+          curl --fail --silent --show-error -X OPTIONS \
+            -H 'Origin: http://localhost:5173' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type,authorization' \
+            -D "$preflight_headers" \
+            -o /dev/null \
+            http://localhost:3000/api/v1/auth/login
+          grep -qi '^access-control-allow-origin: http://localhost:5173' "$preflight_headers"
 
       - name: Compose cleanup
         if: always()

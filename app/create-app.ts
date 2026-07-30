@@ -24,6 +24,10 @@ import { patsModule } from "./pats";
 import { catalogController, catalogProductCollectionController } from "./pats/catalog";
 import { catalogFoundationRouter } from "./pats/catalog-foundation";
 import { bomFoundationRouter } from "./pats/bom-foundation";
+import {
+	catalogBomDefinitionCollectionController,
+	catalogBomDefinitionController,
+} from "./pats/bom";
 import { processRouteFoundationRouter } from "./pats/process-route-foundation";
 import { createMinioObjectStorage } from "./storage/minio-object-storage";
 import { canonicalRouter } from "./canonical/router";
@@ -75,6 +79,15 @@ export function createApp(options: AppOptions = {}): Application {
 	// Request ID tracking (first middleware for all requests)
 	app.use(requestIdMiddleware);
 
+	// CORS must run before canonical routes so browser preflight requests are
+	// answered before the canonical method boundary can return 405.
+	app.use(
+		require("cors")({
+			origin: config.cors.origins,
+			credentials: config.cors.credentials,
+		}),
+	);
+
 	// Canonical PATS routes are intentionally isolated from legacy parsing,
 	// authentication, and error envelopes.
 	app.use(
@@ -89,6 +102,14 @@ export function createApp(options: AppOptions = {}): Application {
 			catalogCollection: {
 				requiredCapability: "catalog.read",
 				handler: catalogProductCollectionController(patsPrisma),
+			},
+			bomDefinitionCollection: {
+				requiredCapability: "catalog.read",
+				handler: catalogBomDefinitionCollectionController(patsPrisma),
+			},
+			bomDefinition: {
+				requiredCapability: "catalog.read",
+				handler: catalogBomDefinitionController(patsPrisma),
 			},
 			catalogMutations: {
 				requiredCapability: "catalog.manage",
@@ -117,14 +138,6 @@ export function createApp(options: AppOptions = {}): Application {
 	app.use(express.json());
 	app.use(express.urlencoded({ extended: true }));
 	app.use(require("cookie-parser")());
-
-	// Configure CORS
-	app.use(
-		require("cors")({
-			origin: config.cors.origins,
-			credentials: config.cors.credentials,
-		}),
-	);
 
 	// Apply security middleware AFTER body parsing
 	if (process.env.NODE_ENV === "production") {

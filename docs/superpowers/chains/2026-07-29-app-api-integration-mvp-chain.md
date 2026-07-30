@@ -1,10 +1,14 @@
 # Chain: App–API Integration MVP
 
-Status: PLANNED / NOT IMPLEMENTED
+Status: PASSES 0-10 COMPLETE LOCALLY / DEV RELEASE CANDIDATE / REMOTE CI PENDING
 Date: 2026-07-29
 Owner: cross-repository implementation agent
 Companion plan: docs/superpowers/plans/2026-07-29-app-api-integration-mvp-plan.md
 App plan/report: sibling repository bnpi-pats-app/.wwg/reports/2026-07-29-app-api-integration-mvp-plan.md
+Pass 8 execution plan: sibling repository bnpi-pats-app/.wwg/reports/2026-07-30-app-api-mvp-pass-8-dev-smoke-plan.md
+Pass 8 execution report: docs/superpowers/reports/2026-07-30-app-api-mvp-pass-8-dev-smoke.md
+Pass 9 execution report: docs/superpowers/reports/2026-07-30-app-api-mvp-pass-9-container-validation.md
+Pass 10 execution report: docs/superpowers/reports/2026-07-30-app-api-mvp-pass-10-ci-release-validation.md
 
 ## Meta-prompt
 
@@ -92,6 +96,18 @@ Only after explicit approval of an isolated DEV database/migration target, run a
 
 Gate: environment, migration approval, recovery evidence, and stop conditions are recorded.
 
+### Pass 9 — container and browser runtime validation
+
+Build the API image using the Node 20 contract, start a uniquely named disposable Compose stack, apply committed migrations to its database, verify CORS preflight and health, and run the API and frontend adapter smoke against the container. Fix only integration defects exposed by that path; do not expand into new domain slices.
+
+Gate: the image builds, the container is healthy, browser preflight succeeds, API and adapter checks pass, and the result is recorded as a DEV release candidate without implying production readiness.
+
+### Pass 10 — CI and release reproducibility
+
+Make CI execute the deployment-critical sequence: start dependencies, apply committed migrations, build/start the API image, verify health, verify browser preflight, and clean up. Do not add production publishing or migration cutover.
+
+Gate: local workflow configuration is valid and the remote GitHub Actions run is green before the next domain chain is treated as release-ready.
+
 ## Per-pass handoff template
 
 - Pass completed:
@@ -105,4 +121,4 @@ Gate: environment, migration approval, recovery evidence, and stop conditions ar
 
 ## Chain completion gate
 
-The chain is complete only when the app can load, create, edit, and refresh Product/Model/ModelPart data through API mode; demo mode remains explicit; concurrency and retry semantics are verified; sparse evidence remains visible; and the release boundary states that BOM, routes, planning, execution, inventory, Drive, publication, migrations, production, and DM/cutover are not included.
+The chain is complete only when the app can load, create, edit, and refresh Product/Model/ModelPart data through API mode; demo mode remains explicit; concurrency and retry semantics are verified; the deployable DEV container path is healthy; the remote CI release gates are green; and the release boundary states that BOM, routes, planning, execution, inventory, Drive, publication, production, and DM/cutover are not included.

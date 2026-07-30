@@ -13,7 +13,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "97b41739-a80f-4fa5-a59b-79ce7ec07b05",
+                                    "id": "4e6d1790-c60f-4ce2-820b-bbccd074ff08",
                                     "name": "Get API endpoints list",
                                     "request": {
                                         "name": "Get API endpoints list",
@@ -56,7 +56,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "method",
-                                                    "value": "POST"
+                                                    "value": "DELETE"
                                                 }
                                             ],
                                             "variable": []
@@ -73,7 +73,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "b677771d-4882-4194-827c-329591a85771",
+                                            "id": "9bf41b56-713e-40a1-8ac4-b9fc9fa57dd3",
                                             "name": "API endpoints list retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -111,7 +111,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "method",
-                                                            "value": "POST"
+                                                            "value": "DELETE"
                                                         }
                                                     ],
                                                     "variable": []
@@ -146,7 +146,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "d6c0b7a5-e3dd-46a3-b5c1-beebe1842aa2",
+                                            "id": "209874f1-69b4-4d60-8acd-0555db4a64f4",
                                             "name": "Invalid format or validation error",
                                             "originalRequest": {
                                                 "url": {
@@ -184,7 +184,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "method",
-                                                            "value": "POST"
+                                                            "value": "DELETE"
                                                         }
                                                     ],
                                                     "variable": []
@@ -209,7 +209,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "abed0100-db72-47e2-89c3-8c829fd71cfc",
+                                            "id": "984b6a58-c731-4be5-bc46-26ff7af896b0",
                                             "name": "Endpoints file not found",
                                             "originalRequest": {
                                                 "url": {
@@ -247,7 +247,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "key": "method",
-                                                            "value": "POST"
+                                                            "value": "DELETE"
                                                         }
                                                     ],
                                                     "variable": []
@@ -284,7 +284,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "3b1e3a1f-50c9-4c1f-ab4b-e223b80052ae",
+                                    "id": "a2b83305-ccdf-464e-bca6-33efeb2a174e",
                                     "name": "Get Swagger documentation",
                                     "request": {
                                         "name": "Get Swagger documentation",
@@ -316,7 +316,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "da721f1b-1122-444e-9a90-36ff4e317339",
+                                            "id": "eb9cd734-6c88-45bf-b528-0ae748c4e3ef",
                                             "name": "Swagger documentation retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -361,7 +361,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "ae93c91a-8246-497b-9993-863ce1709308",
+                                            "id": "7219a651-c5c5-452d-b800-bd03ea622d4f",
                                             "name": "Swagger file not found",
                                             "originalRequest": {
                                                 "url": {
@@ -408,7 +408,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "02dd7472-f333-46f7-946d-c88b03465653",
+                                    "id": "57887bb4-bbdf-4daa-b56b-1242c1c613fd",
                                     "name": "Get Postman collection",
                                     "request": {
                                         "name": "Get Postman collection",
@@ -440,7 +440,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "df54f78d-7041-41c3-98f3-48e6e70ae461",
+                                            "id": "9cec7f4f-6753-4ca8-bd97-438e4e69e941",
                                             "name": "Postman collection retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -485,7 +485,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "f90e84e2-1089-402e-b822-f24aaaaafe68",
+                                            "id": "631c253d-96f3-4611-92fa-67cbb966644a",
                                             "name": "Postman collection not found",
                                             "originalRequest": {
                                                 "url": {
@@ -532,7 +532,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "28f68c2d-c01d-4095-bebb-b2bb13460707",
+                                    "id": "e995bbf0-f715-40a2-a7ba-e0f6d258265f",
                                     "name": "Generate iml files",
                                     "request": {
                                         "name": "Generate iml files",
@@ -592,7 +592,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "f86b15fd-691d-40e5-aaa4-79dac5d9c1f9",
+                                            "id": "2355060b-6caa-4081-bfd1-15a27106a1e1",
                                             "name": "iml files generated successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -665,7 +665,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "82bc2bc4-c751-4dc1-a336-ad331448494d",
+                                            "id": "e837515d-11ba-4629-a3b8-abbab066612d",
                                             "name": "Internal server error",
                                             "originalRequest": {
                                                 "url": {
@@ -750,7 +750,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "d0b3c4c4-f21b-4707-9b78-a752cd46d2d3",
+                                            "id": "71454f48-4b70-49e4-b84a-f0db0c29d1c7",
                                             "name": "Check if workspace code is available",
                                             "request": {
                                                 "name": "Check if workspace code is available",
@@ -802,7 +802,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "dcd042d8-017b-468b-b23d-7f38e98d106f",
+                                                    "id": "7bc8e06b-122c-4fe9-86c8-9e14e307d217",
                                                     "name": "Code availability status",
                                                     "originalRequest": {
                                                         "url": {
@@ -873,7 +873,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "6a29cb08-542b-401a-a7e5-8bcd90c54fd3",
+                                    "id": "ab059d5f-11f6-4494-8169-beb3329fc316",
                                     "name": "Get workspace by ID",
                                     "request": {
                                         "name": "Get workspace by ID",
@@ -894,7 +894,7 @@
                                             "variable": [
                                                 {
                                                     "type": "any",
-                                                    "value": "59baf4af5FbD5bec6bB45702",
+                                                    "value": "32EAd08377504522e82eC26F",
                                                     "key": "id",
                                                     "disabled": false,
                                                     "description": {
@@ -918,7 +918,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "66b3b624-95ab-4336-a7d9-a4c67328ec7c",
+                                            "id": "eee13d1e-d3a7-4577-ba27-213c5ee049be",
                                             "name": "Workspace retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -939,7 +939,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "59baf4af5FbD5bec6bB45702",
+                                                            "value": "32EAd08377504522e82eC26F",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -964,7 +964,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "9a0e3303-1705-4135-9a97-34fce4a70428",
+                                            "id": "1cc8080f-fa42-4a39-80e5-7450bc1d8e5b",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -985,7 +985,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "59baf4af5FbD5bec6bB45702",
+                                                            "value": "32EAd08377504522e82eC26F",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -1016,7 +1016,7 @@
                                     }
                                 },
                                 {
-                                    "id": "ea77de95-8b29-4fa1-9a4f-577aab5f4db5",
+                                    "id": "aa596972-deb6-4ba5-9fb3-31e0319409b1",
                                     "name": "Update workspace",
                                     "request": {
                                         "name": "Update workspace",
@@ -1055,7 +1055,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "bd3361e6-2bd3-475f-b1f6-c110143cf9d9",
+                                            "id": "098cbe1f-8bfa-438b-a383-09638ea3bcab",
                                             "name": "Workspace updated successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1096,7 +1096,7 @@
                                     }
                                 },
                                 {
-                                    "id": "c0b01aaa-7a04-4959-9222-063e188dab21",
+                                    "id": "dc6c42a7-8269-4477-a2ca-cf8dee4783fe",
                                     "name": "Delete workspace",
                                     "request": {
                                         "name": "Delete workspace",
@@ -1135,7 +1135,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "e3b22744-7a89-4e84-9df8-dbf3f831e3f2",
+                                            "id": "fc78d79c-a6bd-47de-834c-544763f6e6c9",
                                             "name": "Workspace deleted successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1178,7 +1178,7 @@
                             ]
                         },
                         {
-                            "id": "c7524285-43f7-415b-99f7-37ebd67e2115",
+                            "id": "75a913ca-01fe-47f8-82c2-a34f44f9478c",
                             "name": "Get all workspaces",
                             "request": {
                                 "name": "Get all workspaces",
@@ -1211,7 +1211,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "1f993703-9e8c-4243-aae3-11d8dde8212c",
+                                    "id": "5925772b-deba-44b0-9122-ed0206593aa3",
                                     "name": "Workspaces retrieved successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1251,7 +1251,7 @@
                             }
                         },
                         {
-                            "id": "ea420fe6-429d-4770-b127-86d49219fc74",
+                            "id": "ca18bf2a-2903-4969-8862-958b234549a3",
                             "name": "Create new workspace",
                             "request": {
                                 "name": "Create new workspace",
@@ -1284,7 +1284,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "2b89cdb6-696f-45c0-a595-66b255c751dd",
+                                    "id": "571268cf-abd3-48e1-832a-a3d3c91ca900",
                                     "name": "Workspace created successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1334,7 +1334,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "25db2679-d70d-4ca5-aec7-5d414d9a994b",
+                                    "id": "584d1f00-9643-4df1-a96b-6a1226a04c5b",
                                     "name": "Get current user's workspace membership",
                                     "request": {
                                         "name": "Get current user's workspace membership",
@@ -1365,7 +1365,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "c90286ae-5862-493a-9f11-1806a8c8e12b",
+                                            "id": "74696b4a-a17d-4f69-9825-758c26c3d78f",
                                             "name": "Membership retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1400,7 +1400,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "e26dcc46-40b0-4ee8-a89f-995ca2449631",
+                                            "id": "5b717e28-4195-4b4d-8453-6ca45ae56119",
                                             "name": "Not a member of this workspace",
                                             "originalRequest": {
                                                 "url": {
@@ -1447,7 +1447,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "49479c19-60e5-4a54-90aa-330645406d6c",
+                                    "id": "7d0602b2-8d08-4cf6-9afa-292f5f0c1df3",
                                     "name": "Get workspace member by ID",
                                     "request": {
                                         "name": "Get workspace member by ID",
@@ -1489,7 +1489,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "f07e0ff9-9ff1-4e0a-b86b-b12705fbc72b",
+                                            "id": "e461d150-1477-4fa5-a7a7-837bbd7cfdad",
                                             "name": "Member retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1541,7 +1541,7 @@
                                     }
                                 },
                                 {
-                                    "id": "0d08e005-3812-45e1-9f08-23234db31c83",
+                                    "id": "09305179-6ff6-42f3-82d0-87bd71d455c2",
                                     "name": "Remove workspace member",
                                     "request": {
                                         "name": "Remove workspace member",
@@ -1577,7 +1577,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "63d229c7-7882-4ce3-9932-31008d29e217",
+                                            "id": "b86a086e-66a3-4018-a347-956521caeabc",
                                             "name": "Member removed successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -1622,7 +1622,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "61953f62-6204-4c55-aa28-2ee43dcc2e27",
+                                            "id": "cca99a0a-5ba7-4f06-bf37-9b1df04744e3",
                                             "name": "Update workspace member role",
                                             "request": {
                                                 "name": "Update workspace member role",
@@ -1659,7 +1659,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "360514a8-d0ed-452e-8545-56891e670fc0",
+                                                    "id": "216cee13-5ede-48c0-89e8-4824513d0da9",
                                                     "name": "Role updated successfully",
                                                     "originalRequest": {
                                                         "url": {
@@ -1705,7 +1705,7 @@
                             ]
                         },
                         {
-                            "id": "d47cfb82-977d-4356-8f90-b69e1405b5f1",
+                            "id": "af5f1ae6-7c21-4776-9b73-3ddbeb0efb7c",
                             "name": "Get all workspace members",
                             "request": {
                                 "name": "Get all workspace members",
@@ -1735,7 +1735,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "8a1654ee-41b4-47e3-bd54-1b669de6a994",
+                                    "id": "457595fb-748d-4796-932b-5246615641c3",
                                     "name": "Members retrieved successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1775,7 +1775,7 @@
                             }
                         },
                         {
-                            "id": "5e3ac41b-9cec-4b84-8cd7-db28b3134360",
+                            "id": "ef98567f-03b0-45f2-8b44-ed5e161b8b0c",
                             "name": "Add a member to workspace",
                             "request": {
                                 "name": "Add a member to workspace",
@@ -1805,7 +1805,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "4bad55cc-8948-4b8b-ab56-9c0568030168",
+                                    "id": "6fc185bf-f99b-4394-9e78-68acc9a3db2d",
                                     "name": "Member added successfully",
                                     "originalRequest": {
                                         "url": {
@@ -1863,7 +1863,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "979c55f2-f090-4bed-8f1b-43ca97781100",
+                                                    "id": "5a1a710a-0826-4803-82b1-7aacc285ba74",
                                                     "name": "Get current user's role in a project",
                                                     "request": {
                                                         "name": "Get current user's role in a project",
@@ -1907,7 +1907,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "a3a6b38e-1d4d-49ef-a1a1-3b034a7807a7",
+                                                            "id": "9b73237c-9536-4ec6-b64b-9933c01b4384",
                                                             "name": "Project role retrieved successfully",
                                                             "originalRequest": {
                                                                 "url": {
@@ -1963,7 +1963,7 @@
                                             ]
                                         },
                                         {
-                                            "id": "3278f442-565e-4773-9568-d7d283d32e3d",
+                                            "id": "d311b9cd-9849-45ca-a67c-4ad85cb08be0",
                                             "name": "Get all members of a project",
                                             "request": {
                                                 "name": "Get all members of a project",
@@ -2006,7 +2006,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "1e23053e-01e6-4971-b999-5175367c224e",
+                                                    "id": "6d48e1f6-dd32-48b0-b51d-1ce088d0db37",
                                                     "name": "Project members retrieved successfully",
                                                     "originalRequest": {
                                                         "url": {
@@ -2067,7 +2067,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "91b33b1f-5c48-4eff-9436-c7e649e9afe2",
+                                    "id": "647b0a38-c56a-42e2-9cf2-fc0a293132e6",
                                     "name": "Get project member by ID",
                                     "request": {
                                         "name": "Get project member by ID",
@@ -2109,7 +2109,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "368069c6-fc0b-4b02-b4fa-53d4cdd973e8",
+                                            "id": "1a0bf3e2-72bb-4623-8324-6bf39b498cea",
                                             "name": "Member retrieved successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -2161,7 +2161,7 @@
                                     }
                                 },
                                 {
-                                    "id": "afddd257-8812-420a-998a-231c1a14f774",
+                                    "id": "a3dd16e0-6049-4831-b8a5-08b4904c12c8",
                                     "name": "Remove project member",
                                     "request": {
                                         "name": "Remove project member",
@@ -2197,7 +2197,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "ca9a6531-52dc-4d36-8d15-49a86330b5ca",
+                                            "id": "c0bbaa43-29bf-4f86-92d4-56ae227ee201",
                                             "name": "Member removed successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -2242,7 +2242,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "affa0d3f-0315-417c-b29d-5363404f93c0",
+                                            "id": "8c7d9c98-5cd4-4d7e-84a6-fb42dfdd8c26",
                                             "name": "Update project member role",
                                             "request": {
                                                 "name": "Update project member role",
@@ -2279,7 +2279,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "cbabf8e9-f663-4232-86f9-b185c39ffc38",
+                                                    "id": "b502386d-ceb5-46e3-9000-f7c62ec15124",
                                                     "name": "Role updated successfully",
                                                     "originalRequest": {
                                                         "url": {
@@ -2325,7 +2325,7 @@
                             ]
                         },
                         {
-                            "id": "2294129a-0e3c-4461-8697-3b24a6e93356",
+                            "id": "b49587ae-abfc-4400-8f9d-1f3c26594a8a",
                             "name": "Get all project members in workspace",
                             "request": {
                                 "name": "Get all project members in workspace",
@@ -2355,7 +2355,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "e094d3ab-0617-4158-9f61-84df69b1c18a",
+                                    "id": "080beb69-397a-4072-9f0d-35c8766c3c91",
                                     "name": "Members retrieved successfully",
                                     "originalRequest": {
                                         "url": {
@@ -2395,7 +2395,7 @@
                             }
                         },
                         {
-                            "id": "b2c1171f-b18f-41cd-9831-fcef8d6200cc",
+                            "id": "3071b1ee-5b1c-46fc-afbd-d16513bee6b0",
                             "name": "Add a member to a project",
                             "request": {
                                 "name": "Add a member to a project",
@@ -2425,7 +2425,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "12c417f0-1f7e-44de-9b36-c8be69cc16fb",
+                                    "id": "e6ac4353-a696-4bd2-9103-d389e195463a",
                                     "name": "Member added successfully",
                                     "originalRequest": {
                                         "url": {
@@ -2471,7 +2471,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "8b13c59c-0c87-4c1f-bb74-8108100dae11",
+                            "id": "343019ec-dde8-4f77-8915-35e50d5fc55c",
                             "name": "Get all employees",
                             "request": {
                                 "name": "Get all employees",
@@ -2522,7 +2522,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "status",
-                                            "value": "TERMINATED"
+                                            "value": "SUSPENDED"
                                         },
                                         {
                                             "disabled": false,
@@ -2559,7 +2559,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "6754535c-634d-4f00-9634-f7a3e9caa4f0",
+                                    "id": "a9ff41eb-1664-43cd-8da6-84886dacf85f",
                                     "name": "List of employees",
                                     "originalRequest": {
                                         "url": {
@@ -2605,7 +2605,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "status",
-                                                    "value": "TERMINATED"
+                                                    "value": "SUSPENDED"
                                                 },
                                                 {
                                                     "disabled": false,
@@ -2648,7 +2648,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "bb86ef9a-0b7c-40a7-a3f4-879901a0fbaf",
+                                    "id": "f5e4db64-9517-44f1-961e-5ede41988f48",
                                     "name": "401",
                                     "originalRequest": {
                                         "url": {
@@ -2694,7 +2694,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "status",
-                                                    "value": "TERMINATED"
+                                                    "value": "SUSPENDED"
                                                 },
                                                 {
                                                     "disabled": false,
@@ -2737,7 +2737,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "34205945-6498-47e1-9cc5-bcdf0c3429cd",
+                                    "id": "20760468-bbb6-44e8-ab37-8eecb5baa454",
                                     "name": "500",
                                     "originalRequest": {
                                         "url": {
@@ -2783,7 +2783,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "status",
-                                                    "value": "TERMINATED"
+                                                    "value": "SUSPENDED"
                                                 },
                                                 {
                                                     "disabled": false,
@@ -2832,7 +2832,7 @@
                             }
                         },
                         {
-                            "id": "8b4a7ad3-226e-401a-bf79-b881aa936816",
+                            "id": "2c4fa102-ce42-42a2-9131-fe2c8e860f32",
                             "name": "Create a new employee manually",
                             "request": {
                                 "name": "Create a new employee manually",
@@ -2877,7 +2877,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "faab1386-1484-414f-85e6-25c040cdb807",
+                                    "id": "3e52815b-f64b-4443-8d52-17a077fda4c7",
                                     "name": "Employee created",
                                     "originalRequest": {
                                         "url": {
@@ -2924,7 +2924,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "b8859f14-5d52-4c7f-8bfd-99c524b52cec",
+                                    "id": "251c8fee-8abb-46fb-9e38-ebdd5c1744c9",
                                     "name": "400",
                                     "originalRequest": {
                                         "url": {
@@ -2971,7 +2971,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "71b5fcc4-501c-4a62-b8b1-fdb6d13e0a4c",
+                                    "id": "4812fc77-d7d9-486d-bd98-5efd8614d5ca",
                                     "name": "Duplicate email or employee number",
                                     "originalRequest": {
                                         "url": {
@@ -3028,7 +3028,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "0cf54f3f-13fd-44d7-9d2f-70c37fc314fe",
+                                    "id": "12d404d6-0fa2-4a83-b6f6-78213c99269e",
                                     "name": "Get employee statistics",
                                     "request": {
                                         "name": "Get employee statistics",
@@ -3059,7 +3059,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "d818d6ea-fc3f-4c16-beb8-610b2291a230",
+                                            "id": "8ca47055-df9c-44a1-93da-09581e78e03e",
                                             "name": "Employee statistics by status, department, and sync status",
                                             "originalRequest": {
                                                 "url": {
@@ -3094,7 +3094,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "57266261-f3ac-45b0-815f-678805d815da",
+                                            "id": "7dc65cb7-1ba7-45db-ad65-3b5b7a1bff18",
                                             "name": "401",
                                             "originalRequest": {
                                                 "url": {
@@ -3141,7 +3141,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "64e540c4-d5f6-4f13-990d-4d83a0024e91",
+                                    "id": "6c47e04f-8512-4865-b7b9-9215c0d9d0fe",
                                     "name": "Trigger employee sync from external API",
                                     "request": {
                                         "name": "Trigger employee sync from external API",
@@ -3190,7 +3190,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "4b39dbe4-481a-4068-8576-0999a6d7e906",
+                                            "id": "432aaf96-db4d-4114-bcad-82dd769707bf",
                                             "name": "Sync result with statistics",
                                             "originalRequest": {
                                                 "url": {
@@ -3238,7 +3238,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "36dd57ee-2216-4e97-91f6-3230c41ca5da",
+                                            "id": "b39f8fb1-deb7-42fb-9756-9a2d542b2cd8",
                                             "name": "400",
                                             "originalRequest": {
                                                 "url": {
@@ -3286,7 +3286,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "8242fdef-9c16-4e15-b5f8-0ef404290093",
+                                            "id": "2dcbfc1b-5e7f-4fe6-9cda-cbe2feeb00dd",
                                             "name": "401",
                                             "originalRequest": {
                                                 "url": {
@@ -3344,7 +3344,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "b23ae968-1795-421b-ae9d-a1f753592818",
+                                            "id": "cc3b336c-495e-48f3-9d32-c489e1a868fd",
                                             "name": "Get sync status and health",
                                             "request": {
                                                 "name": "Get sync status and health",
@@ -3376,7 +3376,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "dabdaad4-e710-48e7-a1a1-979340bf73bd",
+                                                    "id": "d75f4c79-de97-41e6-b411-bb7d8a9b7f33",
                                                     "name": "Sync status including any issues",
                                                     "originalRequest": {
                                                         "url": {
@@ -3424,7 +3424,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "ea036195-9ad5-4a69-b3d7-fa013f63eab4",
+                                            "id": "778b6f5e-6997-479b-9cdb-f3fa9a697851",
                                             "name": "Get employees with sync issues",
                                             "request": {
                                                 "name": "Get employees with sync issues",
@@ -3456,7 +3456,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "a6f167e2-5b46-4b95-8de0-eaab7d7638c0",
+                                                    "id": "a36308c2-d8dd-4502-894a-27c598309462",
                                                     "name": "List of employees with FAILED or PENDING sync status",
                                                     "originalRequest": {
                                                         "url": {
@@ -3510,7 +3510,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "e854cf81-c6d1-4980-aa2e-ab740f1c7624",
+                                            "id": "d751ee34-1b54-4bf1-8d10-729b3e482215",
                                             "name": "Get employee by external ID",
                                             "request": {
                                                 "name": "Get employee by external ID",
@@ -3563,7 +3563,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "80633fca-9ff5-4679-9616-e090f5d4f29c",
+                                                    "id": "bfce4c6f-d9d3-4952-b73e-84cf1dfe8a36",
                                                     "name": "Employee details",
                                                     "originalRequest": {
                                                         "url": {
@@ -3620,7 +3620,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "0db56b1c-dabf-4d08-8d92-afe909deec18",
+                                                    "id": "ccbe6e95-85f1-4182-bbf6-09652e39bc5c",
                                                     "name": "404",
                                                     "originalRequest": {
                                                         "url": {
@@ -3691,7 +3691,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "d9f07086-8649-4d0c-818b-f02cfb3623ba",
+                                    "id": "842e051b-cc02-446f-b710-bea776107572",
                                     "name": "Get employee by ID",
                                     "request": {
                                         "name": "Get employee by ID",
@@ -3709,7 +3709,7 @@
                                             "variable": [
                                                 {
                                                     "type": "any",
-                                                    "value": "59baf4af5FbD5bec6bB45702",
+                                                    "value": "32EAd08377504522e82eC26F",
                                                     "key": "id",
                                                     "disabled": false,
                                                     "description": {
@@ -3733,7 +3733,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "eef27073-08f6-47a1-a497-efee15be5759",
+                                            "id": "bb026f99-6efa-46fc-810d-d911b43b6b6f",
                                             "name": "Employee details",
                                             "originalRequest": {
                                                 "url": {
@@ -3754,7 +3754,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "59baf4af5FbD5bec6bB45702",
+                                                            "value": "32EAd08377504522e82eC26F",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -3779,7 +3779,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "6e7792ac-cb2e-4c8f-b0f2-35492e59175e",
+                                            "id": "af8f8e32-4cfb-49d9-9702-e8161d051e7e",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -3800,7 +3800,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "59baf4af5FbD5bec6bB45702",
+                                                            "value": "32EAd08377504522e82eC26F",
                                                             "key": "id"
                                                         }
                                                     ]
@@ -3831,7 +3831,7 @@
                                     }
                                 },
                                 {
-                                    "id": "0c2ab4b9-7b31-43a2-a27d-ccdf2d5faad8",
+                                    "id": "5fd73b12-c6da-45cb-9151-d96aa2e9c562",
                                     "name": "Update employee",
                                     "request": {
                                         "name": "Update employee",
@@ -3888,7 +3888,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "6ac86b81-3315-431e-8be0-2ba326d5dfac",
+                                            "id": "fb81d19a-5a0f-48b3-82c4-3e27f2440627",
                                             "name": "Employee updated",
                                             "originalRequest": {
                                                 "url": {
@@ -3947,7 +3947,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "6b0acbeb-9e11-490a-a8c7-4780569e83f6",
+                                            "id": "2c788947-de3e-4cff-bd4d-0dcb9db708b7",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -4012,7 +4012,7 @@
                                     }
                                 },
                                 {
-                                    "id": "5fd11095-c44a-472c-ae03-621cf0569100",
+                                    "id": "439b4507-6615-4503-81cb-d2316c93d9b1",
                                     "name": "Delete employee (soft delete)",
                                     "request": {
                                         "name": "Delete employee (soft delete)",
@@ -4054,7 +4054,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "e058e2e3-3a8f-4d65-a66b-fcbd053cb425",
+                                            "id": "9dfd7942-ad20-4b21-bf37-bccbe318bef7",
                                             "name": "Employee deleted",
                                             "originalRequest": {
                                                 "url": {
@@ -4100,7 +4100,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "78d888ea-dc5d-443b-ae17-6282eeb4b296",
+                                            "id": "41e49248-b403-4c96-8519-d49551501db2",
                                             "name": "404",
                                             "originalRequest": {
                                                 "url": {
@@ -4164,7 +4164,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "4eca0942-c235-4a1b-bf6c-4f3526c4930c",
+                                    "id": "3e5b2bb1-597b-4c46-8c88-4eb97d36b0cb",
                                     "name": "Generate product code",
                                     "request": {
                                         "name": "Generate product code",
@@ -4198,7 +4198,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "1c139009-ad5d-4971-a690-1f0d8a003692",
+                                            "id": "17946899-a862-4677-9efa-5d03a89e5d7e",
                                             "name": "Product code generated successfully",
                                             "originalRequest": {
                                                 "url": {
@@ -4245,7 +4245,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "bac6194e-8f6c-45d3-a1e0-c36a56c34f49",
+                                    "id": "e5ced168-3870-4f67-abf0-a9225cd3b288",
                                     "name": "Get product by ID",
                                     "request": {
                                         "name": "Get product by ID",
@@ -4289,7 +4289,7 @@
                                     }
                                 },
                                 {
-                                    "id": "7b791f36-bb79-45b0-919d-e8b1b88c3a42",
+                                    "id": "a12db387-b206-49eb-9cb1-354b76e47afc",
                                     "name": "Update product",
                                     "request": {
                                         "name": "Update product",
@@ -4333,7 +4333,7 @@
                                     }
                                 },
                                 {
-                                    "id": "f8fbc990-249c-42b5-a655-73bcbd6acb96",
+                                    "id": "8945f531-87c4-4d8b-8643-88c24a880d41",
                                     "name": "Delete product",
                                     "request": {
                                         "name": "Delete product",
@@ -4379,7 +4379,7 @@
                             ]
                         },
                         {
-                            "id": "f417abe1-9905-4231-afab-73c862cd77be",
+                            "id": "0938a04e-28ec-4a42-9171-3b3be1722f74",
                             "name": "Get all products",
                             "request": {
                                 "name": "Get all products",
@@ -4417,7 +4417,7 @@
                             }
                         },
                         {
-                            "id": "426911e5-974e-4ba0-94e5-3c919ec47bdd",
+                            "id": "bc4c054d-dc92-4e6f-8c9a-e37b7264477b",
                             "name": "Create new product",
                             "request": {
                                 "name": "Create new product",
@@ -4473,7 +4473,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "be7e764d-9027-4414-985e-79592054f53f",
+                                                    "id": "3d3c1fa8-c28c-42af-86b4-671c823569ef",
                                                     "name": "Read a workspace-scoped PATS product catalog record",
                                                     "request": {
                                                         "name": "Read a workspace-scoped PATS product catalog record",
@@ -4514,7 +4514,7 @@
                                                                     "type": "text/plain"
                                                                 },
                                                                 "key": "x-workspace-id",
-                                                                "value": "59baf4af5FbD5bec6bB45702"
+                                                                "value": "32EAd08377504522e82eC26F"
                                                             }
                                                         ],
                                                         "method": "GET",
@@ -4531,7 +4531,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "d3a719d3-f6ff-4169-b5e5-ab1b5041a80e",
+                                                            "id": "700c71df-18ca-47f3-be06-30791ec0aebf",
                                                             "name": "Complete or sparse PATS catalog record",
                                                             "originalRequest": {
                                                                 "url": {
@@ -4567,7 +4567,7 @@
                                                                             "type": "text/plain"
                                                                         },
                                                                         "key": "x-workspace-id",
-                                                                        "value": "59baf4af5FbD5bec6bB45702"
+                                                                        "value": "32EAd08377504522e82eC26F"
                                                                     },
                                                                     {
                                                                         "description": {
@@ -4588,7 +4588,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "d1d6bfb9-0236-4198-859f-9b4b7bfda5e8",
+                                                            "id": "d0f71344-bda4-4e13-89db-ebdc60a1022e",
                                                             "name": "Workspace header is missing or invalid",
                                                             "originalRequest": {
                                                                 "url": {
@@ -4624,7 +4624,7 @@
                                                                             "type": "text/plain"
                                                                         },
                                                                         "key": "x-workspace-id",
-                                                                        "value": "59baf4af5FbD5bec6bB45702"
+                                                                        "value": "32EAd08377504522e82eC26F"
                                                                     },
                                                                     {
                                                                         "description": {
@@ -4645,7 +4645,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "cd4443fa-4853-445f-b969-66940dd26e43",
+                                                            "id": "de55c1a1-0e51-4855-972e-2a97eddf0e88",
                                                             "name": "Product is not linked to the requested workspace",
                                                             "originalRequest": {
                                                                 "url": {
@@ -4681,7 +4681,7 @@
                                                                             "type": "text/plain"
                                                                         },
                                                                         "key": "x-workspace-id",
-                                                                        "value": "59baf4af5FbD5bec6bB45702"
+                                                                        "value": "32EAd08377504522e82eC26F"
                                                                     },
                                                                     {
                                                                         "description": {
@@ -4702,7 +4702,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "65b9f429-d2e9-4b1b-b5f8-eebae16cc1d1",
+                                                            "id": "208d47e8-b86c-4f44-9008-e307e3f464ae",
                                                             "name": "Private image storage is unavailable",
                                                             "originalRequest": {
                                                                 "url": {
@@ -4738,7 +4738,7 @@
                                                                             "type": "text/plain"
                                                                         },
                                                                         "key": "x-workspace-id",
-                                                                        "value": "59baf4af5FbD5bec6bB45702"
+                                                                        "value": "32EAd08377504522e82eC26F"
                                                                     },
                                                                     {
                                                                         "description": {
@@ -4785,7 +4785,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "f2d97f74-f173-42f3-b6f1-c57c66035937",
+                                            "id": "aa4c8591-0231-49d1-b95f-2781dcabb6e1",
                                             "name": "Create a draft catalog product",
                                             "request": {
                                                 "name": "Create a draft catalog product",
@@ -4817,7 +4817,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "9925cb7c-2fa4-4571-8506-f9bad93baf1b",
+                                                    "id": "93db64b0-8acc-4420-a265-8603524dfd1f",
                                                     "name": "Draft product created",
                                                     "originalRequest": {
                                                         "url": {
@@ -4853,7 +4853,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "68a601aa-ce91-4ced-93b2-b851c7bdf9d4",
+                                                    "id": "56550f62-2aa1-42f9-899a-a8cd1a7b933c",
                                                     "name": "Duplicate product or idempotency payload conflict",
                                                     "originalRequest": {
                                                         "url": {
@@ -4889,7 +4889,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "84c12007-ad5f-4523-9745-3a51c8502e3f",
+                                                    "id": "20e31f5c-2a50-4326-98da-7421bae945c8",
                                                     "name": "Invalid product or source evidence",
                                                     "originalRequest": {
                                                         "url": {
@@ -4931,7 +4931,7 @@
                                             }
                                         },
                                         {
-                                            "id": "f7875570-91ec-471a-b0e1-6eaf02b73c6b",
+                                            "id": "70b28c62-9f37-4b58-8253-7b9f109182f6",
                                             "name": "List deployment-scoped PATS catalog products",
                                             "request": {
                                                 "name": "List deployment-scoped PATS catalog products",
@@ -4991,7 +4991,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "11fbe87f-80dd-4092-aa13-f2cde51c7358",
+                                                    "id": "2651f410-5a8f-43ee-a897-45cb0ae12f80",
                                                     "name": "Paginated normalized product summaries",
                                                     "originalRequest": {
                                                         "url": {
@@ -5055,7 +5055,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "eba74387-4d45-4799-9867-aa887f62267c",
+                                                    "id": "0e391d4e-adb9-4046-9b42-dad427d518aa",
                                                     "name": "Malformed pagination or sort query",
                                                     "originalRequest": {
                                                         "url": {
@@ -5119,7 +5119,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "be734b8b-4a94-43e9-8d10-59d69c3da2ee",
+                                                    "id": "7b9fb90f-27dc-481c-80ab-90f70cca9e40",
                                                     "name": "Authentication required",
                                                     "originalRequest": {
                                                         "url": {
@@ -5183,7 +5183,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "1b75d29b-c3de-4168-ac2a-7bfe53348e38",
+                                                    "id": "f15cba9b-03f2-4c42-814f-eb37934cf59f",
                                                     "name": "catalog.read capability required",
                                                     "originalRequest": {
                                                         "url": {
@@ -5247,7 +5247,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "de437218-9768-4395-b268-3989b7435cfd",
+                                                    "id": "ecab32c5-027a-4257-aa49-f5f4ba98aa1d",
                                                     "name": "Request rate limit exceeded",
                                                     "originalRequest": {
                                                         "url": {
@@ -5311,7 +5311,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "96bda650-f168-4434-b1cc-37834330076c",
+                                                    "id": "79031545-7bba-460e-a3ed-d3bb948c944d",
                                                     "name": "Catalog persistence unavailable",
                                                     "originalRequest": {
                                                         "url": {
@@ -5385,7 +5385,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "a294c57f-ba5c-40cb-9a5a-e2aca12c12e3",
+                                                    "id": "42e7f6c5-2997-4744-9667-77936ffb35f2",
                                                     "name": "Update a draft catalog product",
                                                     "request": {
                                                         "name": "Update a draft catalog product",
@@ -5429,7 +5429,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "902c9b16-a417-4273-8e21-986380782289",
+                                                            "id": "c81ea98d-eaa2-4b31-8bee-78e8c3ab709d",
                                                             "name": "Updated draft product",
                                                             "originalRequest": {
                                                                 "url": {
@@ -5477,7 +5477,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "d7a5a433-5cbb-4a64-84f3-1eee8ce3ede4",
+                                                            "id": "cf8564ac-994a-40a2-8a26-e9a91417f524",
                                                             "name": "Stale or missing If-Match",
                                                             "originalRequest": {
                                                                 "url": {
@@ -5531,7 +5531,7 @@
                                                     }
                                                 },
                                                 {
-                                                    "id": "8d4cd041-3635-4192-b26f-87923a3c3836",
+                                                    "id": "a7557f1c-31cd-4e2e-bbec-8230cb3c815c",
                                                     "name": "Read a deployment-scoped PATS catalog product",
                                                     "request": {
                                                         "name": "Read a deployment-scoped PATS catalog product",
@@ -5575,7 +5575,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "66b0dc81-2f50-4e36-a79f-36924b33e0ad",
+                                                            "id": "6073a9e7-63e4-4e9f-99ab-e5199878f618",
                                                             "name": "Complete or sparse Product to Model to ModelPart record",
                                                             "originalRequest": {
                                                                 "url": {
@@ -5623,7 +5623,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "c5dacb77-7b67-44b8-acf2-53a670b7a879",
+                                                            "id": "db61c945-b4c2-407e-bee9-f8e33b6ac2c8",
                                                             "name": "Authentication required",
                                                             "originalRequest": {
                                                                 "url": {
@@ -5671,7 +5671,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "d827f9c2-39d8-4ae3-bda9-37d7df7a4d8e",
+                                                            "id": "3d5a4e25-4e62-40ca-99bc-9d6be531e82b",
                                                             "name": "catalog.read capability required",
                                                             "originalRequest": {
                                                                 "url": {
@@ -5719,7 +5719,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "a4a4bb6b-42a3-404b-94b2-c389770ee8ec",
+                                                            "id": "4ce1b438-e07e-41f3-bffd-5b6a46a788a2",
                                                             "name": "Product not found",
                                                             "originalRequest": {
                                                                 "url": {
@@ -5767,7 +5767,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "23bfaef8-ce61-4038-8f87-29c016458446",
+                                                            "id": "5d16ed54-2c91-4526-bd77-7dda7cccd3ed",
                                                             "name": "Request rate limit exceeded",
                                                             "originalRequest": {
                                                                 "url": {
@@ -5815,7 +5815,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "8ffb87c7-18f7-4f22-876d-668675dc03cd",
+                                                            "id": "b350a9a1-c518-46b5-8cda-1bfa54914ba1",
                                                             "name": "Private image storage unavailable",
                                                             "originalRequest": {
                                                                 "url": {
@@ -5877,7 +5877,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "59f1ac3d-3afa-4f5d-a78b-13eac3afea21",
+                                            "id": "cc6a2725-95d4-4c6b-a1e4-3998d7a168a5",
                                             "name": "Create a draft catalog model",
                                             "request": {
                                                 "name": "Create a draft catalog model",
@@ -5909,7 +5909,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "58cae5a5-ff78-41b1-914b-d1b244507b0d",
+                                                    "id": "da99f2c0-7582-4162-b1e0-a027ea6458f0",
                                                     "name": "Draft model created",
                                                     "originalRequest": {
                                                         "url": {
@@ -5945,7 +5945,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "e9803aec-d3a7-4f7a-8911-f8e2c035f097",
+                                                    "id": "3fe213cf-2db1-4870-91bd-46487cbd6ad8",
                                                     "name": "Parent product not found",
                                                     "originalRequest": {
                                                         "url": {
@@ -5981,7 +5981,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "5fca6cba-2426-40cd-b7a2-114c5f13ae12",
+                                                    "id": "b9a465b7-0052-4b46-a45d-c89723d56670",
                                                     "name": "Invalid model or source evidence",
                                                     "originalRequest": {
                                                         "url": {
@@ -6027,7 +6027,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "e0831264-9886-4f7b-a881-3e6c132c7782",
+                                                    "id": "de3034b1-53e8-424c-80f3-037e8beb2118",
                                                     "name": "Update a draft catalog model",
                                                     "request": {
                                                         "name": "Update a draft catalog model",
@@ -6071,7 +6071,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "611f861a-1a11-43c1-a1af-430e902abee1",
+                                                            "id": "48740589-5141-4133-ad88-889b36fd2b06",
                                                             "name": "Updated draft model",
                                                             "originalRequest": {
                                                                 "url": {
@@ -6119,7 +6119,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "65fa43f3-8d7d-4519-b68c-ad962e2f9919",
+                                                            "id": "2fec8a9d-48bf-4f5c-877b-7528ee12cbde",
                                                             "name": "Stale or missing If-Match",
                                                             "originalRequest": {
                                                                 "url": {
@@ -6181,7 +6181,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "e0ceb516-12c3-4244-98cd-1bb734131c5e",
+                                            "id": "ed890e39-f603-4e5e-a209-b5d794d9e2aa",
                                             "name": "Create a draft catalog model part",
                                             "request": {
                                                 "name": "Create a draft catalog model part",
@@ -6213,7 +6213,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "9296cdc8-f654-47fb-b03f-79eedd8a11e9",
+                                                    "id": "1904644f-3fcb-4ce6-a6d6-a3dd238e56c9",
                                                     "name": "Draft model part created",
                                                     "originalRequest": {
                                                         "url": {
@@ -6249,7 +6249,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "210ccf57-27ad-4b25-8541-9a9a91236559",
+                                                    "id": "f7915094-e8de-4d1d-a16d-6ee9181f3c9e",
                                                     "name": "Parent model not found",
                                                     "originalRequest": {
                                                         "url": {
@@ -6285,7 +6285,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "839fd98f-ff22-4e38-8de8-5fa646ee4146",
+                                                    "id": "b17e6829-d5cd-469a-ad15-55d9fd1e8b1e",
                                                     "name": "Invalid model part or source evidence",
                                                     "originalRequest": {
                                                         "url": {
@@ -6331,7 +6331,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "75789ab6-2895-4d28-bc2b-a8288ff4df3a",
+                                                    "id": "d173e434-c56e-4c96-8f18-383801f39a7d",
                                                     "name": "Update a draft catalog model part",
                                                     "request": {
                                                         "name": "Update a draft catalog model part",
@@ -6375,7 +6375,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "4a4aad7c-25ab-4e62-9a70-ae2fa14df662",
+                                                            "id": "00bb14a5-fa12-4d96-9be2-03361a919e8b",
                                                             "name": "Updated draft model part",
                                                             "originalRequest": {
                                                                 "url": {
@@ -6423,7 +6423,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "2738e3b4-6895-47e2-9be7-83f4f4e326fd",
+                                                            "id": "c87c1870-1c93-4882-b633-6c1553b44092",
                                                             "name": "Stale or missing If-Match",
                                                             "originalRequest": {
                                                                 "url": {
@@ -6485,7 +6485,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "4305b01d-a386-4419-b7b4-f7cdcbceaa28",
+                                            "id": "157f06b5-3ff0-4c1c-a3a6-0db341878317",
                                             "name": "Create a draft BOM revision",
                                             "request": {
                                                 "name": "Create a draft BOM revision",
@@ -6517,7 +6517,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "894758d2-7c6e-42b4-a374-c938b870f04f",
+                                                    "id": "d9f23aee-a4bd-461a-8cea-310c9946d2a8",
                                                     "name": "Draft BOM revision created",
                                                     "originalRequest": {
                                                         "url": {
@@ -6553,7 +6553,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "548e095c-bd33-4586-a9fe-3988c941a5c2",
+                                                    "id": "ac1b82fc-2b24-457e-b2b5-125ea0e9d893",
                                                     "name": "Parent model not found",
                                                     "originalRequest": {
                                                         "url": {
@@ -6589,7 +6589,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "7ea815cb-723a-4e73-906f-6dde89a0a68e",
+                                                    "id": "6eab483b-7719-47d7-8997-2606b3588840",
                                                     "name": "Duplicate BOM revision or idempotency conflict",
                                                     "originalRequest": {
                                                         "url": {
@@ -6625,7 +6625,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "8055ec87-bed4-463a-869c-fd626b166228",
+                                                    "id": "2e5d462a-f3e5-442c-911b-2f2b109763ad",
                                                     "name": "Invalid BOM revision or source evidence",
                                                     "originalRequest": {
                                                         "url": {
@@ -6667,11 +6667,451 @@
                                             }
                                         },
                                         {
+                                            "id": "970e590a-8167-44fc-87ad-113d33bac584",
+                                            "name": "List BOM definition revisions for a model",
+                                            "request": {
+                                                "name": "List BOM definition revisions for a model",
+                                                "description": {},
+                                                "url": {
+                                                    "path": [
+                                                        "api",
+                                                        "v1",
+                                                        "catalog",
+                                                        "bom-definitions"
+                                                    ],
+                                                    "host": [
+                                                        "{{baseUrl}}"
+                                                    ],
+                                                    "query": [
+                                                        {
+                                                            "disabled": false,
+                                                            "description": {
+                                                                "content": "(Required) ",
+                                                                "type": "text/plain"
+                                                            },
+                                                            "key": "model_id",
+                                                            "value": "<string>"
+                                                        },
+                                                        {
+                                                            "disabled": false,
+                                                            "description": {
+                                                                "content": "",
+                                                                "type": "text/plain"
+                                                            },
+                                                            "key": "page",
+                                                            "value": "1"
+                                                        },
+                                                        {
+                                                            "disabled": false,
+                                                            "description": {
+                                                                "content": "",
+                                                                "type": "text/plain"
+                                                            },
+                                                            "key": "limit",
+                                                            "value": "50"
+                                                        },
+                                                        {
+                                                            "disabled": false,
+                                                            "description": {
+                                                                "content": "Comma-separated revision, created_at, updated_at fields; prefix with - for descending order.",
+                                                                "type": "text/plain"
+                                                            },
+                                                            "key": "sort",
+                                                            "value": "<string>"
+                                                        }
+                                                    ],
+                                                    "variable": []
+                                                },
+                                                "method": "GET",
+                                                "body": {},
+                                                "auth": {
+                                                    "type": "bearer",
+                                                    "bearer": [
+                                                        {
+                                                            "key": "token",
+                                                            "value": "{{bearerToken}}"
+                                                        }
+                                                    ]
+                                                }
+                                            },
+                                            "response": [
+                                                {
+                                                    "id": "91e3cfa0-0a95-427c-a758-3ecb8cdce38d",
+                                                    "name": "Paginated BOM definition summaries",
+                                                    "originalRequest": {
+                                                        "url": {
+                                                            "path": [
+                                                                "api",
+                                                                "v1",
+                                                                "catalog",
+                                                                "bom-definitions"
+                                                            ],
+                                                            "host": [
+                                                                "{{baseUrl}}"
+                                                            ],
+                                                            "query": [
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "(Required) ",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "model_id",
+                                                                    "value": "<string>"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "page",
+                                                                    "value": "1"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "limit",
+                                                                    "value": "50"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "Comma-separated revision, created_at, updated_at fields; prefix with - for descending order.",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "sort",
+                                                                    "value": "<string>"
+                                                                }
+                                                            ],
+                                                            "variable": []
+                                                        },
+                                                        "header": [
+                                                            {
+                                                                "description": {
+                                                                    "content": "Added as a part of security scheme: bearer",
+                                                                    "type": "text/plain"
+                                                                },
+                                                                "key": "Authorization",
+                                                                "value": "Bearer <token>"
+                                                            }
+                                                        ],
+                                                        "method": "GET",
+                                                        "body": {}
+                                                    },
+                                                    "status": "OK",
+                                                    "code": 200,
+                                                    "header": [],
+                                                    "cookie": [],
+                                                    "_postman_previewlanguage": "text"
+                                                },
+                                                {
+                                                    "id": "7a614901-4f04-4e74-b6c8-27e6f56ec781",
+                                                    "name": "Malformed or incomplete collection query",
+                                                    "originalRequest": {
+                                                        "url": {
+                                                            "path": [
+                                                                "api",
+                                                                "v1",
+                                                                "catalog",
+                                                                "bom-definitions"
+                                                            ],
+                                                            "host": [
+                                                                "{{baseUrl}}"
+                                                            ],
+                                                            "query": [
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "(Required) ",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "model_id",
+                                                                    "value": "<string>"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "page",
+                                                                    "value": "1"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "limit",
+                                                                    "value": "50"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "Comma-separated revision, created_at, updated_at fields; prefix with - for descending order.",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "sort",
+                                                                    "value": "<string>"
+                                                                }
+                                                            ],
+                                                            "variable": []
+                                                        },
+                                                        "header": [
+                                                            {
+                                                                "description": {
+                                                                    "content": "Added as a part of security scheme: bearer",
+                                                                    "type": "text/plain"
+                                                                },
+                                                                "key": "Authorization",
+                                                                "value": "Bearer <token>"
+                                                            }
+                                                        ],
+                                                        "method": "GET",
+                                                        "body": {}
+                                                    },
+                                                    "status": "Bad Request",
+                                                    "code": 400,
+                                                    "header": [],
+                                                    "cookie": [],
+                                                    "_postman_previewlanguage": "text"
+                                                },
+                                                {
+                                                    "id": "78a15685-9a08-46d4-865c-df325df61825",
+                                                    "name": "Authentication required",
+                                                    "originalRequest": {
+                                                        "url": {
+                                                            "path": [
+                                                                "api",
+                                                                "v1",
+                                                                "catalog",
+                                                                "bom-definitions"
+                                                            ],
+                                                            "host": [
+                                                                "{{baseUrl}}"
+                                                            ],
+                                                            "query": [
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "(Required) ",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "model_id",
+                                                                    "value": "<string>"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "page",
+                                                                    "value": "1"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "limit",
+                                                                    "value": "50"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "Comma-separated revision, created_at, updated_at fields; prefix with - for descending order.",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "sort",
+                                                                    "value": "<string>"
+                                                                }
+                                                            ],
+                                                            "variable": []
+                                                        },
+                                                        "header": [
+                                                            {
+                                                                "description": {
+                                                                    "content": "Added as a part of security scheme: bearer",
+                                                                    "type": "text/plain"
+                                                                },
+                                                                "key": "Authorization",
+                                                                "value": "Bearer <token>"
+                                                            }
+                                                        ],
+                                                        "method": "GET",
+                                                        "body": {}
+                                                    },
+                                                    "status": "Unauthorized",
+                                                    "code": 401,
+                                                    "header": [],
+                                                    "cookie": [],
+                                                    "_postman_previewlanguage": "text"
+                                                },
+                                                {
+                                                    "id": "a1aed359-1c2a-4457-b64a-b53b3b1add8f",
+                                                    "name": "catalog.read capability required",
+                                                    "originalRequest": {
+                                                        "url": {
+                                                            "path": [
+                                                                "api",
+                                                                "v1",
+                                                                "catalog",
+                                                                "bom-definitions"
+                                                            ],
+                                                            "host": [
+                                                                "{{baseUrl}}"
+                                                            ],
+                                                            "query": [
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "(Required) ",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "model_id",
+                                                                    "value": "<string>"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "page",
+                                                                    "value": "1"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "limit",
+                                                                    "value": "50"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "Comma-separated revision, created_at, updated_at fields; prefix with - for descending order.",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "sort",
+                                                                    "value": "<string>"
+                                                                }
+                                                            ],
+                                                            "variable": []
+                                                        },
+                                                        "header": [
+                                                            {
+                                                                "description": {
+                                                                    "content": "Added as a part of security scheme: bearer",
+                                                                    "type": "text/plain"
+                                                                },
+                                                                "key": "Authorization",
+                                                                "value": "Bearer <token>"
+                                                            }
+                                                        ],
+                                                        "method": "GET",
+                                                        "body": {}
+                                                    },
+                                                    "status": "Forbidden",
+                                                    "code": 403,
+                                                    "header": [],
+                                                    "cookie": [],
+                                                    "_postman_previewlanguage": "text"
+                                                },
+                                                {
+                                                    "id": "1c4c843b-26b2-4672-9b22-cca6ce217d5e",
+                                                    "name": "BOM persistence unavailable",
+                                                    "originalRequest": {
+                                                        "url": {
+                                                            "path": [
+                                                                "api",
+                                                                "v1",
+                                                                "catalog",
+                                                                "bom-definitions"
+                                                            ],
+                                                            "host": [
+                                                                "{{baseUrl}}"
+                                                            ],
+                                                            "query": [
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "(Required) ",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "model_id",
+                                                                    "value": "<string>"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "page",
+                                                                    "value": "1"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "limit",
+                                                                    "value": "50"
+                                                                },
+                                                                {
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "Comma-separated revision, created_at, updated_at fields; prefix with - for descending order.",
+                                                                        "type": "text/plain"
+                                                                    },
+                                                                    "key": "sort",
+                                                                    "value": "<string>"
+                                                                }
+                                                            ],
+                                                            "variable": []
+                                                        },
+                                                        "header": [
+                                                            {
+                                                                "description": {
+                                                                    "content": "Added as a part of security scheme: bearer",
+                                                                    "type": "text/plain"
+                                                                },
+                                                                "key": "Authorization",
+                                                                "value": "Bearer <token>"
+                                                            }
+                                                        ],
+                                                        "method": "GET",
+                                                        "body": {}
+                                                    },
+                                                    "status": "Service Unavailable",
+                                                    "code": 503,
+                                                    "header": [],
+                                                    "cookie": [],
+                                                    "_postman_previewlanguage": "text"
+                                                }
+                                            ],
+                                            "event": [],
+                                            "protocolProfileBehavior": {
+                                                "disableBodyPruning": true
+                                            }
+                                        },
+                                        {
                                             "name": "{bomDefinitionId}",
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "db1296fd-2878-4a20-a3b8-bd9e241bda9a",
+                                                    "id": "51dae7aa-fb26-4eae-903c-1bbc2e5ad599",
                                                     "name": "Update draft BOM evidence status",
                                                     "request": {
                                                         "name": "Update draft BOM evidence status",
@@ -6715,7 +7155,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "cef9776a-9943-4751-a4c6-27c1ded5a138",
+                                                            "id": "c67f3021-cfa8-435d-9e5a-1c5686768b7b",
                                                             "name": "Updated draft BOM revision",
                                                             "originalRequest": {
                                                                 "url": {
@@ -6763,7 +7203,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "fdf9739d-800a-43e7-92b3-06df7100cf53",
+                                                            "id": "05aea7eb-f06b-4a8e-935d-13232e209bcd",
                                                             "name": "Stale or missing If-Match",
                                                             "originalRequest": {
                                                                 "url": {
@@ -6815,6 +7255,296 @@
                                                     "protocolProfileBehavior": {
                                                         "disableBodyPruning": true
                                                     }
+                                                },
+                                                {
+                                                    "id": "b61940d4-7a44-491a-9ccd-f58751e1d68c",
+                                                    "name": "Read a BOM definition revision with ordered lines",
+                                                    "request": {
+                                                        "name": "Read a BOM definition revision with ordered lines",
+                                                        "description": {},
+                                                        "url": {
+                                                            "path": [
+                                                                "api",
+                                                                "v1",
+                                                                "catalog",
+                                                                "bom-definitions",
+                                                                ":bomDefinitionId"
+                                                            ],
+                                                            "host": [
+                                                                "{{baseUrl}}"
+                                                            ],
+                                                            "query": [],
+                                                            "variable": [
+                                                                {
+                                                                    "type": "any",
+                                                                    "value": "<string>",
+                                                                    "key": "bomDefinitionId",
+                                                                    "disabled": false,
+                                                                    "description": {
+                                                                        "content": "(Required) ",
+                                                                        "type": "text/plain"
+                                                                    }
+                                                                }
+                                                            ]
+                                                        },
+                                                        "method": "GET",
+                                                        "body": {},
+                                                        "auth": {
+                                                            "type": "bearer",
+                                                            "bearer": [
+                                                                {
+                                                                    "key": "token",
+                                                                    "value": "{{bearerToken}}"
+                                                                }
+                                                            ]
+                                                        }
+                                                    },
+                                                    "response": [
+                                                        {
+                                                            "id": "ca7200c9-f953-43fd-a8f1-e73e36ace8f0",
+                                                            "name": "BOM definition with sparse-safe ordered lines",
+                                                            "originalRequest": {
+                                                                "url": {
+                                                                    "path": [
+                                                                        "api",
+                                                                        "v1",
+                                                                        "catalog",
+                                                                        "bom-definitions",
+                                                                        ":bomDefinitionId"
+                                                                    ],
+                                                                    "host": [
+                                                                        "{{baseUrl}}"
+                                                                    ],
+                                                                    "query": [],
+                                                                    "variable": [
+                                                                        {
+                                                                            "disabled": false,
+                                                                            "description": {
+                                                                                "content": "(Required) ",
+                                                                                "type": "text/plain"
+                                                                            },
+                                                                            "type": "any",
+                                                                            "value": "<string>",
+                                                                            "key": "bomDefinitionId"
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "header": [
+                                                                    {
+                                                                        "description": {
+                                                                            "content": "Added as a part of security scheme: bearer",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "Authorization",
+                                                                        "value": "Bearer <token>"
+                                                                    }
+                                                                ],
+                                                                "method": "GET",
+                                                                "body": {}
+                                                            },
+                                                            "status": "OK",
+                                                            "code": 200,
+                                                            "header": [],
+                                                            "cookie": [],
+                                                            "_postman_previewlanguage": "text"
+                                                        },
+                                                        {
+                                                            "id": "c2148d64-25b4-4cf3-9fa1-de6534584d58",
+                                                            "name": "Authentication required",
+                                                            "originalRequest": {
+                                                                "url": {
+                                                                    "path": [
+                                                                        "api",
+                                                                        "v1",
+                                                                        "catalog",
+                                                                        "bom-definitions",
+                                                                        ":bomDefinitionId"
+                                                                    ],
+                                                                    "host": [
+                                                                        "{{baseUrl}}"
+                                                                    ],
+                                                                    "query": [],
+                                                                    "variable": [
+                                                                        {
+                                                                            "disabled": false,
+                                                                            "description": {
+                                                                                "content": "(Required) ",
+                                                                                "type": "text/plain"
+                                                                            },
+                                                                            "type": "any",
+                                                                            "value": "<string>",
+                                                                            "key": "bomDefinitionId"
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "header": [
+                                                                    {
+                                                                        "description": {
+                                                                            "content": "Added as a part of security scheme: bearer",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "Authorization",
+                                                                        "value": "Bearer <token>"
+                                                                    }
+                                                                ],
+                                                                "method": "GET",
+                                                                "body": {}
+                                                            },
+                                                            "status": "Unauthorized",
+                                                            "code": 401,
+                                                            "header": [],
+                                                            "cookie": [],
+                                                            "_postman_previewlanguage": "text"
+                                                        },
+                                                        {
+                                                            "id": "c4638cf2-29fe-43f4-a9ff-2910e3ea9ede",
+                                                            "name": "catalog.read capability required",
+                                                            "originalRequest": {
+                                                                "url": {
+                                                                    "path": [
+                                                                        "api",
+                                                                        "v1",
+                                                                        "catalog",
+                                                                        "bom-definitions",
+                                                                        ":bomDefinitionId"
+                                                                    ],
+                                                                    "host": [
+                                                                        "{{baseUrl}}"
+                                                                    ],
+                                                                    "query": [],
+                                                                    "variable": [
+                                                                        {
+                                                                            "disabled": false,
+                                                                            "description": {
+                                                                                "content": "(Required) ",
+                                                                                "type": "text/plain"
+                                                                            },
+                                                                            "type": "any",
+                                                                            "value": "<string>",
+                                                                            "key": "bomDefinitionId"
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "header": [
+                                                                    {
+                                                                        "description": {
+                                                                            "content": "Added as a part of security scheme: bearer",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "Authorization",
+                                                                        "value": "Bearer <token>"
+                                                                    }
+                                                                ],
+                                                                "method": "GET",
+                                                                "body": {}
+                                                            },
+                                                            "status": "Forbidden",
+                                                            "code": 403,
+                                                            "header": [],
+                                                            "cookie": [],
+                                                            "_postman_previewlanguage": "text"
+                                                        },
+                                                        {
+                                                            "id": "9c642e09-913b-4a23-ac01-2a4f22c9ee6f",
+                                                            "name": "BOM definition not found",
+                                                            "originalRequest": {
+                                                                "url": {
+                                                                    "path": [
+                                                                        "api",
+                                                                        "v1",
+                                                                        "catalog",
+                                                                        "bom-definitions",
+                                                                        ":bomDefinitionId"
+                                                                    ],
+                                                                    "host": [
+                                                                        "{{baseUrl}}"
+                                                                    ],
+                                                                    "query": [],
+                                                                    "variable": [
+                                                                        {
+                                                                            "disabled": false,
+                                                                            "description": {
+                                                                                "content": "(Required) ",
+                                                                                "type": "text/plain"
+                                                                            },
+                                                                            "type": "any",
+                                                                            "value": "<string>",
+                                                                            "key": "bomDefinitionId"
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "header": [
+                                                                    {
+                                                                        "description": {
+                                                                            "content": "Added as a part of security scheme: bearer",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "Authorization",
+                                                                        "value": "Bearer <token>"
+                                                                    }
+                                                                ],
+                                                                "method": "GET",
+                                                                "body": {}
+                                                            },
+                                                            "status": "Not Found",
+                                                            "code": 404,
+                                                            "header": [],
+                                                            "cookie": [],
+                                                            "_postman_previewlanguage": "text"
+                                                        },
+                                                        {
+                                                            "id": "14f2b6c8-caf4-468c-89d5-0ace9a5479d4",
+                                                            "name": "BOM persistence unavailable",
+                                                            "originalRequest": {
+                                                                "url": {
+                                                                    "path": [
+                                                                        "api",
+                                                                        "v1",
+                                                                        "catalog",
+                                                                        "bom-definitions",
+                                                                        ":bomDefinitionId"
+                                                                    ],
+                                                                    "host": [
+                                                                        "{{baseUrl}}"
+                                                                    ],
+                                                                    "query": [],
+                                                                    "variable": [
+                                                                        {
+                                                                            "disabled": false,
+                                                                            "description": {
+                                                                                "content": "(Required) ",
+                                                                                "type": "text/plain"
+                                                                            },
+                                                                            "type": "any",
+                                                                            "value": "<string>",
+                                                                            "key": "bomDefinitionId"
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "header": [
+                                                                    {
+                                                                        "description": {
+                                                                            "content": "Added as a part of security scheme: bearer",
+                                                                            "type": "text/plain"
+                                                                        },
+                                                                        "key": "Authorization",
+                                                                        "value": "Bearer <token>"
+                                                                    }
+                                                                ],
+                                                                "method": "GET",
+                                                                "body": {}
+                                                            },
+                                                            "status": "Service Unavailable",
+                                                            "code": 503,
+                                                            "header": [],
+                                                            "cookie": [],
+                                                            "_postman_previewlanguage": "text"
+                                                        }
+                                                    ],
+                                                    "event": [],
+                                                    "protocolProfileBehavior": {
+                                                        "disableBodyPruning": true
+                                                    }
                                                 }
                                             ]
                                         }
@@ -6825,7 +7555,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "60f47786-e56e-409f-828c-7d864f192c9f",
+                                            "id": "3cb6e5e9-cfdd-41ad-9e18-b9d593c5c219",
                                             "name": "Add an ordered model-part line to a draft BOM",
                                             "request": {
                                                 "name": "Add an ordered model-part line to a draft BOM",
@@ -6857,7 +7587,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "32ebfa80-81ee-4b57-aafb-9918863928b1",
+                                                    "id": "8275e601-6f53-4d7c-acb0-34e219b19a1c",
                                                     "name": "Draft BOM line created",
                                                     "originalRequest": {
                                                         "url": {
@@ -6893,7 +7623,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "8c70bd24-5c4b-477b-8274-68d69cb5a284",
+                                                    "id": "f6f15507-e4d1-4e9a-b4d6-358203344fd2",
                                                     "name": "BOM or model part not found",
                                                     "originalRequest": {
                                                         "url": {
@@ -6929,7 +7659,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "646a7440-c123-4f76-a60a-aa0aa65c581a",
+                                                    "id": "a52105d8-44d4-4f22-a5f1-e49e24c680a8",
                                                     "name": "Duplicate line or idempotency conflict",
                                                     "originalRequest": {
                                                         "url": {
@@ -6965,7 +7695,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "0827061c-de2f-49ba-ae11-6a3c1eaada56",
+                                                    "id": "8b963f57-c71c-4605-a44e-a46bc11efd49",
                                                     "name": "Cross-model or invalid BOM line",
                                                     "originalRequest": {
                                                         "url": {
@@ -7011,7 +7741,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "6c958cfa-1d12-4f49-82ec-35efda1b938e",
+                                                    "id": "152c4b7f-64b2-4e80-8a04-a62404b5fe9e",
                                                     "name": "Correct a draft BOM line without silent quantity conversion",
                                                     "request": {
                                                         "name": "Correct a draft BOM line without silent quantity conversion",
@@ -7055,7 +7785,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "cdb38c81-59c1-423a-a5b0-debcc3582215",
+                                                            "id": "e3f35ad9-c6fa-4dfb-8de2-90cf24d8147c",
                                                             "name": "Updated draft BOM line",
                                                             "originalRequest": {
                                                                 "url": {
@@ -7103,7 +7833,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "d64c065c-8dc4-441d-affe-8df697b0440c",
+                                                            "id": "fac2ed3d-beb7-4898-bc4c-98ba6e74ed69",
                                                             "name": "Stale or missing If-Match",
                                                             "originalRequest": {
                                                                 "url": {
@@ -7165,7 +7895,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "e62b0868-9c87-44ce-bf1a-2cba7af31176",
+                                            "id": "52ce1705-0d75-4a4f-aee2-4b9b7996451c",
                                             "name": "Create a draft process route revision",
                                             "request": {
                                                 "name": "Create a draft process route revision",
@@ -7197,7 +7927,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "57fb68e3-ec3e-47c0-8ca0-faf32f9ccd2b",
+                                                    "id": "fa8ecd9e-3802-43ce-9bc4-554542bea1c3",
                                                     "name": "Draft process route created",
                                                     "originalRequest": {
                                                         "url": {
@@ -7233,7 +7963,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "dcadf79d-6551-40b7-aa2e-eb529e97c865",
+                                                    "id": "43886f6f-2b1c-465c-bba2-2058a720a599",
                                                     "name": "Parent model not found",
                                                     "originalRequest": {
                                                         "url": {
@@ -7269,7 +7999,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "8904d0c3-32a7-4ced-9b9b-11a6d7957dbc",
+                                                    "id": "c22f7de6-ac57-4eaf-8d87-879e9458b069",
                                                     "name": "Duplicate route revision or idempotency conflict",
                                                     "originalRequest": {
                                                         "url": {
@@ -7305,7 +8035,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "b7e93890-5acf-4930-8fa0-9562a98e65f8",
+                                                    "id": "8500ccd0-417f-4b7b-aff4-37912321d826",
                                                     "name": "Invalid route or source evidence",
                                                     "originalRequest": {
                                                         "url": {
@@ -7351,7 +8081,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "462bdf94-f932-475e-9a44-b65cefd6fe19",
+                                                    "id": "4b1623bb-66d0-4c7e-8ad6-353838a540c3",
                                                     "name": "Update draft process route evidence status",
                                                     "request": {
                                                         "name": "Update draft process route evidence status",
@@ -7395,7 +8125,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "e6237c8a-746f-450a-a376-415a636ea398",
+                                                            "id": "24396594-49eb-4594-9468-b7fd1c812ad0",
                                                             "name": "Updated draft process route",
                                                             "originalRequest": {
                                                                 "url": {
@@ -7443,7 +8173,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "d21bd6e7-b067-4426-bb18-50eaccb63f13",
+                                                            "id": "b330aec1-7bcf-4429-96d3-4a82e6e8a123",
                                                             "name": "Stale or missing If-Match",
                                                             "originalRequest": {
                                                                 "url": {
@@ -7505,7 +8235,7 @@
                                     "description": "",
                                     "item": [
                                         {
-                                            "id": "07a060d9-d704-4ad2-923e-b77be11b566e",
+                                            "id": "07c7b5aa-2f5d-40f3-a202-546473242954",
                                             "name": "Add an ordered stage to a draft process route",
                                             "request": {
                                                 "name": "Add an ordered stage to a draft process route",
@@ -7537,7 +8267,7 @@
                                             },
                                             "response": [
                                                 {
-                                                    "id": "579f96ba-8411-4ef6-a115-eefc75d6ef20",
+                                                    "id": "b3b05473-8775-42ac-a35a-1e2192d4ce69",
                                                     "name": "Draft route stage created",
                                                     "originalRequest": {
                                                         "url": {
@@ -7573,7 +8303,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "5989d753-4cd4-42c1-a263-2425a9aaa6f7",
+                                                    "id": "a694f437-c7db-43fa-9a97-77366f617279",
                                                     "name": "Parent route not found",
                                                     "originalRequest": {
                                                         "url": {
@@ -7609,7 +8339,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "5b0191ff-5f64-4bd0-ba63-c7f10baa6990",
+                                                    "id": "b74ac976-b408-439d-b0ac-95a456f208bf",
                                                     "name": "Duplicate stage sequence or idempotency conflict",
                                                     "originalRequest": {
                                                         "url": {
@@ -7645,7 +8375,7 @@
                                                     "_postman_previewlanguage": "text"
                                                 },
                                                 {
-                                                    "id": "fb39e40d-f1aa-4047-bbc2-bbf72444d5a8",
+                                                    "id": "118894c2-ad3d-4aad-a8d2-f5d62327054e",
                                                     "name": "Missing stage identity or invalid route stage",
                                                     "originalRequest": {
                                                         "url": {
@@ -7691,7 +8421,7 @@
                                             "description": "",
                                             "item": [
                                                 {
-                                                    "id": "fabf92a1-ce66-43b4-9b96-c490ed4f6acc",
+                                                    "id": "313e3dd1-d78d-4826-a57e-b98c7446cf26",
                                                     "name": "Correct draft route stage order or metadata",
                                                     "request": {
                                                         "name": "Correct draft route stage order or metadata",
@@ -7735,7 +8465,7 @@
                                                     },
                                                     "response": [
                                                         {
-                                                            "id": "67e4fe47-cd9c-45c9-ab6c-0920c7c983f1",
+                                                            "id": "f2658319-c3ce-49c5-9857-003709a752c1",
                                                             "name": "Updated draft route stage",
                                                             "originalRequest": {
                                                                 "url": {
@@ -7783,7 +8513,7 @@
                                                             "_postman_previewlanguage": "text"
                                                         },
                                                         {
-                                                            "id": "388e31ff-e017-43c3-86ae-fd8c059e46ba",
+                                                            "id": "287438a8-3c97-4e82-9281-4317302aa715",
                                                             "name": "Stale or missing If-Match",
                                                             "originalRequest": {
                                                                 "url": {
@@ -7865,7 +8595,7 @@
         }
     ],
     "info": {
-        "_postman_id": "d448154a-8ac7-487d-8ba8-3282d5b3a38d",
+        "_postman_id": "59edf8b9-a055-42be-babf-63d94bfb4440",
         "name": "Bandai PATS API",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         "description": {
