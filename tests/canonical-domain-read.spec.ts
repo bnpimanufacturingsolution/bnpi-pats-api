@@ -125,6 +125,110 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.data).to.deep.equal([{ id: "stage-1", name: "Injection", workflowGroup: { id: "group-1", name: "Factory" }, subStageLinks: [] }]);
 	});
 
+	it("returns a server-owned station snapshot with batch identity and route steps", async () => {
+		const app = appFor({
+			batchPositionProjection: {
+				findMany: async () => [{
+					batchId: "batch-1",
+					stageId: "stage-injection",
+					subStageId: null,
+					routeStepId: "route-step-1",
+					positionStatus: "ACCEPTED",
+					quantityMagnitude: "12",
+					quantityUom: "EA",
+					projectionVersion: 3,
+					updatedAt: new Date("2026-07-31T01:00:00.000Z"),
+					batch: {
+						id: "batch-1",
+						batchCode: "BATCH-001",
+						barcodeValue: "BATCH-001-QR",
+						lotId: "lot-1",
+						plannedQuantity: 12,
+						labelPackSize: 12,
+						status: "ACTIVE",
+						rowVersion: 2,
+						createdAt: new Date("2026-07-30T01:00:00.000Z"),
+						lot: {
+							id: "lot-1",
+							lotCode: "LOT-001",
+							lotName: "July lot",
+							projectId: "project-1",
+							partsListId: "parts-list-1",
+						},
+						parts: [{
+							partId: "part-1",
+							quantity: 12,
+							quantityMagnitude: "12",
+							quantityUom: "EA",
+							part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
+						}],
+					},
+				}],
+			},
+			routingStep: {
+				findMany: async () => [{
+					id: "route-step-1",
+					partsListId: "parts-list-1",
+					partId: "part-1",
+					stageId: "stage-injection",
+					subStageId: null,
+					stepOrder: 1,
+					part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
+				}],
+			},
+		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/batch-positions")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.data).to.deep.equal([{
+			batchId: "batch-1",
+			stageId: "stage-injection",
+			subStageId: null,
+			routeStepId: "route-step-1",
+			positionStatus: "ACCEPTED",
+			quantityMagnitude: "12",
+			quantityUom: "EA",
+			projectionVersion: 3,
+			updatedAt: "2026-07-31T01:00:00.000Z",
+			batch: {
+				id: "batch-1",
+				batchCode: "BATCH-001",
+				barcodeValue: "BATCH-001-QR",
+				lotId: "lot-1",
+				plannedQuantity: 12,
+				labelPackSize: 12,
+				status: "ACTIVE",
+				rowVersion: 2,
+				createdAt: "2026-07-30T01:00:00.000Z",
+				lot: {
+					id: "lot-1",
+					lotCode: "LOT-001",
+					lotName: "July lot",
+					projectId: "project-1",
+					partsListId: "parts-list-1",
+				},
+				parts: [{
+					partId: "part-1",
+					quantity: 12,
+					quantityMagnitude: "12",
+					quantityUom: "EA",
+					part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
+				}],
+			},
+			routeSteps: [{
+				routeStepId: "route-step-1",
+				partId: "part-1",
+				part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
+				stageId: "stage-injection",
+				subStageId: null,
+				stepOrder: 1,
+			}],
+		}]);
+	});
+
 	it("returns dashboard counts from active server batches and their lot ownership", async () => {
 		const app = appFor({
 			project: { count: async () => 4 },

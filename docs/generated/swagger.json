@@ -2741,7 +2741,8 @@
     "/batch-positions": {
       "get": {
         "operationId": "batchPositionCollectionGet",
-        "summary": "Read rebuildable batch-position projections",
+        "summary": "Read rebuildable station-ready batch-position projections",
+        "description": "Returns current positions together with batch, lot, part, and ordered route-step identity needed by execution workstations. The projection is rebuildable from the execution ledger and is not a second source of truth.",
         "tags": [
           "PATS Execution"
         ],

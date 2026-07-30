@@ -13,6 +13,7 @@ type DomainReadDatabase = Pick<
 	| "workInstruction"
 	| "batch"
 	| "batchPositionProjection"
+	| "routingStep"
 	| "stageEvent"
 	| "inventoryTransaction"
 	| "routingViolation"
@@ -386,8 +387,80 @@ export function domainReadRouter(
 
 	router.get("/batch-positions", requireCapability("execution.read"), async (req, res) => {
 		try {
-			const positions = await database.batchPositionProjection.findMany({ orderBy: [{ updatedAt: "desc" }, { batchId: "asc" }], include: { batch: { select: { id: true, batchCode: true, lotId: true, status: true } } } });
-			res.setHeader("Cache-Control", "no-store").json({ data: positions.map((position) => ({ ...position, quantityMagnitude: decimal(position.quantityMagnitude), updatedAt: position.updatedAt.toISOString() })) });
+			const positions = await database.batchPositionProjection.findMany({
+				orderBy: [{ updatedAt: "desc" }, { batchId: "asc" }],
+				include: {
+					batch: {
+						select: {
+							id: true,
+							batchCode: true,
+							barcodeValue: true,
+							lotId: true,
+							plannedQuantity: true,
+							labelPackSize: true,
+							status: true,
+							rowVersion: true,
+							createdAt: true,
+							lot: {
+								select: {
+									id: true,
+									lotCode: true,
+									lotName: true,
+									projectId: true,
+									partsListId: true,
+								},
+							},
+							parts: {
+								select: {
+									partId: true,
+									quantity: true,
+									quantityMagnitude: true,
+									quantityUom: true,
+									part: { select: { id: true, partCode: true, partName: true } },
+								},
+							},
+						},
+					},
+				},
+			});
+			const partsListIds = [...new Set(positions.map((position) => position.batch.lot.partsListId))];
+			const routeSteps = partsListIds.length
+				? await database.routingStep.findMany({
+						where: { partsListId: { in: partsListIds } },
+						orderBy: [{ partsListId: "asc" }, { partId: "asc" }, { stepOrder: "asc" }, { id: "asc" }],
+						include: { part: { select: { id: true, partCode: true, partName: true } } },
+					})
+				: [];
+			const routeStepsByPartsListId = new Map<string, typeof routeSteps>();
+			for (const routeStep of routeSteps) {
+				const steps = routeStepsByPartsListId.get(routeStep.partsListId) ?? [];
+				steps.push(routeStep);
+				routeStepsByPartsListId.set(routeStep.partsListId, steps);
+			}
+			res.setHeader("Cache-Control", "no-store").json({
+				data: positions.map((position) => ({
+					...position,
+					quantityMagnitude: decimal(position.quantityMagnitude),
+					updatedAt: position.updatedAt.toISOString(),
+					batch: {
+						...position.batch,
+						createdAt: position.batch.createdAt.toISOString(),
+						parts: position.batch.parts.map((part) => ({
+							...part,
+							quantityMagnitude: decimal(part.quantityMagnitude),
+							part: part.part,
+						})),
+					},
+					routeSteps: (routeStepsByPartsListId.get(position.batch.lot.partsListId) ?? []).map((step) => ({
+						routeStepId: step.id,
+						partId: step.partId,
+						part: step.part,
+						stageId: step.stageId,
+						subStageId: step.subStageId,
+						stepOrder: step.stepOrder,
+					})),
+				})),
+			});
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS batch position data is unavailable.");
 		}
