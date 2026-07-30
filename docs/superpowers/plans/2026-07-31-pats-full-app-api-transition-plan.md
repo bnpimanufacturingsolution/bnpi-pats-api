@@ -1,8 +1,19 @@
 # PATS Full App–API Transition Plan
 
-Status: DESIGN GATE — implementation not started
+Status: IMPLEMENTATION IN PROGRESS — I11 release gate open
 Date: 2026-07-31
 Repositories: `bnpi-pats-api`, `bnpi-pats-app`
+
+## Implementation status update
+
+The design gate has been approved for bounded implementation passes. I1–I9 foundation, read/write,
+seed, app transport, planning, line-operations, QC, reporting, and configuration-read slices are
+implemented. I10 added the server-owned station-history projection and canonical app adoption. The
+I11 release gate remains open: station support-card ownership, full configuration authoring, the
+remaining planning-editor parity, and a clean seeded browser acceptance path are not complete. The
+current evidence is maintained in the I10/I11 chain reports and the app WWG current-task/report
+surfaces. DM/cutover, client-data migration/publication, external system integration, hardware SDKs,
+and production deployment remain frozen.
 
 Specification discovery: `docs/superpowers/reports/2026-07-31-full-app-api-integration-specification-discovery.md`
 
@@ -199,8 +210,8 @@ represent.
 | I7 | Planning and catalog integration | API-backed create/edit/release flow, lots, batches, and server snapshots |
 | I8 | Line operations and QC integration | API-backed config, stage events, inventory, quality, exceptions, and traceability |
 | I9 | Projections and reporting | Dashboard/reports derive from API read models; no local domain store remains |
-| I10 | Runtime fixture/local-state removal | Fixtures and domain localStorage are test/offline-preview only |
-| I11 | Integrated acceptance/release gate | Seeded API + app container/browser smoke, full tests, docs/truth sync, PR handoff |
+| I10 | Runtime fixture/local-state removal | Station history is API-backed; support-card and configuration-authoring fixture/state boundaries remain open |
+| I11 | Integrated acceptance/release gate | Open until remaining contracts and seeded API + app browser smoke pass; tests/docs are currently green/synced |
 
 Passes are sequential because the next pass depends on the previous contract. We do not create
 all implementation code up front: I1 may refine the exact migration and I4/I5 endpoint set, while
