@@ -20,11 +20,16 @@ export interface IdempotencyScope {
 }
 
 export interface IdempotencyStore {
-	reserve(scope: Required<IdempotencyScope>): Promise<
+	reserve(
+		scope: Required<IdempotencyScope>,
+	): Promise<
 		| { kind: "reserved"; reservation: unknown }
 		| { kind: "existing"; record: IdempotencyRecord }
+		| { kind: "pending" }
+		| { kind: "conflict" }
 	>;
 	persist(reservation: unknown, record: IdempotencyRecord): Promise<void>;
+	release?(reservation: unknown): Promise<void>;
 }
 
 export type IdempotencyResult =
@@ -52,13 +57,22 @@ export async function executeIdempotently(
 
 	const normalizedScope: Required<IdempotencyScope> = { ...scope, key: scope.key };
 	const reservation = await store.reserve(normalizedScope);
+	if (reservation.kind === "conflict" || reservation.kind === "pending") return conflict();
 	if (reservation.kind === "existing") {
 		if (reservation.record.requestHash !== normalizedScope.requestHash) return conflict();
 		const { requestHash: _requestHash, ...response } = reservation.record;
 		return { ...response, replayed: true };
 	}
 
-	const response = await execute();
-	await store.persist(reservation.reservation, { ...response, requestHash: normalizedScope.requestHash });
-	return { ...response, replayed: false };
+	try {
+		const response = await execute();
+		await store.persist(reservation.reservation, {
+			...response,
+			requestHash: normalizedScope.requestHash,
+		});
+		return { ...response, replayed: false };
+	} catch (error) {
+		await store.release?.(reservation.reservation);
+		throw error;
+	}
 }

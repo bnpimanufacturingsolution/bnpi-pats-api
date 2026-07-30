@@ -381,6 +381,26 @@ No route permits a client-selected workspace, line, tenant, PMRS balance, or UI/
 state to authorize a write. `TRANSITIONAL` legacy proof routes remain compatibility evidence;
 they are not silently promoted to these canonical candidates.
 
+## 2026-07-29 App–API MVP route reconciliation
+
+The earlier proposed inventory lists `/api/v1/products` as a candidate catalog family. The
+implemented foundation closure and the first frontend adapter use `/api/v1/catalog/products`.
+For the App–API Product Catalog MVP, `/api/v1/catalog/products` and its member route are the
+working canonical family. The top-level `/api/v1/products` spelling remains a proposed future
+contract only and must not be added as a second identity without an explicit compatibility and
+deprecation plan.
+
+The MVP collection operation is:
+
+```text
+GET /api/v1/catalog/products?page=1&limit=50&sort=-updated_at
+```
+
+It requires `catalog.read`, resolves the operational context on the server, accepts only bounded
+offset pagination and documented snake_case sort fields, and returns exactly `{data,pagination}`.
+The collection is a read-only summary; Product → Model → ModelPart detail remains the member
+graph at `/api/v1/catalog/products/{productId}`.
+
 ## Gate 2 identity slice implemented (2026-07-15)
 
 The first canonical identity slice is now implemented behind the frozen Gate 0 target:

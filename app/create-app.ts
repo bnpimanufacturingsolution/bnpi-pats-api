@@ -7,16 +7,27 @@ import { PrismaClient as PatsPrismaClient } from "../generated/pats-client";
 import { config } from "../config/config";
 import openApiSpecs from "../docs/openApiSpecs";
 import verifyToken from "../middleware/verifyToken";
-import { authSecurityMiddleware, devSecurityMiddleware, securityMiddleware } from "../middleware/security";
+import {
+	authSecurityMiddleware,
+	devSecurityMiddleware,
+	securityMiddleware,
+} from "../middleware/security";
 import requestIdMiddleware from "../middleware/requestId";
 import { sanitizeInputs } from "../middleware/sanitization";
 import { AppError } from "../errors";
 import { env } from "../config/env";
-import { registerLegacyRoutes, type LegacyRouteRegistration } from "./legacy/register-legacy-routes";
+import {
+	registerLegacyRoutes,
+	type LegacyRouteRegistration,
+} from "./legacy/register-legacy-routes";
 import { patsModule } from "./pats";
-import { catalogController } from "./pats/catalog";
+import { catalogController, catalogProductCollectionController } from "./pats/catalog";
+import { catalogFoundationRouter } from "./pats/catalog-foundation";
+import { bomFoundationRouter } from "./pats/bom-foundation";
+import { processRouteFoundationRouter } from "./pats/process-route-foundation";
 import { createMinioObjectStorage } from "./storage/minio-object-storage";
 import { canonicalRouter } from "./canonical/router";
+import { PrismaCatalogIdempotencyStore } from "./canonical/prisma-idempotency-store";
 import type { IdentityDependencies } from "./identity/types";
 import { createLocalAuthDependencies, type LocalAuthDependencies } from "./identity/local-auth";
 import { prismaSubjectRepository } from "./identity/prisma-subject-repository";
@@ -46,10 +57,13 @@ const blockedRegistrations = (baseApiPath: string): readonly LegacyRouteRegistra
 export function createApp(options: AppOptions = {}): Application {
 	const app = options.app ?? express();
 	const patsPrisma = new PatsPrismaClient();
-	const localAuth = options.localAuth ?? (() => {
-		const repository = prismaSubjectRepository(patsPrisma);
-		return createLocalAuthDependencies(repository, repository, env.JWT_SECRET);
-	})();
+	const catalogIdempotencyStore = new PrismaCatalogIdempotencyStore(patsPrisma);
+	const localAuth =
+		options.localAuth ??
+		(() => {
+			const repository = prismaSubjectRepository(patsPrisma);
+			return createLocalAuthDependencies(repository, repository, env.JWT_SECRET);
+		})();
 	const patsObjectStorage = createMinioObjectStorage({
 		endpoint: process.env.MINIO_ENDPOINT ?? "http://localhost:9000",
 		accessKeyId: process.env.MINIO_ACCESS_KEY ?? "pats-minio",
@@ -71,6 +85,30 @@ export function createApp(options: AppOptions = {}): Application {
 			catalog: {
 				requiredCapability: "catalog.read",
 				handler: catalogController(patsPrisma, patsObjectStorage, { canonical: true }),
+			},
+			catalogCollection: {
+				requiredCapability: "catalog.read",
+				handler: catalogProductCollectionController(patsPrisma),
+			},
+			catalogMutations: {
+				requiredCapability: "catalog.manage",
+				router: express
+					.Router()
+					.use(
+						catalogFoundationRouter(patsPrisma, {
+							idempotencyStore: catalogIdempotencyStore,
+						}),
+					)
+					.use(
+						bomFoundationRouter(patsPrisma, {
+							idempotencyStore: catalogIdempotencyStore,
+						}),
+					)
+					.use(
+						processRouteFoundationRouter(patsPrisma, {
+							idempotencyStore: catalogIdempotencyStore,
+						}),
+					),
 			},
 		}),
 	);
