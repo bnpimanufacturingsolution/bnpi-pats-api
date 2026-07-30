@@ -87,6 +87,57 @@ describe("canonical PATS domain read contract", () => {
 		expect(receivedArgs).to.deep.include({ skip: 1, take: 1 });
 	});
 
+	it("preserves lot execution bindings in production-plan detail reads", async () => {
+		const app = appFor({
+			project: {
+				findUnique: async () => ({
+					id: "plan-1",
+					projectCode: "PLAN-001",
+					name: "July production",
+					status: "DRAFT",
+					requiredProductionQuantity: 100,
+					rowVersion: 2,
+					createdAt: new Date("2026-07-01T00:00:00.000Z"),
+					releasedAt: null,
+					product: null,
+					productSpecification: null,
+					demandAllocations: [],
+					materialRequirements: [],
+					parts: [{ id: "part-1", partCode: "PART-001", partName: "Main part" }],
+					partsLists: [{ id: "route-1", version: 3, status: "PUBLISHED", publishedAt: new Date("2026-07-02T00:00:00.000Z"), steps: [{ id: "route-step-1", stageId: "stage-1", subStageId: null, stepOrder: 1 }] }],
+					pmrs: [],
+					lots: [{
+						id: "lot-1",
+						lotCode: "LOT-001",
+						lotName: "July lot",
+						partsListId: "route-1",
+						partsListVersion: 3,
+						status: "PLANNED",
+						requiredProductionQuantity: 100,
+						labelPackSize: 10,
+						quantityMagnitude: "100",
+						quantityUom: "EA",
+						partAllocations: [{ lotPartAllocationId: "allocation-1", partId: "part-1", part: { partCode: "PART-001" }, quantityMagnitude: "100", quantityUom: "EA" }],
+						batches: [],
+					}],
+				}),
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/production-plans/plan-1")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.lots[0]).to.include({
+			lotId: "lot-1",
+			partsListId: "route-1",
+			partsListVersion: 3,
+			requiredProductionQuantity: 100,
+			labelPackSize: 10,
+		});
+	});
+
 	it("allows batch-filtered reads without treating the filter as an unsupported query", async () => {
 		let receivedWhere: unknown;
 		const database = {

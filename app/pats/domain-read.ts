@@ -276,7 +276,11 @@ export function domainReadRouter(
 					lotId: lot.id,
 					lotCode: lot.lotCode,
 					lotName: lot.lotName,
+					partsListId: lot.partsListId,
+					partsListVersion: lot.partsListVersion,
 					status: lot.status,
+					requiredProductionQuantity: lot.requiredProductionQuantity,
+					labelPackSize: lot.labelPackSize,
 					quantityMagnitude: decimal(lot.quantityMagnitude),
 					quantityUom: lot.quantityUom,
 					partAllocations: lot.partAllocations.map((allocation) => ({
