@@ -1,6 +1,6 @@
 # Chain: BOM App–API Vertical Slice
 
-Status: PLANNED — implementation follows the remote CI gate  
+Status: COMPLETE WITH RELEASE BOUNDARIES — remote CI gate pending
 Date: 2026-07-30  
 Prerequisite: App–API MVP container changes are locally complete; remote CI must be green before release claims.
 

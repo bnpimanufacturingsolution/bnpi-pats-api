@@ -61,6 +61,16 @@ export interface CanonicalRouterOptions {
 		handler: RequestHandler;
 		requiredCapability?: string;
 	};
+	/** Optional deployment-scoped BOM definition collection read boundary. */
+	bomDefinitionCollection?: {
+		handler: RequestHandler;
+		requiredCapability?: string;
+	};
+	/** Optional deployment-scoped BOM definition detail read boundary. */
+	bomDefinition?: {
+		handler: RequestHandler;
+		requiredCapability?: string;
+	};
 	/** Optional catalog draft-write boundary. It is mounted behind canonical identity and capability checks. */
 	catalogMutations?: {
 		router: Router;
@@ -504,7 +514,10 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 		const catalogMutationGate: RequestHandler = (req, res, next) => {
 			if (
 				["GET", "HEAD"].includes(req.method) &&
-				(req.path === "/products" || /^\/products\/[^/]+$/.test(req.path))
+				(req.path === "/products" ||
+					/^\/products\/[^/]+$/.test(req.path) ||
+					req.path === "/bom-definitions" ||
+					/^\/bom-definitions\/[^/]+$/.test(req.path))
 			) {
 				next();
 				return;
@@ -626,6 +639,92 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 	}
 	if (options.catalogCollection) {
 		router.all("/catalog/products", (req: Request, res: Response) =>
+			canonicalMethodNotAllowed(req, res, "GET"),
+		);
+	}
+
+	if (options.bomDefinitionCollection) {
+		const bomDefinitionCollectionIdentity =
+			identityMiddleware ??
+			((_req: Request, res: Response) => identityUnavailable(_req, res));
+		/**
+		 * @openapi
+		 * /api/v1/catalog/bom-definitions:
+		 *   get:
+		 *     operationId: catalogBomDefinitionCollectionGet
+		 *     summary: List BOM definition revisions for a model
+		 *     tags: [PATS Catalog]
+		 *     security:
+		 *       - bearerAuth: []
+		 *     parameters:
+		 *       - in: query
+		 *         name: model_id
+		 *         required: true
+		 *         schema: { type: string }
+		 *       - in: query
+		 *         name: page
+		 *         schema: { type: integer, minimum: 1, default: 1 }
+		 *       - in: query
+		 *         name: limit
+		 *         schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+		 *       - in: query
+		 *         name: sort
+		 *         description: Comma-separated revision, created_at, updated_at fields; prefix with - for descending order.
+		 *         schema: { type: string }
+		 *     responses:
+		 *       200: { description: Paginated BOM definition summaries }
+		 *       400: { description: Malformed or incomplete collection query }
+		 *       401: { description: Authentication required }
+		 *       403: { description: catalog.read capability required }
+		 *       503: { description: BOM persistence unavailable }
+		 */
+		router.get(
+			"/catalog/bom-definitions",
+			bomDefinitionCollectionIdentity,
+			options.bomDefinitionCollection.requiredCapability
+				? requireCanonicalCapability(options.bomDefinitionCollection.requiredCapability)
+				: (_req, _res, next) => next(),
+			options.bomDefinitionCollection.handler,
+		);
+		router.all("/catalog/bom-definitions", (req: Request, res: Response) =>
+			canonicalMethodNotAllowed(req, res, "GET"),
+		);
+	}
+
+	if (options.bomDefinition) {
+		const bomDefinitionIdentity =
+			identityMiddleware ??
+			((_req: Request, res: Response) => identityUnavailable(_req, res));
+		/**
+		 * @openapi
+		 * /api/v1/catalog/bom-definitions/{bomDefinitionId}:
+		 *   get:
+		 *     operationId: catalogBomDefinitionGet
+		 *     summary: Read a BOM definition revision with ordered lines
+		 *     tags: [PATS Catalog]
+		 *     security:
+		 *       - bearerAuth: []
+		 *     parameters:
+		 *       - in: path
+		 *         name: bomDefinitionId
+		 *         required: true
+		 *         schema: { type: string }
+		 *     responses:
+		 *       200: { description: BOM definition with sparse-safe ordered lines }
+		 *       401: { description: Authentication required }
+		 *       403: { description: catalog.read capability required }
+		 *       404: { description: BOM definition not found }
+		 *       503: { description: BOM persistence unavailable }
+		 */
+		router.get(
+			"/catalog/bom-definitions/:bomDefinitionId",
+			bomDefinitionIdentity,
+			options.bomDefinition.requiredCapability
+				? requireCanonicalCapability(options.bomDefinition.requiredCapability)
+				: (_req, _res, next) => next(),
+			options.bomDefinition.handler,
+		);
+		router.all("/catalog/bom-definitions/:bomDefinitionId", (req: Request, res: Response) =>
 			canonicalMethodNotAllowed(req, res, "GET"),
 		);
 	}

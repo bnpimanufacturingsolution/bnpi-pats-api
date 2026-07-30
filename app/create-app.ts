@@ -24,6 +24,10 @@ import { patsModule } from "./pats";
 import { catalogController, catalogProductCollectionController } from "./pats/catalog";
 import { catalogFoundationRouter } from "./pats/catalog-foundation";
 import { bomFoundationRouter } from "./pats/bom-foundation";
+import {
+	catalogBomDefinitionCollectionController,
+	catalogBomDefinitionController,
+} from "./pats/bom";
 import { processRouteFoundationRouter } from "./pats/process-route-foundation";
 import { createMinioObjectStorage } from "./storage/minio-object-storage";
 import { canonicalRouter } from "./canonical/router";
@@ -98,6 +102,14 @@ export function createApp(options: AppOptions = {}): Application {
 			catalogCollection: {
 				requiredCapability: "catalog.read",
 				handler: catalogProductCollectionController(patsPrisma),
+			},
+			bomDefinitionCollection: {
+				requiredCapability: "catalog.read",
+				handler: catalogBomDefinitionCollectionController(patsPrisma),
+			},
+			bomDefinition: {
+				requiredCapability: "catalog.read",
+				handler: catalogBomDefinitionController(patsPrisma),
 			},
 			catalogMutations: {
 				requiredCapability: "catalog.manage",

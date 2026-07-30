@@ -1651,6 +1651,72 @@
             "description": "Invalid BOM revision or source evidence"
           }
         }
+      },
+      "get": {
+        "operationId": "catalogBomDefinitionCollectionGet",
+        "summary": "List BOM definition revisions for a model",
+        "tags": [
+          "PATS Catalog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "description": "Comma-separated revision, created_at, updated_at fields; prefix with - for descending order.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated BOM definition summaries"
+          },
+          "400": {
+            "description": "Malformed or incomplete collection query"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "catalog.read capability required"
+          },
+          "503": {
+            "description": "BOM persistence unavailable"
+          }
+        }
       }
     },
     "/api/v1/catalog/bom-lines": {
@@ -1717,6 +1783,45 @@
           },
           "412": {
             "description": "Stale or missing If-Match"
+          }
+        }
+      },
+      "get": {
+        "operationId": "catalogBomDefinitionGet",
+        "summary": "Read a BOM definition revision with ordered lines",
+        "tags": [
+          "PATS Catalog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bomDefinitionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "BOM definition with sparse-safe ordered lines"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "catalog.read capability required"
+          },
+          "404": {
+            "description": "BOM definition not found"
+          },
+          "503": {
+            "description": "BOM persistence unavailable"
           }
         }
       }

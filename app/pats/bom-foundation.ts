@@ -360,7 +360,7 @@ async function evidenceCount(
 	return database.canonicalEvidenceLink.count({ where: { subjectType, subjectId } });
 }
 
-function toBomDefinitionResource(
+export function toBomDefinitionResource(
 	definition: {
 		id: string;
 		modelId: string;
@@ -386,7 +386,7 @@ function toBomDefinitionResource(
 	};
 }
 
-function toBomLineResource(
+export function toBomLineResource(
 	line: {
 		id: string;
 		bomDefinitionId: string;
