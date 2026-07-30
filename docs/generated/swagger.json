@@ -735,6 +735,168 @@
           }
         }
       },
+      "StationHistory": {
+        "type": "object",
+        "required": [
+          "station",
+          "events",
+          "openViolations"
+        ],
+        "properties": {
+          "station": {
+            "type": "object",
+            "required": [
+              "id",
+              "stationCode",
+              "name",
+              "stageId"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "stationCode": {
+                "type": "string",
+                "nullable": true
+              },
+              "name": {
+                "type": "string"
+              },
+              "stageId": {
+                "type": "string"
+              }
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "occurredAt",
+                "batchId",
+                "batchCode",
+                "stageId",
+                "subStageId",
+                "stepName",
+                "actor",
+                "eventType",
+                "isRoutingViolation",
+                "status"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "occurredAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "batchId": {
+                  "type": "string"
+                },
+                "batchCode": {
+                  "type": "string"
+                },
+                "stageId": {
+                  "type": "string"
+                },
+                "subStageId": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "stepName": {
+                  "type": "string"
+                },
+                "actor": {
+                  "type": "string"
+                },
+                "eventType": {
+                  "type": "string"
+                },
+                "isRoutingViolation": {
+                  "type": "boolean"
+                },
+                "status": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "openViolations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "routingViolationId",
+                "batchId",
+                "batchCode",
+                "lotId",
+                "lotCode",
+                "partId",
+                "partCode",
+                "partName",
+                "attemptedStep",
+                "detectedAt",
+                "resolved"
+              ],
+              "properties": {
+                "routingViolationId": {
+                  "type": "string"
+                },
+                "batchId": {
+                  "type": "string"
+                },
+                "batchCode": {
+                  "type": "string"
+                },
+                "lotId": {
+                  "type": "string"
+                },
+                "lotCode": {
+                  "type": "string"
+                },
+                "partId": {
+                  "type": "string"
+                },
+                "partCode": {
+                  "type": "string"
+                },
+                "partName": {
+                  "type": "string"
+                },
+                "attemptedStep": {
+                  "type": "object",
+                  "required": [
+                    "stageId",
+                    "subStageId",
+                    "stepName"
+                  ],
+                  "properties": {
+                    "stageId": {
+                      "type": "string"
+                    },
+                    "subStageId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "stepName": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "detectedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "resolved": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
       "CollectionEnvelope": {
         "type": "object",
         "required": [
@@ -888,6 +1050,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/LineReport"
+            }
+          }
+        }
+      },
+      "StationHistoryRead": {
+        "description": "Server-owned station event history and open routing violations",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StationHistory"
             }
           }
         }
@@ -2978,6 +3150,42 @@
           },
           "409": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
+          }
+        }
+      }
+    },
+    "/stations/{stationId}/history": {
+      "get": {
+        "operationId": "stationHistoryGet",
+        "summary": "Read server-owned station event history and open violations",
+        "description": "Returns stage-event evidence and open routing violations for the station's configured stage boundaries. The projection is read-only and rebuildable from the execution ledger.",
+        "tags": [
+          "PATS Execution"
+        ],
+        "x-required-capability": "execution.read",
+        "parameters": [
+          {
+            "name": "stationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/StationHistoryRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
           }
         }
       }

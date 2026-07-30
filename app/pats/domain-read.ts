@@ -384,6 +384,88 @@ export function domainReadRouter(
 		}
 	});
 
+	router.get("/stations/:stationId/history", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const station = await database.station.findUnique({
+				where: { id: req.params.stationId },
+				select: {
+					id: true,
+					stationCode: true,
+					name: true,
+					stageId: true,
+					boundSteps: { select: { stageId: true, subStageId: true } },
+				},
+			});
+			if (!station) {
+				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested station was not found.");
+				return;
+			}
+
+			const stageIds = [...new Set([station.stageId, ...station.boundSteps.map((step) => step.stageId)])];
+			const [stages, events, violations] = await Promise.all([
+				database.stage.findMany({ where: { id: { in: stageIds } }, select: { id: true, name: true } }),
+				database.stageEvent.findMany({
+					where: { stageId: { in: stageIds } },
+					orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+					include: { actorSubject: { select: { displayNameSnapshot: true } } },
+				}),
+				database.routingViolation.findMany({
+					where: { attemptedStageId: { in: stageIds }, status: "OPEN" },
+					orderBy: [{ detectedAt: "desc" }, { id: "desc" }],
+				}),
+			]);
+
+			const batchIds = [...new Set([...events.map((event) => event.batchId), ...violations.map((violation) => violation.batchId)])];
+			const lotIds = [...new Set(violations.map((violation) => violation.lotId))];
+			const partIds = [...new Set(violations.map((violation) => violation.partId))];
+			const [batches, lots, parts] = await Promise.all([
+				batchIds.length ? database.batch.findMany({ where: { id: { in: batchIds } }, select: { id: true, batchCode: true } }) : [],
+				lotIds.length ? database.lot.findMany({ where: { id: { in: lotIds } }, select: { id: true, lotCode: true } }) : [],
+				partIds.length ? database.part.findMany({ where: { id: { in: partIds } }, select: { id: true, partCode: true, partName: true } }) : [],
+			]);
+			const stageNames = new Map(stages.map((stage) => [stage.id, stage.name]));
+			const batchCodes = new Map(batches.map((batch) => [batch.id, batch.batchCode]));
+			const lotCodes = new Map(lots.map((lot) => [lot.id, lot.lotCode]));
+			const partsById = new Map(parts.map((part) => [part.id, part]));
+
+			res.setHeader("Cache-Control", "no-store").json({
+				station: { id: station.id, stationCode: station.stationCode, name: station.name, stageId: station.stageId },
+				events: events.map((event) => ({
+					id: event.id,
+					occurredAt: event.occurredAt.toISOString(),
+					batchId: event.batchId,
+					batchCode: batchCodes.get(event.batchId) ?? event.batchId,
+					stageId: event.stageId,
+					subStageId: event.subStageId,
+					stepName: stageNames.get(event.stageId) ?? event.stageId,
+					actor: event.actorSubject?.displayNameSnapshot ?? event.actor,
+					eventType: event.eventType,
+					isRoutingViolation: event.isRoutingViolation,
+					status: event.status,
+				})),
+				openViolations: violations.map((violation) => ({
+					routingViolationId: violation.id,
+					batchId: violation.batchId,
+					batchCode: batchCodes.get(violation.batchId) ?? violation.batchId,
+					lotId: violation.lotId,
+					lotCode: lotCodes.get(violation.lotId) ?? violation.lotId,
+					partId: violation.partId,
+					partCode: partsById.get(violation.partId)?.partCode ?? violation.partId,
+					partName: partsById.get(violation.partId)?.partName ?? violation.partId,
+					attemptedStep: {
+						stageId: violation.attemptedStageId,
+						subStageId: violation.attemptedSubStageId,
+						stepName: stageNames.get(violation.attemptedStageId) ?? violation.attemptedStageId,
+					},
+					detectedAt: violation.detectedAt.toISOString(),
+					resolved: violation.resolved,
+				})),
+			});
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station history data is unavailable.");
+		}
+	});
+
 	router.get("/station-steps", requireCapability("execution.read"), async (req, res) => {
 		try {
 			const stationSteps = await database.stationStep.findMany({

@@ -332,6 +332,70 @@ describe("canonical PATS domain read contract", () => {
 		}]);
 	});
 
+	it("returns server-owned station history from execution evidence", async () => {
+		const occurredAt = new Date("2026-07-31T02:00:00.000Z");
+		const app = appFor({
+			station: {
+				findUnique: async () => ({
+					id: "station-injection",
+					stationCode: "ST-INJ-01",
+					name: "Injection Station 01",
+					stageId: "stage-injection",
+					boundSteps: [{ stageId: "stage-injection", subStageId: null }],
+				}),
+			},
+			stage: {
+				findMany: async () => [{ id: "stage-injection", name: "Injection" }],
+			},
+			stageEvent: {
+				findMany: async () => [{
+					id: "event-1",
+					occurredAt,
+					batchId: "batch-1",
+					stageId: "stage-injection",
+					subStageId: null,
+					eventType: "STAGE_COMPLETED",
+					actor: "operator-id",
+					isRoutingViolation: false,
+					status: "ACCEPTED",
+					actorSubject: { displayNameSnapshot: "Operator One" },
+				}],
+			},
+			routingViolation: {
+				findMany: async () => [{
+					id: "violation-1",
+					batchId: "batch-1",
+					lotId: "lot-1",
+					partId: "part-1",
+					attemptedStageId: "stage-injection",
+					attemptedSubStageId: null,
+					detectedAt: occurredAt,
+					resolved: false,
+					status: "OPEN",
+				}],
+			},
+			batch: {
+				findMany: async () => [{ id: "batch-1", batchCode: "BATCH-001" }],
+			},
+			lot: {
+				findMany: async () => [{ id: "lot-1", lotCode: "LOT-001" }],
+			},
+			part: {
+				findMany: async () => [{ id: "part-1", partCode: "PART-001", partName: "Main part" }],
+			},
+		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/stations/station-injection/history")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.station).to.deep.include({ id: "station-injection", stationCode: "ST-INJ-01", stageId: "stage-injection" });
+		expect(response.body.events[0]).to.deep.include({ batchId: "batch-1", batchCode: "BATCH-001", stepName: "Injection", actor: "Operator One" });
+		expect(response.body.openViolations[0]).to.deep.include({ batchCode: "BATCH-001", lotCode: "LOT-001", partCode: "PART-001", partName: "Main part", resolved: false });
+		expect(response.body.openViolations[0].attemptedStep).to.deep.equal({ stageId: "stage-injection", subStageId: null, stepName: "Injection" });
+	});
+
 	it("returns dashboard counts from active server batches and their lot ownership", async () => {
 		const app = appFor({
 			project: { count: async () => 4 },

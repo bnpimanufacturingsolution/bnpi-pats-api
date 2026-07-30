@@ -1,5 +1,47 @@
 [
   {
+    "id": "stationHistoryGet",
+    "method": "GET",
+    "url": "/stations/{stationId}/history",
+    "summary": "Read server-owned station event history and open violations",
+    "description": "Returns stage-event evidence and open routing violations for the station's configured stage boundaries. The projection is read-only and rebuildable from the execution ledger.",
+    "tags": [
+      "PATS Execution"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "stationId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
     "id": "batchCollectionGet",
     "method": "GET",
     "url": "/batches",
