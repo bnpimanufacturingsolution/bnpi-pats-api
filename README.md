@@ -4,14 +4,17 @@ Backend foundation for the Bandai Production and Assembly Tracking System.
 
 ## Current status
 
-This repository is not yet a hardened manufacturing API or canonical PATS
-domain model. It currently contains:
+This repository contains a partially API-backed PATS domain foundation, not yet
+the complete application API. It currently contains:
 
 - shared platform foundations for health, security, documentation, and
   workspace tenancy;
 - inherited MongoDB/Prisma PMS, procurement, finance, employee, and product
   modules retained as compatibility material;
-- a provisional, standalone PostgreSQL draft at `prisma/pats/schema.prisma`.
+- a PostgreSQL PATS schema, migrations, generated client, and mounted catalog/BOM
+  route foundations;
+- no complete canonical PATS seed profile or full planning/execution/reporting
+  API coverage.
 
 The default Express composition does not mount quarantined legacy routes.
 Set `ENABLE_LEGACY_API=true` only for a controlled compatibility run. Auth,
@@ -19,8 +22,9 @@ workspace membership, project membership, employee/HRIS, and legacy product
 surfaces remain unchanged pending external or security review.
 
 No seeded record, initial, fixture, or legacy field name is a PATS requirement.
-The frontend prototype remains on local/demo transport while UX and the domain
-model are being confirmed.
+The frontend still contains prototype/local transport on active surfaces while
+the full app–API transition is implemented. See
+[`docs/superpowers/plans/2026-07-31-pats-full-app-api-transition-plan.md`](docs/superpowers/plans/2026-07-31-pats-full-app-api-transition-plan.md).
 
 ## Runtime boundary
 
@@ -35,7 +39,7 @@ cron startup, and graceful shutdown.
 | `/api/workspace*` | Retained workspace tenancy |
 | `/api/auth/*`, `/api/workspace-member*`, `/api/project-member*`, `/api/employee*`, `/api/product*` | Blocked-review surfaces; behavior preserved |
 | Inherited PMS/procurement/finance routes | Quarantined; opt in with `ENABLE_LEGACY_API=true` |
-| `prisma/pats/schema.prisma` | Provisional and unwired; not used by the runtime |
+| `prisma/pats/schema.prisma` | Active PostgreSQL PATS schema; incomplete relative to the full frozen target |
 
 The full route/module evidence is recorded in
 [`docs/superpowers/reports/2026-07-13-api-surface-inventory.md`](docs/superpowers/reports/2026-07-13-api-surface-inventory.md),
@@ -69,11 +73,9 @@ docker compose up -d
 docker compose ps
 ```
 
-The API image is built and defined in the `pats` profile but is intentionally
-not started by the base command until the draft PostgreSQL Prisma client is
-wired into the runtime in a later pass. The legacy Mongo service is available
-only with `--profile legacy`; Redis is optional with `--profile redis` and is
-not required for the base foundation.
+The API image is built and defined in the `pats` profile. The legacy Mongo
+service is available only with `--profile legacy`; Redis is optional with
+`--profile redis` and is not required for the base foundation.
 
 Named volumes survive `docker compose down`. Use `docker compose down -v`
 only when intentionally deleting local database or object-storage state.
@@ -112,14 +114,14 @@ Generated files are written under `docs/generated/`.
 
 ## Seeds and persistence
 
-`prisma/seed.ts` is the legacy Mongo compatibility/demo seed orchestrator. It
-seeds inherited module data for local presentation and compatibility testing;
-it is not a canonical PATS seed. This cleanup does not rewrite, migrate, reset,
-or promote those values.
+`prisma/seed.ts` remains the legacy Mongo compatibility/demo seed orchestrator.
+It is not a canonical PATS seed and must not be used to satisfy the app–API
+integration goal.
 
-The only PATS schema currently present is the standalone draft under
-`prisma/pats/`. It has no runtime import, migration history, production seed,
-or API registration.
+The canonical PATS seed and the remaining planning, execution, inventory,
+projection, and reporting persistence are tracked by the full transition plan.
+Seed profiles must be deterministic, idempotent, and explicitly separated from
+client-data migration.
 
 ## Technology
 
@@ -131,7 +133,8 @@ or API registration.
 
 ## Scope boundary
 
-This cleanup intentionally does not add PATS CRUD, planning, execution,
-scanning, or reporting endpoints. It also does not replace authentication,
-authorization, workspace tenancy, SSO/HRIS integrations, database migrations,
-production deployment, or frontend API adoption.
+The current foundation still does not provide complete PATS CRUD, planning,
+execution, scanning, or reporting integration for the frontend. Full app–API
+adoption, canonical seed profiles, and the remaining domain model are planned
+in the transition chain. DM/cutover, Drive publication, and production
+deployment remain separate boundaries.
