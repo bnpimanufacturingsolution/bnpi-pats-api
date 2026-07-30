@@ -1,10 +1,12 @@
 # Chain: App–API Integration MVP
 
-Status: PLANNED / NOT IMPLEMENTED
+Status: PASSES 0-8 COMPLETE / RELEASE BOUNDARIES REMAIN
 Date: 2026-07-29
 Owner: cross-repository implementation agent
 Companion plan: docs/superpowers/plans/2026-07-29-app-api-integration-mvp-plan.md
 App plan/report: sibling repository bnpi-pats-app/.wwg/reports/2026-07-29-app-api-integration-mvp-plan.md
+Pass 8 execution plan: sibling repository bnpi-pats-app/.wwg/reports/2026-07-30-app-api-mvp-pass-8-dev-smoke-plan.md
+Pass 8 execution report: docs/superpowers/reports/2026-07-30-app-api-mvp-pass-8-dev-smoke.md
 
 ## Meta-prompt
 
