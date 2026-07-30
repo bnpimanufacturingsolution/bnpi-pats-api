@@ -134,6 +134,82 @@
     }
   },
   {
+    "id": "productionPlanModelAllocationUpsert",
+    "method": "POST",
+    "url": "/production-plans/{planId}/model-allocations",
+    "summary": "Upsert a model allocation and materialize plan-part evidence",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanPartsListVersionCreate",
+    "method": "POST",
+    "url": "/production-plans/{planId}/parts-list-versions",
+    "summary": "Create an immutable draft parts-list route version",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
     "id": "productionPlanRelease",
     "method": "POST",
     "url": "/production-plans/{planId}/release",

@@ -101,10 +101,11 @@ describe("canonical PATS domain read contract", () => {
 					releasedAt: null,
 					product: null,
 					productSpecification: null,
+					modelAllocations: [],
 					demandAllocations: [],
 					materialRequirements: [],
 					parts: [{ id: "part-1", partCode: "PART-001", partName: "Main part" }],
-					partsLists: [{ id: "route-1", version: 3, status: "PUBLISHED", publishedAt: new Date("2026-07-02T00:00:00.000Z"), steps: [{ id: "route-step-1", stageId: "stage-1", subStageId: null, stepOrder: 1 }] }],
+					partsLists: [{ id: "route-1", version: 3, status: "PUBLISHED", publishedAt: new Date("2026-07-02T00:00:00.000Z"), steps: [{ id: "route-step-1", partId: "part-1", part: { partCode: "PART-001", partName: "Main part" }, stageId: "stage-1", subStageId: null, stepOrder: 1 }] }],
 					pmrs: [],
 					lots: [{
 						id: "lot-1",

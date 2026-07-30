@@ -104,6 +104,88 @@ describe("canonical PATS command contract", () => {
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:precondition-failed");
 	});
 
+	it("upserts a model allocation and materializes plan parts and the initial route snapshot", async () => {
+		const idempotencyRecord = {
+			findUnique: async () => null,
+			create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-allocation", ...data }),
+			update: async () => undefined,
+			delete: async () => undefined,
+		};
+		const database = {
+			idempotencyRecord,
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			project: {
+				findUnique: async () => ({ id: "plan-1", productId: "product-1", status: "DRAFT", rowVersion: 1 }),
+				update: async () => ({ id: "plan-1", rowVersion: 2 }),
+			},
+			model: {
+				findUnique: async () => ({ id: "model-1", productId: "product-1", modelParts: [{ id: "model-part-1", partCode: "PART-001", partName: "Main part", routingSteps: [{ stageId: "stage-1", subStageId: null }] }] }),
+			},
+			projectModelAllocation: {
+				upsert: async () => ({ id: "allocation-1", modelId: "model-1", plannedQuantity: 100 }),
+			},
+			part: {
+				findMany: async () => [],
+				create: async () => ({ id: "part-1" }),
+			},
+			partsList: {
+				findFirst: async () => null,
+				create: async () => ({ id: "parts-list-1" }),
+			},
+			stage: { findMany: async () => [{ id: "stage-1" }] },
+			subStage: { findMany: async () => [] },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database);
+		const response = await request(app)
+			.post("/api/v1/production-plans/plan-1/model-allocations")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "allocation-1")
+			.set("If-Match", '"1"')
+			.send({ modelId: "model-1", plannedQuantity: 100 });
+
+		expect(response.status).to.equal(200);
+		expect(response.headers.etag).to.equal('"2"');
+		expect(response.body).to.deep.include({ allocationId: "allocation-1", modelId: "model-1", partsListVersionId: "parts-list-1", planRowVersion: 2 });
+	});
+
+	it("creates a new draft route version and validates server-owned route identity", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-route", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			project: {
+				findUnique: async () => ({ id: "plan-1", status: "DRAFT", rowVersion: 1 }),
+				update: async () => ({ id: "plan-1", rowVersion: 2 }),
+			},
+			part: { findMany: async () => [{ id: "part-1" }] },
+			stage: { findMany: async () => [{ id: "stage-1" }] },
+			subStage: { findMany: async () => [] },
+			partsList: {
+				findFirst: async () => ({ version: 1 }),
+				create: async () => ({ id: "parts-list-2", version: 2 }),
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database);
+		const response = await request(app)
+			.post("/api/v1/production-plans/plan-1/parts-list-versions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "route-version-1")
+			.set("If-Match", '"1"')
+			.send({ steps: [{ partId: "part-1", stageId: "stage-1", stepOrder: 1 }] });
+
+		expect(response.status).to.equal(201);
+		expect(response.headers.etag).to.equal('"2"');
+		expect(response.body).to.deep.include({ partsListVersionId: "parts-list-2", version: 2, planRowVersion: 2 });
+	});
+
 	it("fails command access closed without planning.manage", async () => {
 		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
 		const response = await request(app)

@@ -68,12 +68,17 @@ function date(value: Date | null | undefined): string | null {
 
 function routeResource(route: {
 	id: string;
+	partId: string;
+	part: { partCode: string; partName: string };
 	stageId: string;
 	subStageId: string | null;
 	stepOrder: number;
 }) {
 	return {
 		routeStepId: route.id,
+		partId: route.partId,
+		partCode: route.part.partCode,
+		partName: route.part.partName,
 		stageId: route.stageId,
 		subStageId: route.subStageId,
 		stepOrder: route.stepOrder,
@@ -234,10 +239,11 @@ export function domainReadRouter(
 				include: {
 					product: { select: { id: true, productCode: true, productName: true } },
 					productSpecification: true,
+					modelAllocations: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { model: { select: { id: true, modelNumber: true, modelName: true } } } },
 					demandAllocations: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { model: { select: { id: true, modelNumber: true, modelName: true } } } },
 					materialRequirements: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
 					parts: { orderBy: [{ partCode: "asc" }, { id: "asc" }] },
-					partsLists: { orderBy: [{ version: "desc" }, { id: "asc" }], include: { steps: { orderBy: [{ stepOrder: "asc" }, { id: "asc" }] } } },
+					partsLists: { orderBy: [{ version: "desc" }, { id: "asc" }], include: { steps: { orderBy: [{ stepOrder: "asc" }, { id: "asc" }], include: { part: { select: { partCode: true, partName: true } } } } } },
 					pmrs: true,
 					lots: {
 						orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -263,6 +269,17 @@ export function domainReadRouter(
 				releasedAt: date(plan.releasedAt),
 				product: plan.product,
 				productSpecification: plan.productSpecification,
+				modelAllocations: plan.modelAllocations.map((allocation) => ({
+					allocationId: allocation.id,
+					modelId: allocation.modelId,
+					model: allocation.model,
+					plannedQuantity: allocation.plannedQuantity,
+					quantityMagnitude: decimal(allocation.quantityMagnitude),
+					quantityUom: allocation.quantityUom,
+					usageBasis: allocation.usageBasis,
+					lifecycleStatus: allocation.lifecycleStatus,
+					rowVersion: allocation.rowVersion,
+				})),
 				allocations: plan.demandAllocations.map((allocation) => ({
 					allocationId: allocation.id,
 					modelId: allocation.modelId,

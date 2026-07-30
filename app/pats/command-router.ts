@@ -38,6 +38,27 @@ const productionPlanPatchSchema = z.object({
 	productId: z.string().trim().min(1).max(100).nullable().optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
 
+const productionPlanModelAllocationSchema = z.object({
+	modelId: z.string().trim().min(1).max(100),
+	plannedQuantity: z.number().int().positive(),
+	quantityMagnitude: decimalString.nullable().optional(),
+	quantityUom: z.string().trim().min(1).max(40).nullable().optional(),
+	usageBasis: z.string().trim().max(120).nullable().optional(),
+	marketRegion: z.string().trim().max(120).nullable().optional(),
+	demandPurpose: z.string().trim().max(120).nullable().optional(),
+	sourceRevisionRef: z.string().trim().max(160).nullable().optional(),
+}).strict();
+
+const productionPlanPartsListVersionSchema = z.object({
+	steps: z.array(z.object({
+		partId: z.string().trim().min(1).max(100),
+		stageId: z.string().trim().min(1).max(100),
+		subStageId: z.string().trim().min(1).max(100).nullable().optional(),
+		stepOrder: z.number().int().positive(),
+	}).strict()).max(1000),
+	sourceRevisionRef: z.string().trim().max(160).nullable().optional(),
+}).strict();
+
 const lotCreateSchema = z.object({
 	lotCode: z.string().trim().min(1).max(120),
 	lotName: z.string().trim().min(1).max(240),
@@ -190,6 +211,27 @@ function staleVersion(): never {
 	throw new CommandProblem(412, "urn:bandai:pats:problem:precondition-failed", "Precondition Failed", "The resource changed since it was read. Reload it before retrying.");
 }
 
+function ensurePlanEditable(plan: { status: string }): void {
+	const immutableStatuses: string[] = [PlanLifecycleStatus.RELEASED, PlanLifecycleStatus.COMPLETED, PlanLifecycleStatus.CANCELLED];
+	if (immutableStatuses.includes(plan.status)) {
+		conflict("Released or completed production plans cannot be edited.");
+	}
+}
+
+function catalogRoutingSteps(value: unknown): Array<{ stageId: string; subStageId: string | null; stepOrder: number }> {
+	if (!Array.isArray(value)) return [];
+	return value.flatMap((candidate, index) => {
+		if (typeof candidate !== "object" || candidate === null) return [];
+		const step = candidate as { stageId?: unknown; subStageId?: unknown; order?: unknown };
+		if (typeof step.stageId !== "string" || step.stageId.trim().length === 0) return [];
+		return [{
+			stageId: step.stageId,
+			subStageId: typeof step.subStageId === "string" ? step.subStageId : null,
+			stepOrder: typeof step.order === "number" && Number.isInteger(step.order) && step.order > 0 ? step.order : index + 1,
+		}];
+	});
+}
+
 function requireCapability(capability: string, gate: (capability: string) => RequestHandler): RequestHandler {
 	return gate(capability);
 }
@@ -267,6 +309,147 @@ export function commandRouter(
 				});
 				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_UPDATED", "ProductionPlan", plan.id, { rowVersion: plan.rowVersion });
 				return { status: 200, body: planResponse(plan), headers: resourceHeaders(plan.id, plan.rowVersion) };
+			});
+			respondCommand(res, response);
+		} catch (error) {
+			commandError(error, req, res, next);
+		}
+	});
+
+	router.post("/production-plans/:planId/model-allocations", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, productionPlanModelAllocationSchema);
+			const expectedVersion = requireIfMatch(req, "production plan");
+			const response = await executeCommand(database, req, "productionPlanModelAllocationUpsert", { planId: req.params.planId, body }, async (transaction) => {
+				const plan = await transaction.project.findUnique({ where: { id: req.params.planId }, select: { id: true, productId: true, status: true, rowVersion: true } });
+				if (!plan) notFound("The requested production plan was not found.");
+				if (plan.rowVersion !== expectedVersion) staleVersion();
+				ensurePlanEditable(plan);
+
+				const model = await transaction.model.findUnique({ where: { id: body.modelId }, include: { modelParts: true } });
+				if (!model) notFound("The requested catalog model was not found.");
+				if (plan.productId !== null && model.productId !== plan.productId) conflict("The selected model does not belong to the production plan product.");
+
+				const allocation = await transaction.projectModelAllocation.upsert({
+					where: { projectId_modelId: { projectId: plan.id, modelId: model.id } },
+					create: {
+						projectId: plan.id,
+						modelId: model.id,
+						plannedQuantity: body.plannedQuantity,
+						quantityMagnitude: body.quantityMagnitude ?? null,
+						quantityUom: body.quantityUom ?? null,
+						usageBasis: body.usageBasis ?? null,
+						marketRegion: body.marketRegion ?? null,
+						demandPurpose: body.demandPurpose ?? null,
+						sourceRevisionRef: body.sourceRevisionRef ?? null,
+					},
+					update: {
+						plannedQuantity: body.plannedQuantity,
+						quantityMagnitude: body.quantityMagnitude ?? null,
+						quantityUom: body.quantityUom ?? null,
+						usageBasis: body.usageBasis ?? null,
+						marketRegion: body.marketRegion ?? null,
+						demandPurpose: body.demandPurpose ?? null,
+						sourceRevisionRef: body.sourceRevisionRef ?? null,
+						rowVersion: { increment: 1 },
+					},
+				});
+
+				const modelPartIds = model.modelParts.map((modelPart) => modelPart.id);
+				const existingParts = modelPartIds.length === 0
+					? []
+					: await transaction.part.findMany({ where: { projectId: plan.id, sourceModelPartId: { in: modelPartIds } }, select: { sourceModelPartId: true } });
+				const existingPartIds = new Set(existingParts.map((part) => part.sourceModelPartId));
+				for (const modelPart of model.modelParts) {
+					if (existingPartIds.has(modelPart.id)) continue;
+					await transaction.part.create({
+						data: {
+							projectId: plan.id,
+							partCode: modelPart.partCode,
+							partName: modelPart.partName,
+							sourceModelId: model.id,
+							sourceModelPartId: modelPart.id,
+						},
+					});
+				}
+
+				const currentPartsList = await transaction.partsList.findFirst({ where: { projectId: plan.id }, orderBy: [{ version: "desc" }, { id: "desc" }], include: { steps: true } });
+				let partsListVersionId = currentPartsList?.id ?? null;
+				if (!currentPartsList) {
+					const planParts = await transaction.part.findMany({ where: { projectId: plan.id }, select: { id: true, sourceModelPartId: true } });
+					const planPartByModelPartId = new Map(planParts.flatMap((part) => part.sourceModelPartId ? [[part.sourceModelPartId, part.id] as const] : []));
+					const validStageIds = new Set((await transaction.stage.findMany({ select: { id: true } })).map((stage) => stage.id));
+					const configuredSubStages = await transaction.subStage.findMany({ select: { id: true, eligibleStages: { select: { stageId: true } } } });
+					const validSubStagePairs = new Set(configuredSubStages.flatMap((subStage) => subStage.eligibleStages.map((eligibility) => `${subStage.id}:${eligibility.stageId}`)));
+					const initialSteps = model.modelParts.flatMap((modelPart) => {
+						const partId = planPartByModelPartId.get(modelPart.id);
+						if (!partId) return [];
+						return catalogRoutingSteps(modelPart.routingSteps).filter((step) => validStageIds.has(step.stageId) && (step.subStageId === null || validSubStagePairs.has(`${step.subStageId}:${step.stageId}`))).map((step) => ({ ...step, partId }));
+					});
+					const partsList = await transaction.partsList.create({ data: { projectId: plan.id, version: 1, status: "DRAFT", steps: { create: initialSteps } }, select: { id: true } });
+					partsListVersionId = partsList.id;
+				}
+
+				const updatedPlan = await transaction.project.update({ where: { id: plan.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
+				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_MODEL_ALLOCATION_UPSERTED", "ProductionPlan", plan.id, { allocationId: allocation.id, modelId: model.id, partsListVersionId });
+				return { status: 200, body: { allocationId: allocation.id, modelId: allocation.modelId, plannedQuantity: allocation.plannedQuantity, partsListVersionId, planRowVersion: updatedPlan.rowVersion }, headers: resourceHeaders(plan.id, updatedPlan.rowVersion) };
+			});
+			respondCommand(res, response);
+		} catch (error) {
+			commandError(error, req, res, next);
+		}
+	});
+
+	router.post("/production-plans/:planId/parts-list-versions", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, productionPlanPartsListVersionSchema);
+			const expectedVersion = requireIfMatch(req, "production plan");
+			const response = await executeCommand(database, req, "productionPlanPartsListVersionCreate", { planId: req.params.planId, body }, async (transaction) => {
+				const plan = await transaction.project.findUnique({ where: { id: req.params.planId }, select: { id: true, status: true, rowVersion: true } });
+				if (!plan) notFound("The requested production plan was not found.");
+				if (plan.rowVersion !== expectedVersion) staleVersion();
+				ensurePlanEditable(plan);
+
+				const partIds = [...new Set(body.steps.map((step) => step.partId))];
+				const parts = await transaction.part.findMany({ where: { projectId: plan.id, id: { in: partIds } }, select: { id: true } });
+				if (parts.length !== partIds.length) notFound("Every route step must reference a part in the production plan.");
+				const stageIds = [...new Set(body.steps.map((step) => step.stageId))];
+				const subStageIds = [...new Set(body.steps.flatMap((step) => step.subStageId ? [step.subStageId] : []))];
+				const [stages, subStages] = await Promise.all([
+					transaction.stage.findMany({ where: { id: { in: stageIds } }, select: { id: true } }),
+					transaction.subStage.findMany({ where: { id: { in: subStageIds } }, select: { id: true, eligibleStages: { select: { stageId: true } } } }),
+				]);
+				if (stages.length !== stageIds.length) notFound("Every route step must reference a configured stage.");
+				if (subStages.length !== subStageIds.length) notFound("Every route step must reference a configured sub-stage.");
+				const eligibleStagePairs = new Set(subStages.flatMap((subStage) => subStage.eligibleStages.map((eligibility) => `${subStage.id}:${eligibility.stageId}`)));
+				if (body.steps.some((step) => step.subStageId !== null && step.subStageId !== undefined && !eligibleStagePairs.has(`${step.subStageId}:${step.stageId}`))) {
+					conflict("Every route sub-stage must be eligible under its selected stage.");
+				}
+				const routeIdentity = new Set<string>();
+				const partOrders = new Set<string>();
+				for (const step of body.steps) {
+					const identity = `${step.partId}:${step.stageId}:${step.subStageId ?? ""}`;
+					const order = `${step.partId}:${step.stepOrder}`;
+					if (routeIdentity.has(identity)) conflict("A part cannot repeat the same route stage.");
+					if (partOrders.has(order)) conflict("A part cannot repeat a route step order.");
+					routeIdentity.add(identity);
+					partOrders.add(order);
+				}
+
+				const previous = await transaction.partsList.findFirst({ where: { projectId: plan.id }, orderBy: [{ version: "desc" }, { id: "desc" }], select: { version: true } });
+				const partsList = await transaction.partsList.create({
+					data: {
+						projectId: plan.id,
+						version: (previous?.version ?? 0) + 1,
+						status: "DRAFT",
+						sourceRevisionRef: body.sourceRevisionRef ?? null,
+						steps: { create: body.steps.map((step) => ({ partId: step.partId, stageId: step.stageId, subStageId: step.subStageId ?? null, stepOrder: step.stepOrder })) },
+					},
+					select: { id: true, version: true },
+				});
+				const updatedPlan = await transaction.project.update({ where: { id: plan.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
+				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_PARTS_LIST_VERSION_CREATED", "PartsList", partsList.id, { planId: plan.id, version: partsList.version, stepCount: body.steps.length });
+				return { status: 201, body: { partsListVersionId: partsList.id, version: partsList.version, planRowVersion: updatedPlan.rowVersion }, headers: resourceHeaders(plan.id, updatedPlan.rowVersion) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
