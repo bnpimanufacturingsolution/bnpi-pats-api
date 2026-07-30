@@ -20,6 +20,8 @@ type DomainReadDatabase = Pick<
 	| "qualityInspection"
 	| "qualityDecision"
 	| "planDemandAllocation"
+	| "lot"
+	| "part"
 >;
 
 const PROBLEM_TYPE = {
@@ -156,6 +158,23 @@ function dashboardProgress(
 			return { projectId, projectName: project.projectName, productName: project.productName, plannedQuantity: project.plannedQuantity, activeQuantity: project.activeQuantity, activeBatchCount: project.activeBatchCount, segments };
 		})
 		.sort((left, right) => right.activeBatchCount - left.activeBatchCount || left.productName.localeCompare(right.productName));
+}
+
+function reportDateKey(value: Date): string {
+	return value.toISOString().slice(0, 10);
+}
+
+function reportDateBuckets(now: Date): string[] {
+	const buckets: string[] = [];
+	const cursor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+	for (let offset = 6; offset >= 0; offset -= 1) {
+		const bucket = new Date(cursor);
+		bucket.setUTCDate(cursor.getUTCDate() - offset);
+		buckets.push(reportDateKey(bucket));
+	}
+
+	return buckets;
 }
 
 export function domainReadRouter(
@@ -565,15 +584,107 @@ export function domainReadRouter(
 
 	router.get("/reports/line", requireCapability("execution.read"), async (req, res) => {
 		try {
-			const [plans, batches, events, violations, qualityDecisions, transactions] = await Promise.all([
+			const reportNow = new Date();
+			const throughputStart = new Date(Date.UTC(reportNow.getUTCFullYear(), reportNow.getUTCMonth(), reportNow.getUTCDate()));
+			throughputStart.setUTCDate(throughputStart.getUTCDate() - 6);
+			const [plans, batches, events, violations, qualityDecisions, transactions, stages, activityRows, throughputRows, inventoryRows, violationRows, closedBatchRows] = await Promise.all([
 				database.project.count(),
 				database.batch.count(),
 				database.stageEvent.count({ where: { status: "ACCEPTED" } }),
 				database.routingViolation.count(),
 				database.qualityDecision.count(),
 				database.inventoryTransaction.count(),
+				database.stage.findMany({ select: { id: true, name: true }, orderBy: [{ displayOrder: "asc" }, { id: "asc" }] }),
+				database.stageEvent.findMany({ take: 50, orderBy: [{ occurredAt: "desc" }, { id: "desc" }], include: { actorSubject: { select: { displayNameSnapshot: true } } } }),
+				database.stageEvent.findMany({ where: { status: "ACCEPTED", eventType: "STAGE_COMPLETED", occurredAt: { gte: throughputStart } }, select: { quantity: true, quantityMagnitude: true, occurredAt: true } }),
+				database.inventoryTransaction.findMany({ take: 100, orderBy: [{ recordedAt: "desc" }, { id: "desc" }], include: { recordedBySubject: { select: { displayNameSnapshot: true } } } }),
+				database.routingViolation.findMany({ take: 100, orderBy: [{ detectedAt: "desc" }, { id: "desc" }] }),
+				database.batch.findMany({ where: { status: { in: ["CLOSED", "HELD", "SCRAPPED"] } }, take: 100, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, batchCode: true, plannedQuantity: true, currentStageId: true, status: true } }),
 			]);
-			res.setHeader("Cache-Control", "no-store").json({ generatedAt: new Date().toISOString(), production: { plans, batches, acceptedStageEvents: events }, exceptions: { routingViolations: violations }, quality: { decisions: qualityDecisions }, traceability: { inventoryTransactions: transactions } });
+			const stageNames = new Map(stages.map((stage) => [stage.id, stage.name]));
+			const identityIds = {
+				batch: [...new Set([...activityRows.map((row) => row.batchId), ...inventoryRows.map((row) => row.batchId), ...violationRows.map((row) => row.batchId)])],
+				lot: [...new Set([...inventoryRows.map((row) => row.lotId), ...violationRows.map((row) => row.lotId)])],
+				part: [...new Set([...activityRows.map((row) => row.partId), ...inventoryRows.map((row) => row.partId), ...violationRows.map((row) => row.partId)].filter((id): id is string => Boolean(id)))],
+			};
+			const [batchIdentities, lotIdentities, partIdentities] = await Promise.all([
+				database.batch.findMany({ where: { id: { in: identityIds.batch } }, select: { id: true, batchCode: true } }),
+				database.lot.findMany({ where: { id: { in: identityIds.lot } }, select: { id: true, lotCode: true } }),
+				database.part.findMany({ where: { id: { in: identityIds.part } }, select: { id: true, partCode: true, partName: true, variancePercentThreshold: true } }),
+			]);
+			const batchCodes = new Map(batchIdentities.map((batch) => [batch.id, batch.batchCode]));
+			const lotCodes = new Map(lotIdentities.map((lot) => [lot.id, lot.lotCode]));
+			const parts = new Map(partIdentities.map((part) => [part.id, part]));
+			const activity = activityRows.map((event) => ({
+				id: event.id,
+				occurredAt: event.occurredAt.toISOString(),
+				stepName: stageNames.get(event.stageId) ?? event.stageId,
+				batchId: batchCodes.get(event.batchId) ?? event.batchId,
+				actor: event.actorSubject?.displayNameSnapshot ?? event.actor,
+				eventType: event.eventType,
+				isRoutingViolation: event.isRoutingViolation,
+			}));
+			const actualByDate = new Map<string, number>();
+			for (const event of throughputRows) {
+				const quantity = Number(event.quantityMagnitude ?? event.quantity ?? 0);
+				if (!Number.isFinite(quantity)) continue;
+				const key = reportDateKey(event.occurredAt);
+				actualByDate.set(key, (actualByDate.get(key) ?? 0) + quantity);
+			}
+			const dailyThroughput = reportDateBuckets(reportNow).map((date) => ({ date, expected: null, actual: actualByDate.get(date) ?? 0 }));
+			const closedLots = closedBatchRows.map((batch) => ({
+				id: batch.batchCode,
+				closedAt: null,
+				finalStage: stageNames.get(batch.currentStageId) ?? batch.currentStageId,
+				qty: String(batch.plannedQuantity),
+				result: batch.status === "CLOSED" ? "Closed" : batch.status === "HELD" ? "Held" : "Scrapped",
+				exception: batch.status === "CLOSED" ? "None" : `Batch ${batch.status.toLowerCase()}`,
+			}));
+			const routingViolations = violationRows.map((violation) => {
+				const part = parts.get(violation.partId);
+				const expectedSteps = Array.isArray(violation.expectedSteps) ? violation.expectedSteps : [];
+				return {
+					routingViolationId: violation.id,
+					partId: violation.partId,
+					partCode: part?.partCode ?? "Unknown",
+					partName: part?.partName ?? "Unknown part",
+					batchId: violation.batchId,
+					lotId: violation.lotId,
+					lotCode: lotCodes.get(violation.lotId) ?? "Unknown lot",
+					attemptedStageName: stageNames.get(violation.attemptedStageId) ?? violation.attemptedStageId,
+					expectedStageNames: expectedSteps.map((step) => {
+						const stageId = typeof step === "object" && step !== null && "stageId" in step ? String(step.stageId) : "";
+						return stageNames.get(stageId) ?? stageId;
+					}).filter(Boolean),
+					detectedAt: violation.detectedAt.toISOString(),
+					resolved: violation.resolved,
+				};
+			});
+			const inventoryTransactions = inventoryRows.map((transaction) => {
+				const part = parts.get(transaction.partId);
+				const variancePercent = transaction.expectedQuantity === 0
+					? transaction.actualQuantity === 0 ? 0 : 1
+					: (transaction.actualQuantity - transaction.expectedQuantity) / transaction.expectedQuantity;
+				const threshold = part?.variancePercentThreshold ?? 0.05;
+				return {
+					inventoryTransactionId: transaction.id,
+					transactionType: transaction.transactionType === "RECEIVING" ? "Receiving" : "Issuance",
+					partCode: part?.partCode ?? "Unknown",
+					partName: part?.partName ?? "Unknown part",
+					lotCode: lotCodes.get(transaction.lotId) ?? "Unknown lot",
+					batchId: transaction.batchId,
+					fromStageName: transaction.fromStageId ? stageNames.get(transaction.fromStageId) ?? transaction.fromStageId : null,
+					toStageName: stageNames.get(transaction.toStageId) ?? transaction.toStageId,
+					expectedQuantity: transaction.expectedQuantity,
+					actualQuantity: transaction.actualQuantity,
+					variancePercent,
+					exceedsVarianceThreshold: Math.abs(variancePercent) > threshold,
+					withdrawalFormRef: transaction.withdrawalFormRef ?? undefined,
+					recordedAt: transaction.recordedAt.toISOString(),
+					recordedBy: transaction.recordedBySubject?.displayNameSnapshot ?? transaction.recordedBy,
+				};
+			});
+			res.setHeader("Cache-Control", "no-store").json({ generatedAt: new Date().toISOString(), production: { plans, batches, acceptedStageEvents: events }, exceptions: { routingViolations: violations }, quality: { decisions: qualityDecisions }, traceability: { inventoryTransactions: transactions }, dailyThroughput, activity, closedLots, routingViolations, inventoryTransactions });
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS line report data is unavailable.");
 		}

@@ -340,6 +340,50 @@ describe("canonical PATS domain read contract", () => {
 		]);
 	});
 
+	it("returns server-owned line activity, throughput evidence, closed batches, and traceability rows", async () => {
+		const occurredAt = new Date();
+		const app = appFor({
+			project: { count: async () => 2 },
+			batch: {
+				count: async () => 4,
+				findMany: async (args: { where?: { status?: unknown } }) =>
+					args.where?.status
+						? [{ id: "batch-closed", batchCode: "BATCH-CLOSED", plannedQuantity: 40, currentStageId: "stage-1", status: "CLOSED" }]
+						: [{ id: "batch-1", batchCode: "BATCH-001" }],
+			},
+			lot: { findMany: async () => [{ id: "lot-1", lotCode: "LOT-001" }] },
+			part: { findMany: async () => [{ id: "part-1", partCode: "PART-001", partName: "Main part", variancePercentThreshold: 0.05 }] },
+			stage: { findMany: async () => [{ id: "stage-1", name: "Injection", displayOrder: 1 }] },
+			stageEvent: {
+				count: async () => 1,
+				findMany: async (args: { select?: unknown }) =>
+					args.select
+						? [{ quantity: 40, quantityMagnitude: "40", occurredAt }]
+						: [{ id: "event-1", stageId: "stage-1", batchId: "batch-1", lotId: "lot-1", partId: "part-1", eventType: "STAGE_COMPLETED", actor: "Operator", isRoutingViolation: false, occurredAt, actorSubject: { displayNameSnapshot: "Operator One" } }],
+			},
+			routingViolation: {
+				count: async () => 1,
+				findMany: async () => [{ id: "violation-1", partId: "part-1", batchId: "batch-1", lotId: "lot-1", attemptedStageId: "stage-1", expectedSteps: [{ stageId: "stage-1" }], detectedAt: occurredAt, resolved: false }],
+			},
+			qualityDecision: { count: async () => 1 },
+			inventoryTransaction: {
+				count: async () => 1,
+				findMany: async () => [{ id: "inventory-1", transactionType: "ISSUANCE", partId: "part-1", lotId: "lot-1", batchId: "batch-1", fromStageId: null, toStageId: "stage-1", expectedQuantity: 40, actualQuantity: 35, withdrawalFormRef: "WF-001", recordedAt: occurredAt, recordedBy: "Operator", recordedBySubject: { displayNameSnapshot: "Operator One" } }],
+			},
+		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/reports/line")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.activity[0]).to.include({ batchId: "BATCH-001", stepName: "Injection", actor: "Operator One" });
+		expect(response.body.closedLots[0]).to.include({ id: "BATCH-CLOSED", finalStage: "Injection", result: "Closed" });
+		expect(response.body.routingViolations[0]).to.include({ partCode: "PART-001", lotCode: "LOT-001", attemptedStageName: "Injection", resolved: false });
+		expect(response.body.inventoryTransactions[0]).to.include({ partCode: "PART-001", lotCode: "LOT-001", exceedsVarianceThreshold: true });
+		expect(response.body.dailyThroughput).to.have.length(7);
+	});
+
 	it("fails planning reads closed when the subject lacks planning.read", async () => {
 		const app = appFor({ project: { count: async () => 0, findMany: async () => [] } }, [
 			{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" },

@@ -1,0 +1,60 @@
+[
+  {
+    "id": "dashboardSummaryGet",
+    "method": "GET",
+    "url": "/dashboard-summaries",
+    "summary": "Read dashboard counts derived from server ledgers",
+    "tags": [
+      "PATS Reporting"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "lineReportGet",
+    "method": "GET",
+    "url": "/reports/line",
+    "summary": "Read the server-owned line reporting projection",
+    "tags": [
+      "PATS Reporting"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

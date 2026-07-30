@@ -141,20 +141,252 @@ components:
                     - stageId
                     - stageName
                     - quantity
-                  properties:
-                    kind:
-                      type: string
-                      enum:
-                        - stage
-                        - blocked
-                        - remaining
-                    stageId:
-                      type: string
-                    stageName:
-                      type: string
-                    quantity:
-                      type: number
-                      minimum: 0
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - stage
+                    - blocked
+                    - remaining
+                stageId:
+                  type: string
+                stageName:
+                  type: string
+                quantity:
+                  type: number
+                  minimum: 0
+    LineReport:
+      type: object
+      required:
+        - generatedAt
+        - production
+        - exceptions
+        - quality
+        - traceability
+        - dailyThroughput
+        - activity
+        - closedLots
+        - routingViolations
+        - inventoryTransactions
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        production:
+          type: object
+          required:
+            - plans
+            - batches
+            - acceptedStageEvents
+          properties:
+            plans:
+              type: integer
+              minimum: 0
+            batches:
+              type: integer
+              minimum: 0
+            acceptedStageEvents:
+              type: integer
+              minimum: 0
+        exceptions:
+          type: object
+          required:
+            - routingViolations
+          properties:
+            routingViolations:
+              type: integer
+              minimum: 0
+        quality:
+          type: object
+          required:
+            - decisions
+          properties:
+            decisions:
+              type: integer
+              minimum: 0
+        traceability:
+          type: object
+          required:
+            - inventoryTransactions
+          properties:
+            inventoryTransactions:
+              type: integer
+              minimum: 0
+        dailyThroughput:
+          type: array
+          items:
+            type: object
+            required:
+              - date
+              - actual
+            properties:
+              date:
+                type: string
+                format: date
+              expected:
+                type: number
+                nullable: true
+              actual:
+                type: number
+                minimum: 0
+        activity:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - occurredAt
+              - stepName
+              - batchId
+              - actor
+              - eventType
+              - isRoutingViolation
+            properties:
+              id:
+                type: string
+              occurredAt:
+                type: string
+                format: date-time
+              stepName:
+                type: string
+              batchId:
+                type: string
+              actor:
+                type: string
+              eventType:
+                type: string
+              isRoutingViolation:
+                type: boolean
+        closedLots:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - closedAt
+              - finalStage
+              - qty
+              - result
+              - exception
+            properties:
+              id:
+                type: string
+              closedAt:
+                type: string
+                format: date-time
+                nullable: true
+              finalStage:
+                type: string
+              qty:
+                type: string
+              result:
+                type: string
+                enum:
+                  - Closed
+                  - Held
+                  - Scrapped
+              exception:
+                type: string
+        routingViolations:
+          type: array
+          items:
+            type: object
+            required:
+              - routingViolationId
+              - partId
+              - partCode
+              - partName
+              - batchId
+              - lotId
+              - lotCode
+              - attemptedStageName
+              - expectedStageNames
+              - detectedAt
+              - resolved
+            properties:
+              routingViolationId:
+                type: string
+              partId:
+                type: string
+              partCode:
+                type: string
+              partName:
+                type: string
+              batchId:
+                type: string
+              lotId:
+                type: string
+              lotCode:
+                type: string
+              attemptedStageName:
+                type: string
+              expectedStageNames:
+                type: array
+                items:
+                  type: string
+              detectedAt:
+                type: string
+                format: date-time
+              resolved:
+                type: boolean
+        inventoryTransactions:
+          type: array
+          items:
+            type: object
+            required:
+              - inventoryTransactionId
+              - transactionType
+              - partCode
+              - partName
+              - lotCode
+              - batchId
+              - fromStageName
+              - toStageName
+              - expectedQuantity
+              - actualQuantity
+              - variancePercent
+              - exceedsVarianceThreshold
+              - recordedAt
+              - recordedBy
+            properties:
+              inventoryTransactionId:
+                type: string
+              transactionType:
+                type: string
+                enum:
+                  - Receiving
+                  - Issuance
+              partCode:
+                type: string
+              partName:
+                type: string
+              lotCode:
+                type: string
+              batchId:
+                type: string
+              fromStageName:
+                type: string
+                nullable: true
+              toStageName:
+                type: string
+              expectedQuantity:
+                type: integer
+                minimum: 0
+              actualQuantity:
+                type: integer
+                minimum: 0
+              variancePercent:
+                type: number
+              exceedsVarianceThreshold:
+                type: boolean
+              withdrawalFormRef:
+                type: string
+                nullable: true
+              recordedAt:
+                type: string
+                format: date-time
+              recordedBy:
+                type: string
     CollectionEnvelope:
       type: object
       required:
@@ -257,6 +489,13 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/DashboardSummary"
+    LineReportRead:
+      description: Server-owned line activity, throughput evidence, closed-batch, and
+        traceability projection
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LineReport"
     CommandRead:
       description: Command result and resource projection
       content:
@@ -1872,13 +2111,13 @@ paths:
   /reports/line:
     get:
       operationId: lineReportGet
-      summary: Read line-level production, quality, exception, and traceability totals
+      summary: Read the server-owned line reporting projection
       tags:
         - PATS Reporting
       x-required-capability: execution.read
       responses:
         "200":
-          $ref: "#/components/responses/ResourceRead"
+          $ref: "#/components/responses/LineReportRead"
         "403":
           $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403
         "503":

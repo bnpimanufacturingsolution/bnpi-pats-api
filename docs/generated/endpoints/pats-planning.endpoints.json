@@ -1,0 +1,203 @@
+[
+  {
+    "id": "productionPlanCollectionGet",
+    "method": "GET",
+    "url": "/production-plans",
+    "summary": "List production-plan summaries",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanCreate",
+    "method": "POST",
+    "url": "/production-plans",
+    "summary": "Create a draft production plan",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanGet",
+    "method": "GET",
+    "url": "/production-plans/{planId}",
+    "summary": "Read a production plan and its planning snapshot",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanPatch",
+    "method": "PATCH",
+    "url": "/production-plans/{planId}",
+    "summary": "Update a draft production plan",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanRelease",
+    "method": "POST",
+    "url": "/production-plans/{planId}/release",
+    "summary": "Release a draft or ready production plan",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanLotCreate",
+    "method": "POST",
+    "url": "/production-plans/{planId}/lots",
+    "summary": "Create a planned lot and its part allocation",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]
