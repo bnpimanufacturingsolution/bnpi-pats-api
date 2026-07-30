@@ -95,6 +95,124 @@
           "lastName",
           "role"
         ]
+      },
+      "CollectionEnvelope": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {}
+          }
+        }
+      },
+      "PaginatedEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {}
+          },
+          "pagination": {
+            "type": "object",
+            "required": [
+              "page",
+              "pageSize",
+              "totalItems",
+              "totalPages"
+            ],
+            "properties": {
+              "page": {
+                "type": "integer"
+              },
+              "pageSize": {
+                "type": "integer"
+              },
+              "totalItems": {
+                "type": "integer"
+              },
+              "totalPages": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      "BatchId": {
+        "name": "batch_id",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "PlanId": {
+        "name": "planId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "responses": {
+      "CollectionRead": {
+        "description": "Collection of server-owned resources",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CollectionEnvelope"
+            }
+          }
+        }
+      },
+      "PaginatedRead": {
+        "description": "Paginated collection of server-owned resources",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PaginatedEnvelope"
+            }
+          }
+        }
+      },
+      "ResourceRead": {
+        "description": "Server-owned resource or projection",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
       }
     }
   },
@@ -1993,6 +2111,420 @@
           },
           "412": {
             "description": "Stale or missing If-Match"
+          }
+        }
+      }
+    },
+    "openapi": {
+      "0": "3",
+      "1": ".",
+      "2": "1",
+      "3": ".",
+      "4": "0"
+    },
+    "info": {
+      "title": "Bandai PATS API v1 Operational Read Contracts",
+      "version": "2026-07-31",
+      "description": "Server-owned read resources for configuration, planning, execution, quality, dashboard, and line reporting."
+    },
+    "servers": {
+      "0": {
+        "url": "/api/v1"
+      }
+    },
+    "/workflow-groups": {
+      "get": {
+        "operationId": "workflowGroupCollectionGet",
+        "summary": "Read deployment-owned workflow groups",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CollectionRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/stages": {
+      "get": {
+        "operationId": "stageCollectionGet",
+        "summary": "Read configured production stages",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CollectionRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/sub-stages": {
+      "get": {
+        "operationId": "subStageCollectionGet",
+        "summary": "Read configured production substages",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CollectionRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/stations": {
+      "get": {
+        "operationId": "stationCollectionGet",
+        "summary": "Read physical production stations",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CollectionRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/station-steps": {
+      "get": {
+        "operationId": "stationStepCollectionGet",
+        "summary": "Read station-to-stage bindings",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CollectionRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/work-instructions": {
+      "get": {
+        "operationId": "workInstructionCollectionGet",
+        "summary": "Read versioned work instructions",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CollectionRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/production-plans": {
+      "get": {
+        "operationId": "productionPlanCollectionGet",
+        "summary": "List production-plan summaries",
+        "tags": [
+          "PATS Planning"
+        ],
+        "x-required-capability": "planning.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedRead"
+          },
+          "400": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/production-plans/{planId}": {
+      "get": {
+        "operationId": "productionPlanGet",
+        "summary": "Read a production plan and its planning snapshot",
+        "tags": [
+          "PATS Planning"
+        ],
+        "x-required-capability": "planning.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PlanId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ResourceRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/batches": {
+      "get": {
+        "operationId": "batchCollectionGet",
+        "summary": "List batches and their current positions",
+        "tags": [
+          "PATS Execution"
+        ],
+        "x-required-capability": "execution.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/BatchId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedRead"
+          },
+          "400": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/batch-positions": {
+      "get": {
+        "operationId": "batchPositionCollectionGet",
+        "summary": "Read rebuildable batch-position projections",
+        "tags": [
+          "PATS Execution"
+        ],
+        "x-required-capability": "execution.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CollectionRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/stage-events": {
+      "get": {
+        "operationId": "stageEventCollectionGet",
+        "summary": "Read append-only stage execution evidence",
+        "tags": [
+          "PATS Execution"
+        ],
+        "x-required-capability": "execution.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/BatchId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedRead"
+          },
+          "400": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/inventory-transactions": {
+      "get": {
+        "operationId": "inventoryTransactionCollectionGet",
+        "summary": "Read append-only inventory evidence",
+        "tags": [
+          "PATS Inventory"
+        ],
+        "x-required-capability": "inventory.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/BatchId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedRead"
+          },
+          "400": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/routing-violations": {
+      "get": {
+        "operationId": "routingViolationCollectionGet",
+        "summary": "Read routing violations and their resolution state",
+        "tags": [
+          "PATS Exceptions"
+        ],
+        "x-required-capability": "execution.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CollectionRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/quality-inspections": {
+      "get": {
+        "operationId": "qualityInspectionCollectionGet",
+        "summary": "Read quality inspections and decisions",
+        "tags": [
+          "PATS Quality"
+        ],
+        "x-required-capability": "quality.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CollectionRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/dashboard-summaries": {
+      "get": {
+        "operationId": "dashboardSummaryGet",
+        "summary": "Read dashboard counts derived from server ledgers",
+        "tags": [
+          "PATS Reporting"
+        ],
+        "x-required-capability": "execution.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ResourceRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/reports/line": {
+      "get": {
+        "operationId": "lineReportGet",
+        "summary": "Read line-level production, quality, exception, and traceability totals",
+        "tags": [
+          "PATS Reporting"
+        ],
+        "x-required-capability": "execution.read",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ResourceRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
           }
         }
       }

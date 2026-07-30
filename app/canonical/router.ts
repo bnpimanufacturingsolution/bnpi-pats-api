@@ -76,6 +76,10 @@ export interface CanonicalRouterOptions {
 		router: Router;
 		requiredCapability: string;
 	};
+	/** Optional deployment-scoped operational read boundary backed by canonical PATS persistence. */
+	domainReads?: {
+		router: Router;
+	};
 }
 
 interface CanonicalIdentityRequest extends Request {
@@ -172,7 +176,7 @@ function requireCanonicalIdentity(
 	};
 }
 
-function requireCanonicalCapability(
+export function requireCanonicalCapability(
 	capability: string,
 ): (req: Request, res: Response, next: NextFunction) => void {
 	return (req: Request, res: Response, next: NextFunction) => {
@@ -727,6 +731,37 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 		router.all("/catalog/bom-definitions/:bomDefinitionId", (req: Request, res: Response) =>
 			canonicalMethodNotAllowed(req, res, "GET"),
 		);
+	}
+
+	if (options.domainReads) {
+		const domainReadIdentity =
+			identityMiddleware ??
+			((_req: Request, res: Response) => identityUnavailable(_req, res));
+		const domainReadPrefixes = [
+			"/production-plans",
+			"/workflow-groups",
+			"/stages",
+			"/sub-stages",
+			"/stations",
+			"/station-steps",
+			"/work-instructions",
+			"/batches",
+			"/batch-positions",
+			"/stage-events",
+			"/inventory-transactions",
+			"/routing-violations",
+			"/quality-inspections",
+			"/dashboard-summaries",
+			"/reports",
+		];
+		const domainReadIdentityGate: RequestHandler = (req, res, next) => {
+			if (domainReadPrefixes.some((prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`))) {
+				domainReadIdentity(req, res, next);
+				return;
+			}
+			next();
+		};
+		router.use(domainReadIdentityGate, options.domainReads.router);
 	}
 
 	router.use((req: Request, res: Response) => {

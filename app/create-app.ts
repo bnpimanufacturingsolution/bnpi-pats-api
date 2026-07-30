@@ -21,6 +21,7 @@ import {
 	type LegacyRouteRegistration,
 } from "./legacy/register-legacy-routes";
 import { patsModule } from "./pats";
+import { domainReadRouter } from "./pats/domain-read";
 import { catalogController, catalogProductCollectionController } from "./pats/catalog";
 import { catalogFoundationRouter } from "./pats/catalog-foundation";
 import { bomFoundationRouter } from "./pats/bom-foundation";
@@ -30,7 +31,7 @@ import {
 } from "./pats/bom";
 import { processRouteFoundationRouter } from "./pats/process-route-foundation";
 import { createMinioObjectStorage } from "./storage/minio-object-storage";
-import { canonicalRouter } from "./canonical/router";
+import { canonicalRouter, requireCanonicalCapability } from "./canonical/router";
 import { PrismaCatalogIdempotencyStore } from "./canonical/prisma-idempotency-store";
 import type { IdentityDependencies } from "./identity/types";
 import { createLocalAuthDependencies, type LocalAuthDependencies } from "./identity/local-auth";
@@ -129,7 +130,10 @@ export function createApp(options: AppOptions = {}): Application {
 						processRouteFoundationRouter(patsPrisma, {
 							idempotencyStore: catalogIdempotencyStore,
 						}),
-					),
+						),
+			},
+			domainReads: {
+				router: domainReadRouter(patsPrisma, requireCanonicalCapability),
 			},
 		}),
 	);
