@@ -98,7 +98,9 @@ async function seedProfile(tx) {
 	const decorationStageId = stableId("stage-decoration");
 	const assemblyStageId = stableId("stage-assembly");
 	const qcSubStageId = stableId("substage-quality-check");
-	const stationId = stableId("station-injection-01");
+	const injectionStationId = stableId("station-injection-01");
+	const decorationStationId = stableId("station-decoration-01");
+	const assemblyStationId = stableId("station-assembly-01");
 
 	await tx.product.upsert({
 		where: { id: productId },
@@ -225,15 +227,21 @@ async function seedProfile(tx) {
 		});
 	}
 
-	await tx.station.upsert({
-		where: { id: stationId },
-		update: { workspaceId: "PATS", name: `${prefix} Injection Station 01`, stationCode: code("ST-INJ-01"), operationalContextKey: "PATS", stageId: injectionStageId, displayOrder: 1, isEnabled: true },
-		create: { id: stationId, workspaceId: "PATS", name: `${prefix} Injection Station 01`, stationCode: code("ST-INJ-01"), operationalContextKey: "PATS", stageId: injectionStageId, displayOrder: 1, isEnabled: true },
-	});
-	for (const [id, stageId, subStageId] of [
-		[stableId("station-step-injection"), injectionStageId, null],
-		[stableId("station-step-decoration"), decorationStageId, null],
-		[stableId("station-step-qc"), assemblyStageId, qcSubStageId],
+	for (const [id, name, stationCode, stageId, displayOrder] of [
+		[injectionStationId, "Injection Station 01", "ST-INJ-01", injectionStageId, 1],
+		[decorationStationId, "Decoration Station 01", "ST-DEC-01", decorationStageId, 2],
+		[assemblyStationId, "Assembly Station 01", "ST-ASM-01", assemblyStageId, 3],
+	]) {
+		await tx.station.upsert({
+			where: { id },
+			update: { workspaceId: "PATS", name: `${prefix} ${name}`, stationCode: code(stationCode), operationalContextKey: "PATS", stageId, displayOrder, isEnabled: true },
+			create: { id, workspaceId: "PATS", name: `${prefix} ${name}`, stationCode: code(stationCode), operationalContextKey: "PATS", stageId, displayOrder, isEnabled: true },
+		});
+	}
+	for (const [id, stationId, stageId, subStageId] of [
+		[stableId("station-step-injection"), injectionStationId, injectionStageId, null],
+		[stableId("station-step-decoration"), decorationStationId, decorationStageId, null],
+		[stableId("station-step-qc"), assemblyStationId, assemblyStageId, qcSubStageId],
 	]) {
 		await tx.stationStep.upsert({
 			where: { id },
@@ -368,8 +376,8 @@ async function seedProfile(tx) {
 	const inspectionId = stableId("quality-inspection-001");
 	await tx.qualityInspection.upsert({
 		where: { id: inspectionId },
-		update: { batchId, stageId: assemblyStageId, subStageId: qcSubStageId, stationId, inspectedQuantity: "495.000000", quantityUom: "piece", status: "COMPLETED", inspectedBySubjectId: quality.id, evidence: { seedProfile: profile, evidenceStatus: "PROVISIONAL" }, startedAt: new Date("2026-07-28T10:30:00.000Z"), completedAt: new Date("2026-07-28T10:45:00.000Z") },
-		create: { id: inspectionId, batchId, stageId: assemblyStageId, subStageId: qcSubStageId, stationId, inspectedQuantity: "495.000000", quantityUom: "piece", status: "COMPLETED", inspectedBySubjectId: quality.id, evidence: { seedProfile: profile, evidenceStatus: "PROVISIONAL" }, startedAt: new Date("2026-07-28T10:30:00.000Z"), completedAt: new Date("2026-07-28T10:45:00.000Z") },
+		update: { batchId, stageId: assemblyStageId, subStageId: qcSubStageId, stationId: assemblyStationId, inspectedQuantity: "495.000000", quantityUom: "piece", status: "COMPLETED", inspectedBySubjectId: quality.id, evidence: { seedProfile: profile, evidenceStatus: "PROVISIONAL" }, startedAt: new Date("2026-07-28T10:30:00.000Z"), completedAt: new Date("2026-07-28T10:45:00.000Z") },
+		create: { id: inspectionId, batchId, stageId: assemblyStageId, subStageId: qcSubStageId, stationId: assemblyStationId, inspectedQuantity: "495.000000", quantityUom: "piece", status: "COMPLETED", inspectedBySubjectId: quality.id, evidence: { seedProfile: profile, evidenceStatus: "PROVISIONAL" }, startedAt: new Date("2026-07-28T10:30:00.000Z"), completedAt: new Date("2026-07-28T10:45:00.000Z") },
 	});
 	await tx.qualityDecision.upsert({
 		where: { id: stableId("quality-decision-001") },
