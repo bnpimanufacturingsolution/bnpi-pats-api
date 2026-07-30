@@ -75,6 +75,15 @@ export function createApp(options: AppOptions = {}): Application {
 	// Request ID tracking (first middleware for all requests)
 	app.use(requestIdMiddleware);
 
+	// CORS must run before canonical routes so browser preflight requests are
+	// answered before the canonical method boundary can return 405.
+	app.use(
+		require("cors")({
+			origin: config.cors.origins,
+			credentials: config.cors.credentials,
+		}),
+	);
+
 	// Canonical PATS routes are intentionally isolated from legacy parsing,
 	// authentication, and error envelopes.
 	app.use(
@@ -117,14 +126,6 @@ export function createApp(options: AppOptions = {}): Application {
 	app.use(express.json());
 	app.use(express.urlencoded({ extended: true }));
 	app.use(require("cookie-parser")());
-
-	// Configure CORS
-	app.use(
-		require("cors")({
-			origin: config.cors.origins,
-			credentials: config.cors.credentials,
-		}),
-	);
 
 	// Apply security middleware AFTER body parsing
 	if (process.env.NODE_ENV === "production") {

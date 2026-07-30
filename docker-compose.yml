@@ -64,6 +64,8 @@ services:
             PORT: 3000
             NODE_ENV: ${NODE_ENV:-production}
             JWT_SECRET: ${JWT_SECRET:-change-me-for-local-dev}
+            CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+            CORS_CREDENTIALS: ${CORS_CREDENTIALS:-false}
             ENABLE_TEST_MODE: "false"
             ENABLE_LEGACY_API: "false"
             REDIS_ENABLED: "false"

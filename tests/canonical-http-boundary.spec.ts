@@ -29,6 +29,18 @@ describe("canonical HTTP boundary", function () {
 		assert.strictEqual(response.text ?? "", "");
 	});
 
+	it("answers browser preflight before the canonical method boundary", async () => {
+		const response = await request(createApp({ enableLegacyRoutes: false }))
+			.options("/api/v1/auth/login")
+			.set("Origin", "http://localhost:5173")
+			.set("Access-Control-Request-Method", "POST")
+			.set("Access-Control-Request-Headers", "content-type,authorization")
+			.expect(204);
+
+		assert.strictEqual(response.headers["access-control-allow-origin"], "http://localhost:5173");
+		assert.match(response.headers["access-control-allow-methods"], /POST/);
+	});
+
 	it("accepts application/json and propagates request correlation and valid trace context", async () => {
 		const requestId = "d54a0aa9-5259-4d24-9fec-3b3a1e98f77c";
 		const response = await request(createApp({ enableLegacyRoutes: false }))
