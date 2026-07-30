@@ -4,6 +4,8 @@ Status: DESIGN GATE — implementation not started
 Date: 2026-07-31
 Repositories: `bnpi-pats-api`, `bnpi-pats-app`
 
+Specification discovery: `docs/superpowers/reports/2026-07-31-full-app-api-integration-specification-discovery.md`
+
 ## Goal
 
 Make the active Bandai PATS application API-backed end to end. The API becomes the source of
@@ -178,27 +180,31 @@ Required behavior:
 
 ## Pass chain
 
-The full transition is eleven sequential passes, with one conditional schema-reconciliation
-subpass if the current Prisma draft cannot satisfy an active-screen invariant.
+Discovery and design are now explicit gates. The full transition has two completed discovery/design
+passes followed by eleven dependency-ordered implementation passes, with a conditional schema
+correction subpass if model convergence finds an active-screen invariant the current draft cannot
+represent.
 
 | Pass | Focus | Exit evidence |
 |---|---|---|
-| 0 | Scope and runtime inventory | Active routes mapped to API resources; fixture/localStorage authority list complete |
-| 1 | Data-model convergence | Current schema reconciled to frozen target; blocking gaps and migration plan recorded |
-| 1A* | Conditional schema correction | Only if Pass 1 finds an active-screen invariant the current schema cannot represent |
-| 2 | Migration and persistence boundary | Additive migration, constraints, transaction seams, and isolated PostgreSQL validation pass |
-| 3 | Deterministic PATS seed | `none/demo/uat` modes, idempotent seed rerun, complete active journey data |
-| 4 | Read API coverage | Catalog/configuration/planning/execution/reporting reads documented and contract-tested |
-| 5 | Write API coverage | Planning/configuration/event/inventory commands with auth, concurrency, idempotency, audit |
-| 6 | App transport cutover | Typed services/query hooks replace runtime fixture reads across active routes |
-| 7 | Planning and catalog integration | API-backed create/edit/release flow and server version refresh |
-| 8 | Line operations integration | API-backed config, stage events, inventory, exceptions, and traceability |
-| 9 | Projections and reporting | Dashboard/reports derive from API read models; no local domain store remains |
-| 10 | Integrated acceptance/release gate | Seeded API + app container/browser smoke, full tests, docs/truth sync, PR handoff |
+| D0 | Scope and runtime inventory | Completed in the specification discovery report; active routes, state authorities, schema, and gaps are mapped |
+| D1 | Integrated specification and model reconciliation | Completed in the specification discovery report; decisions, boundaries, confirmation gates, and acceptance are recorded |
+| I1 | Canonical data-model convergence | Prisma/API model and migration design match the frozen target and active-screen invariants |
+| I1A* | Conditional schema correction | Only if I1 finds an active-screen invariant the current model cannot represent |
+| I2 | Migration and persistence boundary | Additive migration, constraints, transaction seams, and isolated PostgreSQL validation pass |
+| I3 | Deterministic PATS seed | `none/demo/uat` modes, idempotent seed rerun, complete active journey data |
+| I4 | Read API coverage | Catalog/configuration/planning/execution/quality/reporting reads documented and contract-tested |
+| I5 | Write API coverage | Planning/configuration/event/inventory/quality commands with auth, concurrency, idempotency, audit |
+| I6 | App transport foundation | Typed services/query hooks and API error/concurrency behavior cover all active domains |
+| I7 | Planning and catalog integration | API-backed create/edit/release flow, lots, batches, and server snapshots |
+| I8 | Line operations and QC integration | API-backed config, stage events, inventory, quality, exceptions, and traceability |
+| I9 | Projections and reporting | Dashboard/reports derive from API read models; no local domain store remains |
+| I10 | Runtime fixture/local-state removal | Fixtures and domain localStorage are test/offline-preview only |
+| I11 | Integrated acceptance/release gate | Seeded API + app container/browser smoke, full tests, docs/truth sync, PR handoff |
 
 Passes are sequential because the next pass depends on the previous contract. We do not create
-all implementation code up front: Pass 1 may refine the exact migration and Pass 4/5 endpoint
-set, while Pass 3 seed data is created only after the persistence shape is stable.
+all implementation code up front: I1 may refine the exact migration and I4/I5 endpoint set, while
+I3 seed data is created only after the persistence shape is stable.
 
 ## Release gates
 
