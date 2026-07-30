@@ -21,6 +21,7 @@
 		"prisma:pats:format": "node scripts/pats-prisma-format.mjs",
 		"prisma:pats:validate": "node scripts/pats-prisma-validate.mjs",
 		"prisma:pats:generate": "node scripts/pats-prisma-generate.mjs",
+		"prisma:pats:seed": "node scripts/pats-seed.mjs",
 		"prisma:pats:bootstrap-local-admin": "node scripts/pats-bootstrap-local-admin.mjs",
 		"prisma:pats:migrate:dev": "node scripts/pats-prisma-migrate-dev.mjs",
 		"prisma:pats:migrate:deploy": "node scripts/pats-prisma-migrate-deploy.mjs",

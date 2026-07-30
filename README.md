@@ -118,10 +118,21 @@ Generated files are written under `docs/generated/`.
 It is not a canonical PATS seed and must not be used to satisfy the app–API
 integration goal.
 
-The canonical PATS seed and the remaining planning, execution, inventory,
-projection, and reporting persistence are tracked by the full transition plan.
-Seed profiles must be deterministic, idempotent, and explicitly separated from
-client-data migration.
+The canonical PATS seed is `scripts/pats-seed.mjs` and is invoked with
+`pnpm prisma:pats:seed`. It supports `SEED_MODE=none|demo|uat`, requires an
+explicit `PATS_SEED_PASSWORD` for writable profiles, uses deterministic IDs and
+upserts, never clears/deletes records, and marks seeded values as provisional
+evidence. Example:
+
+```bash
+SEED_MODE=demo \
+PATS_DATABASE_URL=postgresql://pats:pats@localhost:5432/pats \
+PATS_SEED_PASSWORD='replace-with-a-development-password' \
+pnpm prisma:pats:seed
+```
+
+Seed profiles are development/UAT data, not client-data migration or source
+publication. The legacy seed remains unchanged and explicitly compatibility-only.
 
 ## Technology
 
