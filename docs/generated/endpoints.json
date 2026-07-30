@@ -3193,7 +3193,24 @@
     "queryParams": [],
     "responses": {
       "200": {
-        "contentTypes": []
+        "description": "Server-owned quality inspections with batch and latest-decision evidence.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "data"
+          ],
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/QualityInspection"
+              }
+            }
+          }
+        },
+        "contentTypes": [
+          "application/json"
+        ]
       },
       "403": {
         "contentTypes": []

@@ -177,6 +177,57 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.data).to.deep.equal([{ id: "stage-1", name: "Injection", workflowGroup: { id: "group-1", name: "Factory" }, subStageLinks: [] }]);
 	});
 
+	it("returns quality inspections with server-owned batch and part evidence", async () => {
+		const startedAt = new Date("2026-07-31T00:00:00.000Z");
+		const app = appFor(
+			{
+				qualityInspection: {
+					findMany: async () => [
+						{
+							id: "inspection-1",
+							batchId: "batch-1",
+							stageId: "stage-assembly",
+							subStageId: null,
+							stationId: "station-qc",
+							inspectedQuantity: "25",
+							quantityUom: "PCS",
+							status: "OPEN",
+							evidence: null,
+							startedAt,
+							completedAt: null,
+							rowVersion: 1,
+							createdAt: startedAt,
+							updatedAt: startedAt,
+							decisions: [],
+							batch: {
+								id: "batch-1",
+								batchCode: "B-1001",
+								lotId: "lot-1",
+								plannedQuantity: 30,
+								parts: [{
+									partId: "part-1",
+									quantity: 30,
+									quantityMagnitude: "30",
+									quantityUom: "PCS",
+									part: { id: "part-1", partCode: "PART-1", partName: "Casing Upper" },
+								}],
+							},
+						},
+					],
+				},
+			},
+			[{ kind: "ROLE_BUNDLE", key: "quality-reviewer", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/quality-inspections")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.data[0]).to.include({ id: "inspection-1", status: "OPEN" });
+		expect(response.body.data[0].batch.parts[0].part.partName).to.equal("Casing Upper");
+	});
+
 	it("returns a server-owned station snapshot with batch identity and route steps", async () => {
 		const app = appFor({
 			batchPositionProjection: {

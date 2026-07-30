@@ -549,7 +549,7 @@ export function domainReadRouter(
 
 	router.get("/quality-inspections", requireCapability("quality.read"), async (_req, res) => {
 		try {
-			const inspections = await database.qualityInspection.findMany({ orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] }, batch: { select: { id: true, batchCode: true, lotId: true } } } });
+			const inspections = await database.qualityInspection.findMany({ orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] }, batch: { select: { id: true, batchCode: true, lotId: true, plannedQuantity: true, parts: { orderBy: [{ partId: "asc" }], take: 1, select: { partId: true, quantity: true, quantityMagnitude: true, quantityUom: true, part: { select: { id: true, partCode: true, partName: true } } } } } } } });
 			res.setHeader("Cache-Control", "no-store").json({ data: inspections.map((inspection) => ({ ...inspection, inspectedQuantity: decimal(inspection.inspectedQuantity), startedAt: inspection.startedAt.toISOString(), completedAt: date(inspection.completedAt) })) });
 		} catch {
 			problem(_req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS quality inspection data is unavailable.");

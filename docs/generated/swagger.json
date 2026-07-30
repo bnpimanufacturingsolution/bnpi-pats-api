@@ -96,6 +96,209 @@
           "role"
         ]
       },
+      "QualityInspection": {
+        "type": "object",
+        "required": [
+          "id",
+          "batchId",
+          "stageId",
+          "subStageId",
+          "stationId",
+          "inspectedQuantity",
+          "quantityUom",
+          "status",
+          "startedAt",
+          "completedAt",
+          "rowVersion",
+          "createdAt",
+          "updatedAt",
+          "decisions",
+          "batch"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "batchId": {
+            "type": "string"
+          },
+          "stageId": {
+            "type": "string"
+          },
+          "subStageId": {
+            "type": "string",
+            "nullable": true
+          },
+          "stationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "inspectedQuantity": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantityUom": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "IN_PROGRESS",
+              "COMPLETED",
+              "CANCELLED"
+            ]
+          },
+          "evidence": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "rowVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QualityDecision"
+            }
+          },
+          "batch": {
+            "$ref": "#/components/schemas/QualityBatch"
+          }
+        }
+      },
+      "QualityDecision": {
+        "type": "object",
+        "required": [
+          "id",
+          "decision",
+          "reasonCode",
+          "reasonNote",
+          "decidedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "PASSED",
+              "FAILED",
+              "HOLD"
+            ]
+          },
+          "reasonCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "reasonNote": {
+            "type": "string",
+            "nullable": true
+          },
+          "decidedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "QualityBatch": {
+        "type": "object",
+        "required": [
+          "id",
+          "batchCode",
+          "lotId",
+          "plannedQuantity",
+          "parts"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "batchCode": {
+            "type": "string"
+          },
+          "lotId": {
+            "type": "string"
+          },
+          "plannedQuantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QualityBatchPart"
+            }
+          }
+        }
+      },
+      "QualityBatchPart": {
+        "type": "object",
+        "required": [
+          "partId",
+          "quantity",
+          "quantityMagnitude",
+          "quantityUom",
+          "part"
+        ],
+        "properties": {
+          "partId": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "quantityMagnitude": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantityUom": {
+            "type": "string",
+            "nullable": true
+          },
+          "part": {
+            "type": "object",
+            "required": [
+              "id",
+              "partCode",
+              "partName"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "partCode": {
+                "type": "string"
+              },
+              "partName": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
       "DashboardSummary": {
         "type": "object",
         "required": [
@@ -3250,7 +3453,25 @@
         "x-required-capability": "quality.read",
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CollectionRead"
+            "description": "Server-owned quality inspections with batch and latest-decision evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/QualityInspection"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "403": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
