@@ -1482,6 +1482,237 @@ async function seedProfile(tx) {
 		});
 	}
 
+	// Second released plan — dashboard multi-row progress (early-stage WIP only)
+	const secondaryPlanId = stableId("production-plan-b251-secondary");
+	const secondaryPlanQty = 6 * CLIENT_B251.trayQuantityStandard; // 1440
+	await tx.project.upsert({
+		where: { id: secondaryPlanId },
+		update: {
+			workspaceId: "PATS",
+			projectCode: code("PLAN-B251-AUG"),
+			name: `${CLIENT_B251.productName} — August prep`,
+			requiredProductionQuantity: secondaryPlanQty,
+			status: "RELEASED",
+			releasedAt: atOffset({ days: 2 }),
+			releasedBySubjectId: planner.id,
+			productId: productB251Id,
+		},
+		create: {
+			id: secondaryPlanId,
+			workspaceId: "PATS",
+			projectCode: code("PLAN-B251-AUG"),
+			name: `${CLIENT_B251.productName} — August prep`,
+			requiredProductionQuantity: secondaryPlanQty,
+			productId: productB251Id,
+			status: "RELEASED",
+			releasedAt: atOffset({ days: 2 }),
+			releasedBySubjectId: planner.id,
+			createdAt: seedClock,
+		},
+	});
+	await tx.productSpecification.upsert({
+		where: { projectId: secondaryPlanId },
+		update: {
+			skuCode: code("B251-SKU-AUG"),
+			productName: CLIENT_B251.productName,
+			trayQuantityStandard: CLIENT_B251.trayQuantityStandard,
+			sourceRevisionRef: CLIENT_B251.revision,
+		},
+		create: {
+			id: stableId("product-spec-b251-aug"),
+			projectId: secondaryPlanId,
+			skuCode: code("B251-SKU-AUG"),
+			productName: CLIENT_B251.productName,
+			trayQuantityStandard: CLIENT_B251.trayQuantityStandard,
+			sourceRevisionRef: CLIENT_B251.revision,
+			createdAt: seedClock,
+		},
+	});
+	for (const [modelNumber, qty] of [
+		["02", 720],
+		["03", 720],
+	]) {
+		await tx.projectModelAllocation.upsert({
+			where: {
+				projectId_modelId: {
+					projectId: secondaryPlanId,
+					modelId: modelIds[modelNumber],
+				},
+			},
+			update: {
+				plannedQuantity: qty,
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+				lifecycleStatus: "COMMITTED",
+			},
+			create: {
+				id: stableId(`pma-b251-aug-${modelNumber}`),
+				projectId: secondaryPlanId,
+				modelId: modelIds[modelNumber],
+				plannedQuantity: qty,
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+				lifecycleStatus: "COMMITTED",
+			},
+		});
+	}
+	const secondaryPartsListId = stableId("parts-list-b251-aug-v1");
+	await tx.partsList.upsert({
+		where: { id: secondaryPartsListId },
+		update: {
+			projectId: secondaryPlanId,
+			version: 1,
+			status: "PUBLISHED",
+			sourceRevisionRef: CLIENT_B251.revision,
+			publishedAt: seedClock,
+		},
+		create: {
+			id: secondaryPartsListId,
+			projectId: secondaryPlanId,
+			version: 1,
+			status: "PUBLISHED",
+			sourceRevisionRef: CLIENT_B251.revision,
+			publishedAt: seedClock,
+			createdAt: seedClock,
+		},
+	});
+	const secondaryLotDefs = [
+		["lot-aug-hd", "LOT-B251-AUG-02", "B251 Cheese Hotdog — Aug Lot 01", "02", 720, "B251-01-08"],
+		["lot-aug-tc", "LOT-B251-AUG-03", "B251 Tacos — Aug Lot 01", "03", 720, "B251-01-11"],
+	];
+	const secondaryLotIds = {};
+	for (const [key, lotCode, lotName, modelNumber, qty, partCode] of secondaryLotDefs) {
+		const lotId = stableId(key);
+		secondaryLotIds[modelNumber] = lotId;
+		await tx.lot.upsert({
+			where: { id: lotId },
+			update: {
+				projectId: secondaryPlanId,
+				lotCode: code(lotCode),
+				lotName,
+				partsListId: secondaryPartsListId,
+				partsListVersion: 1,
+				partId: planPartIds[partCode],
+				partName: CLIENT_B251.models.find((m) => m.modelNumber === modelNumber).parts[0][1],
+				requiredProductionQuantity: qty,
+				status: "ACTIVE",
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				createdAtStage: "Planning",
+			},
+			create: {
+				id: lotId,
+				projectId: secondaryPlanId,
+				lotCode: code(lotCode),
+				lotName,
+				partsListId: secondaryPartsListId,
+				partsListVersion: 1,
+				partId: planPartIds[partCode],
+				partName: CLIENT_B251.models.find((m) => m.modelNumber === modelNumber).parts[0][1],
+				requiredProductionQuantity: qty,
+				status: "ACTIVE",
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				createdAtStage: "Planning",
+				createdAt: seedClock,
+			},
+		});
+		await tx.lotPartAllocation.upsert({
+			where: {
+				lotId_partId: { lotId, partId: planPartIds[partCode] },
+			},
+			update: {
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+				usageBasis: "1 per product",
+				status: "COMMITTED",
+			},
+			create: {
+				id: stableId(`alloc-aug-${lotCode}-${partCode}`),
+				lotId,
+				partId: planPartIds[partCode],
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+				usageBasis: "1 per product",
+				status: "COMMITTED",
+				createdAt: seedClock,
+			},
+		});
+	}
+	const secondaryBatchDefs = [
+		["batch-aug-hd-inj", "BNI-2608-001", "02", "B251-01-08", 360, injectionStageId, null],
+		["batch-aug-tc-inj", "BNI-2608-002", "03", "B251-01-11", 240, injectionStageId, null],
+		["batch-aug-tc-dec", "BNI-2608-003", "03", "B251-01-12", 120, decorationStageId, subFullSprayId],
+	];
+	for (const [key, batchCode, modelNumber, partCode, qty, stageId, subStageId] of secondaryBatchDefs) {
+		const id = stableId(key);
+		const lotId = secondaryLotIds[modelNumber];
+		await tx.batch.upsert({
+			where: { id },
+			update: {
+				batchCode: code(batchCode),
+				barcodeValue: code(batchCode),
+				lotId,
+				plannedQuantity: qty,
+				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				currentStageId: stageId,
+				currentSubStageId: subStageId,
+				status: "ACTIVE",
+				createdBySubjectId: operator.id,
+			},
+			create: {
+				id,
+				batchCode: code(batchCode),
+				barcodeValue: code(batchCode),
+				lotId,
+				plannedQuantity: qty,
+				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				currentStageId: stageId,
+				currentSubStageId: subStageId,
+				status: "ACTIVE",
+				createdBySubjectId: operator.id,
+				createdAt: seedClock,
+			},
+		});
+		await tx.batchPartLine.upsert({
+			where: { batchId_partId: { batchId: id, partId: planPartIds[partCode] } },
+			update: {
+				quantity: qty,
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+			},
+			create: {
+				batchId: id,
+				partId: planPartIds[partCode],
+				quantity: qty,
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+			},
+		});
+		await tx.batchPositionProjection.upsert({
+			where: { batchId: id },
+			update: {
+				stageId,
+				subStageId,
+				positionStatus: "ACCEPTED",
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+				projectionVersion: 1,
+			},
+			create: {
+				batchId: id,
+				stageId,
+				subStageId,
+				positionStatus: "ACCEPTED",
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+				projectionVersion: 1,
+			},
+		});
+	}
+
 	await tx.auditRecord.upsert({
 		where: { id: stableId("audit-seed-b251-release") },
 		update: {
@@ -1555,9 +1786,9 @@ async function seedProfile(tx) {
 		capsuleAttachments: capsuleAttachmentCount,
 		catalogModelParts: injPartCount + decoPartCount + paintPartCount + capsuleAttachmentCount,
 		planParts: Object.keys(planPartIds).length,
-		plans: 1,
-		lots: lotDefs.length,
-		batches: batchDefs.length,
+		plans: 2,
+		lots: lotDefs.length + secondaryLotDefs.length,
+		batches: batchDefs.length + secondaryBatchDefs.length,
 		productId: productB251Id,
 		projectId,
 		openInspectionId: inspectionOpenId,

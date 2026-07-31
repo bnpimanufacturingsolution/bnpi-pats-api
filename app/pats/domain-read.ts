@@ -733,7 +733,28 @@ export function domainReadRouter(
 				const key = reportDateKey(event.occurredAt);
 				actualByDate.set(key, (actualByDate.get(key) ?? 0) + quantity);
 			}
-			const dailyThroughput = reportDateBuckets(reportNow).map((date) => ({ date, expected: null, actual: actualByDate.get(date) ?? 0 }));
+			// Provisional expected pace: released-plan required qty / 7-day window.
+			// Not a formal schedule resource — comparison aid until a schedule API exists.
+			let dailyExpected: number | null = null;
+			try {
+				const releasedPlans = await database.project.findMany({
+					where: { status: "RELEASED" },
+					select: { requiredProductionQuantity: true },
+				});
+				const planPaceTotal = releasedPlans.reduce(
+					(sum: number, plan: { requiredProductionQuantity: number }) =>
+						sum + (Number(plan.requiredProductionQuantity) || 0),
+					0,
+				);
+				if (planPaceTotal > 0) dailyExpected = Math.max(1, Math.round(planPaceTotal / 7));
+			} catch {
+				dailyExpected = null;
+			}
+			const dailyThroughput = reportDateBuckets(reportNow).map((date) => ({
+				date,
+				expected: dailyExpected,
+				actual: actualByDate.get(date) ?? 0,
+			}));
 			const closedLots = closedBatchRows.map((batch) => ({
 				id: batch.batchCode,
 				closedAt: null,

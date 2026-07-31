@@ -461,7 +461,13 @@ describe("canonical PATS domain read contract", () => {
 	it("returns server-owned line activity, throughput evidence, closed batches, and traceability rows", async () => {
 		const occurredAt = new Date();
 		const app = appFor({
-			project: { count: async () => 2 },
+			project: {
+				count: async () => 2,
+				findMany: async () => [
+					{ requiredProductionQuantity: 700 },
+					{ requiredProductionQuantity: 700 },
+				],
+			},
 			batch: {
 				count: async () => 4,
 				findMany: async (args: { where?: { status?: unknown } }) =>
@@ -500,6 +506,8 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.routingViolations[0]).to.include({ partCode: "PART-001", lotCode: "LOT-001", attemptedStageName: "Injection", resolved: false });
 		expect(response.body.inventoryTransactions[0]).to.include({ partCode: "PART-001", lotCode: "LOT-001", exceedsVarianceThreshold: true });
 		expect(response.body.dailyThroughput).to.have.length(7);
+		// 1400 plan qty / 7 days = 200 provisional pace
+		expect(response.body.dailyThroughput[0].expected).to.equal(200);
 	});
 
 	it("fails planning reads closed when the subject lacks planning.read", async () => {
