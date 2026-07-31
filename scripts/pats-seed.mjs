@@ -109,7 +109,14 @@ async function seedProfile(tx) {
 		"subject-planner",
 		`${profile}.planner`,
 		`${prefix} Planner`,
-		["planner", "catalog-manager", "production-operator", "inventory-controller"],
+		// Demo shell convenience: planner can walk planning + floor + QC without role switch.
+		[
+			"planner",
+			"catalog-manager",
+			"production-operator",
+			"inventory-controller",
+			"quality-reviewer",
+		],
 		passwordHash,
 	);
 	const operator = await upsertSubject(
@@ -1010,12 +1017,14 @@ async function seedProfile(tx) {
 		},
 	});
 
-	// Lots: one active lot per major model family
+	// Lots: one active lot per model family (including drink + tray)
 	const lotDefs = [
 		["lot-avocado", "LOT-B251-01", "B251 Avocado Burger — Lot 01", "01", 1440],
 		["lot-hotdog", "LOT-B251-02", "B251 Cheese Hotdog — Lot 01", "02", 720],
 		["lot-tacos", "LOT-B251-03", "B251 Tacos — Lot 01", "03", 720],
 		["lot-fries", "LOT-B251-04", "B251 Potato Wedge — Lot 01", "04", 480],
+		["lot-drink", "LOT-B251-05", "B251 Cola / Ice Coffee — Lot 01", "05", 480],
+		["lot-tray", "LOT-B251-06", "B251 Tray — Lot 01", "06", 480],
 	];
 	const lotIds = {};
 	const lotAllocIds = {};
@@ -1083,7 +1092,7 @@ async function seedProfile(tx) {
 		}
 	}
 
-	// Batches — factory-style codes, WIP across stages
+	// Batches — factory-style codes, WIP across all stages / model families
 	// [key, code, modelNumber, partCode, qty, stage, sub, status]
 	const batchDefs = [
 		["batch-av-inj", "BNI-2607-001", "01", "B251-01-01", 480, injectionStageId, null, "ACTIVE"],
@@ -1095,6 +1104,12 @@ async function seedProfile(tx) {
 		["batch-tc-asm", "BNI-2607-007", "03", "B251-01-12", 360, assemblyStageId, subAssortmentId, "ACTIVE"],
 		["batch-fw-dec", "BNI-2607-008", "04", "B251-01-15", 240, decorationStageId, subTampoId, "ACTIVE"],
 		["batch-av-wh", "BNI-2607-009", "01", "B251-01-01", 240, warehouseStageId, subMainPackingId, "CLOSED"],
+		["batch-dr-inj", "BNI-2607-010", "05", "B251-01-22", 240, injectionStageId, null, "ACTIVE"],
+		["batch-dr-dec", "BNI-2607-011", "05", "B251-01-20", 240, decorationStageId, subFullSprayId, "ACTIVE"],
+		["batch-tr-inj", "BNI-2607-012", "06", "B251-01-23", 120, injectionStageId, null, "ACTIVE"],
+		["batch-tr-asm", "BNI-2607-013", "06", "B251-01-23", 120, assemblyStageId, subAssortmentId, "ACTIVE"],
+		["batch-hd-asm", "BNI-2607-014", "02", "B251-01-10", 240, assemblyStageId, subQualityCheckId, "ACTIVE"],
+		["batch-fw-inj", "BNI-2607-015", "04", "B251-01-16", 240, injectionStageId, null, "ACTIVE"],
 	];
 
 	const batchIds = {};
@@ -1160,6 +1175,12 @@ async function seedProfile(tx) {
 		["ev-tc-asm", "batch-tc-asm", assemblyStageId, subAssortmentId, "B251-01-12", 360, 2, 1, "STAGE_COMPLETED", "ACCEPTED", false],
 		["ev-fw-dec", "batch-fw-dec", decorationStageId, subTampoId, "B251-01-15", 240, 2, 2, "STAGE_COMPLETED", "ACCEPTED", false],
 		["ev-av-wh", "batch-av-wh", warehouseStageId, subMainPackingId, "B251-01-01", 240, 2, 4, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-dr-inj", "batch-dr-inj", injectionStageId, null, "B251-01-22", 240, 2, 5, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-dr-dec", "batch-dr-dec", decorationStageId, subFullSprayId, "B251-01-20", 235, 2, 6, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-tr-inj", "batch-tr-inj", injectionStageId, null, "B251-01-23", 120, 3, 1, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-tr-asm", "batch-tr-asm", assemblyStageId, subAssortmentId, "B251-01-23", 120, 3, 2, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-hd-asm", "batch-hd-asm", assemblyStageId, subQualityCheckId, "B251-01-10", 240, 3, 3, "STAGE_SCAN_RECORDED", "ACCEPTED", false],
+		["ev-fw-inj", "batch-fw-inj", injectionStageId, null, "B251-01-16", 240, 3, 4, "STAGE_COMPLETED", "ACCEPTED", false],
 	];
 
 	for (const [key, batchKey, stageId, subStageId, partCode, qty, day, hour, eventType, status, isViolation] of eventDefs) {
@@ -1326,108 +1347,140 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// QC: completed HOLD + open inspection on Avocado QC batch
-	const inspectionDoneId = stableId("qi-b251-hold");
-	const inspectionOpenId = stableId("qi-b251-open");
-	await tx.qualityInspection.upsert({
-		where: { id: inspectionDoneId },
-		update: {
-			batchId: batchIds["batch-av-qc"],
-			stageId: assemblyStageId,
-			subStageId: subQualityCheckId,
-			stationId: assemblyStationId,
-			inspectedQuantity: "480.000000",
-			quantityUom: "piece",
-			status: "COMPLETED",
-			inspectedBySubjectId: quality.id,
-			evidence: {
-				partCode: "B251-01-04",
-				partName: "Cheese & Patty",
-				origin: "client-parts-list",
-				evidenceStatus: "PROVISIONAL",
+	// QC worklist + history on B251 batches (PROVISIONAL demo dispositions)
+	// [key, batchKey, partCode, partName, qty, stage, sub, status, day, hour]
+	const qcOpenDefs = [
+		["qi-b251-open-taco", "batch-tc-asm", "B251-01-12", "Right Taco", 360, assemblyStageId, subAssortmentId, "IN_PROGRESS", 1, 3],
+		["qi-b251-open-av", "batch-av-qc", "B251-01-04", "Cheese & Patty", 480, assemblyStageId, subQualityCheckId, "IN_PROGRESS", 0, 7],
+		["qi-b251-open-hd", "batch-hd-asm", "B251-01-10", "Cheese Hotdog", 240, assemblyStageId, subQualityCheckId, "IN_PROGRESS", 3, 3],
+		["qi-b251-open-tray", "batch-tr-asm", "B251-01-23", "Tray", 120, assemblyStageId, subAssortmentId, "IN_PROGRESS", 3, 2],
+		["qi-b251-open-drink", "batch-dr-dec", "B251-01-20", "Ice L", 240, decorationStageId, subFullSprayId, "IN_PROGRESS", 2, 6],
+	];
+	const inspectionOpenId = stableId("qi-b251-open-taco");
+	for (const [key, batchKey, partCode, partName, qty, stageId, subStageId, status, day, hour] of qcOpenDefs) {
+		const id = stableId(key);
+		await tx.qualityInspection.upsert({
+			where: { id },
+			update: {
+				batchId: batchIds[batchKey],
+				stageId,
+				subStageId,
+				stationId: stageId === decorationStageId ? decorationStationId : assemblyStationId,
+				inspectedQuantity: `${qty}.000000`,
+				quantityUom: "piece",
+				status,
+				inspectedBySubjectId: quality.id,
+				evidence: {
+					partCode,
+					partName,
+					origin: "client-parts-list",
+					evidenceStatus: "PROVISIONAL",
+				},
+				startedAt: atOffset({ days: day, hours: hour }),
+				completedAt: null,
 			},
-			startedAt: atOffset({ hours: 6, minutes: 30 }),
-			completedAt: atOffset({ hours: 6, minutes: 45 }),
-		},
-		create: {
-			id: inspectionDoneId,
-			batchId: batchIds["batch-av-qc"],
-			stageId: assemblyStageId,
-			subStageId: subQualityCheckId,
-			stationId: assemblyStationId,
-			inspectedQuantity: "480.000000",
-			quantityUom: "piece",
-			status: "COMPLETED",
-			inspectedBySubjectId: quality.id,
-			evidence: {
-				partCode: "B251-01-04",
-				partName: "Cheese & Patty",
-				origin: "client-parts-list",
-				evidenceStatus: "PROVISIONAL",
+			create: {
+				id,
+				batchId: batchIds[batchKey],
+				stageId,
+				subStageId,
+				stationId: stageId === decorationStageId ? decorationStationId : assemblyStationId,
+				inspectedQuantity: `${qty}.000000`,
+				quantityUom: "piece",
+				status,
+				inspectedBySubjectId: quality.id,
+				evidence: {
+					partCode,
+					partName,
+					origin: "client-parts-list",
+					evidenceStatus: "PROVISIONAL",
+				},
+				startedAt: atOffset({ days: day, hours: hour }),
 			},
-			startedAt: atOffset({ hours: 6, minutes: 30 }),
-			completedAt: atOffset({ hours: 6, minutes: 45 }),
-		},
-	});
-	await tx.qualityDecision.upsert({
-		where: { id: stableId("qd-b251-hold") },
-		update: {
-			inspectionId: inspectionDoneId,
-			decision: "HOLD",
-			reasonCode: "ROUTING_REVIEW",
-			reasonNote: "Batch advanced to Assembly without Decoration completion evidence.",
-			decidedBySubjectId: quality.id,
-			decidedAt: atOffset({ hours: 6, minutes: 45 }),
-		},
-		create: {
-			id: stableId("qd-b251-hold"),
-			inspectionId: inspectionDoneId,
-			decision: "HOLD",
-			reasonCode: "ROUTING_REVIEW",
-			reasonNote: "Batch advanced to Assembly without Decoration completion evidence.",
-			decidedBySubjectId: quality.id,
-			decidedAt: atOffset({ hours: 6, minutes: 45 }),
-		},
-	});
-	await tx.qualityInspection.upsert({
-		where: { id: inspectionOpenId },
-		update: {
-			batchId: batchIds["batch-tc-asm"],
-			stageId: assemblyStageId,
-			subStageId: subAssortmentId,
-			stationId: assemblyStationId,
-			inspectedQuantity: "360.000000",
-			quantityUom: "piece",
-			status: "IN_PROGRESS",
-			inspectedBySubjectId: quality.id,
-			evidence: {
-				partCode: "B251-01-12",
-				partName: "Right Taco",
-				origin: "client-parts-list",
-				evidenceStatus: "PROVISIONAL",
+		});
+	}
+
+	// Completed inspections with decisions for history panel
+	const qcDoneDefs = [
+		["qi-b251-hold", "batch-av-dec", "B251-01-01", "Avocado Burger Upper Bun", 480, decorationStageId, subFullSprayId, "HOLD", "ROUTING_REVIEW", "Batch advanced without full decoration completion evidence.", 0, 6],
+		["qi-b251-pass-wh", "batch-av-wh", "B251-01-01", "Avocado Burger Upper Bun", 240, warehouseStageId, subMainPackingId, "PASSED", "VISUAL_OK", "Pack appearance and label match B251 tray standard.", 2, 4],
+		["qi-b251-fail-hd", "batch-hd-dec", "B251-01-10", "Cheese Hotdog", 360, decorationStageId, subMaskSprayId, "FAILED", "PAINT_DEFECT", "Mask spray miss on Cheese Hotdog body — return to Decoration.", 1, 3],
+		["qi-b251-pass-fw", "batch-fw-dec", "B251-01-15", "Fries", 240, decorationStageId, subTampoId, "PASSED", "TAMPO_OK", "Tampo registration within tolerance for Potato Wedge fries.", 2, 2],
+	];
+	for (const [key, batchKey, partCode, partName, qty, stageId, subStageId, decision, reasonCode, reasonNote, day, hour] of qcDoneDefs) {
+		const inspectionId = stableId(key);
+		const decidedAt = atOffset({ days: day, hours: hour, minutes: 45 });
+		await tx.qualityInspection.upsert({
+			where: { id: inspectionId },
+			update: {
+				batchId: batchIds[batchKey],
+				stageId,
+				subStageId,
+				stationId:
+					stageId === warehouseStageId
+						? warehouseStationId
+						: stageId === decorationStageId
+							? decorationStationId
+							: assemblyStationId,
+				inspectedQuantity: `${qty}.000000`,
+				quantityUom: "piece",
+				status: "COMPLETED",
+				inspectedBySubjectId: quality.id,
+				evidence: {
+					partCode,
+					partName,
+					origin: "client-parts-list",
+					evidenceStatus: "PROVISIONAL",
+				},
+				startedAt: atOffset({ days: day, hours: hour, minutes: 30 }),
+				completedAt: decidedAt,
 			},
-			startedAt: atOffset({ days: 1, hours: 3 }),
-			completedAt: null,
-		},
-		create: {
-			id: inspectionOpenId,
-			batchId: batchIds["batch-tc-asm"],
-			stageId: assemblyStageId,
-			subStageId: subAssortmentId,
-			stationId: assemblyStationId,
-			inspectedQuantity: "360.000000",
-			quantityUom: "piece",
-			status: "IN_PROGRESS",
-			inspectedBySubjectId: quality.id,
-			evidence: {
-				partCode: "B251-01-12",
-				partName: "Right Taco",
-				origin: "client-parts-list",
-				evidenceStatus: "PROVISIONAL",
+			create: {
+				id: inspectionId,
+				batchId: batchIds[batchKey],
+				stageId,
+				subStageId,
+				stationId:
+					stageId === warehouseStageId
+						? warehouseStationId
+						: stageId === decorationStageId
+							? decorationStationId
+							: assemblyStationId,
+				inspectedQuantity: `${qty}.000000`,
+				quantityUom: "piece",
+				status: "COMPLETED",
+				inspectedBySubjectId: quality.id,
+				evidence: {
+					partCode,
+					partName,
+					origin: "client-parts-list",
+					evidenceStatus: "PROVISIONAL",
+				},
+				startedAt: atOffset({ days: day, hours: hour, minutes: 30 }),
+				completedAt: decidedAt,
 			},
-			startedAt: atOffset({ days: 1, hours: 3 }),
-		},
-	});
+		});
+		await tx.qualityDecision.upsert({
+			where: { id: stableId(`qd-${key}`) },
+			update: {
+				inspectionId,
+				decision,
+				reasonCode,
+				reasonNote,
+				decidedBySubjectId: quality.id,
+				decidedAt,
+			},
+			create: {
+				id: stableId(`qd-${key}`),
+				inspectionId,
+				decision,
+				reasonCode,
+				reasonNote,
+				decidedBySubjectId: quality.id,
+				decidedAt,
+			},
+		});
+	}
 
 	await tx.auditRecord.upsert({
 		where: { id: stableId("audit-seed-b251-release") },
