@@ -17,6 +17,7 @@ import {
 	decoPartDisplayName,
 	paintPartDisplayName,
 } from "./pats-seed-client-b251.mjs";
+import { CLIENT_B308 } from "./pats-seed-client-b308.mjs";
 
 const mode = (process.env.SEED_MODE ?? "none").trim().toLowerCase();
 
@@ -1482,61 +1483,165 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// Second released plan — dashboard multi-row progress (early-stage WIP only)
-	const secondaryPlanId = stableId("production-plan-b251-secondary");
-	const secondaryPlanQty = 6 * CLIENT_B251.trayQuantityStandard; // 1440
-	await tx.project.upsert({
-		where: { id: secondaryPlanId },
+	// ── Second product family (distinct from B251) for multi-SKU demos ───────
+	const productB308Id = stableId("product-b308");
+	const b308ModelIds = {};
+	const b308PartIds = {};
+	await tx.product.upsert({
+		where: { id: productB308Id },
 		update: {
-			workspaceId: "PATS",
-			projectCode: code("PLAN-B251-AUG"),
-			name: `${CLIENT_B251.productName} — August prep`,
-			requiredProductionQuantity: secondaryPlanQty,
-			status: "RELEASED",
-			releasedAt: atOffset({ days: 2 }),
-			releasedBySubjectId: planner.id,
-			productId: productB251Id,
+			productName: CLIENT_B308.productName,
+			lifecycleStatus: "PUBLISHED",
+			evidenceStatus: "PROVISIONAL",
 		},
 		create: {
-			id: secondaryPlanId,
+			id: productB308Id,
+			productCode: code(CLIENT_B308.productCode),
+			productName: CLIENT_B308.productName,
+			lifecycleStatus: "PUBLISHED",
+			evidenceStatus: "PROVISIONAL",
+		},
+	});
+	for (const model of CLIENT_B308.models) {
+		const modelId = stableId(`model-b308-${model.modelNumber}`);
+		b308ModelIds[model.modelNumber] = modelId;
+		await tx.model.upsert({
+			where: { id: modelId },
+			update: {
+				productId: productB308Id,
+				modelNumber: model.modelNumber,
+				modelName: model.modelName,
+				sourceStatus: model.sourceStatus,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: model.evidenceStatus,
+				sourceReference: {
+					seedProfile: profile,
+					origin: "seed-provisional-variety",
+					productCode: CLIENT_B308.productCode,
+					modelNumber: model.modelNumber,
+				},
+			},
+			create: {
+				id: modelId,
+				productId: productB308Id,
+				modelNumber: model.modelNumber,
+				modelName: model.modelName,
+				sourceStatus: model.sourceStatus,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: model.evidenceStatus,
+				sourceReference: {
+					seedProfile: profile,
+					origin: "seed-provisional-variety",
+					productCode: CLIENT_B308.productCode,
+					modelNumber: model.modelNumber,
+				},
+			},
+		});
+		for (const [partCode, partName] of model.parts) {
+			const partId = stableId(`model-part-${partCode}`);
+			await tx.modelPart.upsert({
+				where: { modelId_partCode: { modelId, partCode } },
+				update: {
+					partName,
+					lifecycleStatus: "PUBLISHED",
+					evidenceStatus: "PROVISIONAL",
+					routingSteps: [],
+				},
+				create: {
+					id: partId,
+					modelId,
+					partCode,
+					partName,
+					lifecycleStatus: "PUBLISHED",
+					evidenceStatus: "PROVISIONAL",
+					routingSteps: [],
+				},
+			});
+			const resolved = await tx.modelPart.findUnique({
+				where: { modelId_partCode: { modelId, partCode } },
+				select: { id: true },
+			});
+			if (resolved) b308PartIds[partCode] = resolved.id;
+		}
+	}
+	// Shared capsule on every B308 model
+	for (const model of CLIENT_B308.models) {
+		const modelId = b308ModelIds[model.modelNumber];
+		const partCode = CLIENT_B308.sharedCapsule.partCode;
+		await tx.modelPart.upsert({
+			where: { modelId_partCode: { modelId, partCode } },
+			update: {
+				partName: CLIENT_B308.sharedCapsule.partName,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+				routingSteps: [],
+			},
+			create: {
+				id: stableId(`model-part-b308-capsule-${model.modelNumber}`),
+				modelId,
+				partCode,
+				partName: CLIENT_B308.sharedCapsule.partName,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+				routingSteps: [],
+			},
+		});
+	}
+
+	// B308 export plan — WIP skewed to Decoration / Assembly / Warehouse (vs B251 Injection-heavy)
+	const b308PlanId = stableId("production-plan-b308-export");
+	const b308PlanQty = 10 * CLIENT_B308.trayQuantityStandard; // 2000
+	const b308PlanPartIds = {};
+	await tx.project.upsert({
+		where: { id: b308PlanId },
+		update: {
 			workspaceId: "PATS",
-			projectCode: code("PLAN-B251-AUG"),
-			name: `${CLIENT_B251.productName} — August prep`,
-			requiredProductionQuantity: secondaryPlanQty,
-			productId: productB251Id,
+			projectCode: code("PLAN-B308-EXP"),
+			name: `${CLIENT_B308.productName} — Export replenishment`,
+			requiredProductionQuantity: b308PlanQty,
 			status: "RELEASED",
-			releasedAt: atOffset({ days: 2 }),
+			releasedAt: atOffset({ days: 1, hours: 2 }),
+			releasedBySubjectId: planner.id,
+			productId: productB308Id,
+		},
+		create: {
+			id: b308PlanId,
+			workspaceId: "PATS",
+			projectCode: code("PLAN-B308-EXP"),
+			name: `${CLIENT_B308.productName} — Export replenishment`,
+			requiredProductionQuantity: b308PlanQty,
+			productId: productB308Id,
+			status: "RELEASED",
+			releasedAt: atOffset({ days: 1, hours: 2 }),
 			releasedBySubjectId: planner.id,
 			createdAt: seedClock,
 		},
 	});
 	await tx.productSpecification.upsert({
-		where: { projectId: secondaryPlanId },
+		where: { projectId: b308PlanId },
 		update: {
-			skuCode: code("B251-SKU-AUG"),
-			productName: CLIENT_B251.productName,
-			trayQuantityStandard: CLIENT_B251.trayQuantityStandard,
-			sourceRevisionRef: CLIENT_B251.revision,
+			skuCode: code("B308-SKU-EXP"),
+			productName: CLIENT_B308.productName,
+			trayQuantityStandard: CLIENT_B308.trayQuantityStandard,
+			sourceRevisionRef: CLIENT_B308.revision,
 		},
 		create: {
-			id: stableId("product-spec-b251-aug"),
-			projectId: secondaryPlanId,
-			skuCode: code("B251-SKU-AUG"),
-			productName: CLIENT_B251.productName,
-			trayQuantityStandard: CLIENT_B251.trayQuantityStandard,
-			sourceRevisionRef: CLIENT_B251.revision,
+			id: stableId("product-spec-b308"),
+			projectId: b308PlanId,
+			skuCode: code("B308-SKU-EXP"),
+			productName: CLIENT_B308.productName,
+			trayQuantityStandard: CLIENT_B308.trayQuantityStandard,
+			sourceRevisionRef: CLIENT_B308.revision,
 			createdAt: seedClock,
 		},
 	});
-	for (const [modelNumber, qty] of [
-		["02", 720],
-		["03", 720],
-	]) {
+	const b308ModelPlanQtys = { "01": 600, "02": 500, "03": 500, "04": 400 };
+	for (const [modelNumber, qty] of Object.entries(b308ModelPlanQtys)) {
 		await tx.projectModelAllocation.upsert({
 			where: {
 				projectId_modelId: {
-					projectId: secondaryPlanId,
-					modelId: modelIds[modelNumber],
+					projectId: b308PlanId,
+					modelId: b308ModelIds[modelNumber],
 				},
 			},
 			update: {
@@ -1546,9 +1651,9 @@ async function seedProfile(tx) {
 				lifecycleStatus: "COMMITTED",
 			},
 			create: {
-				id: stableId(`pma-b251-aug-${modelNumber}`),
-				projectId: secondaryPlanId,
-				modelId: modelIds[modelNumber],
+				id: stableId(`pma-b308-${modelNumber}`),
+				projectId: b308PlanId,
+				modelId: b308ModelIds[modelNumber],
 				plannedQuantity: qty,
 				quantityMagnitude: `${qty}.000000`,
 				quantityUom: "piece",
@@ -1556,99 +1661,136 @@ async function seedProfile(tx) {
 			},
 		});
 	}
-	const secondaryPartsListId = stableId("parts-list-b251-aug-v1");
+	const b308PartsListId = stableId("parts-list-b308-v1");
 	await tx.partsList.upsert({
-		where: { id: secondaryPartsListId },
+		where: { id: b308PartsListId },
 		update: {
-			projectId: secondaryPlanId,
+			projectId: b308PlanId,
 			version: 1,
 			status: "PUBLISHED",
-			sourceRevisionRef: CLIENT_B251.revision,
+			sourceRevisionRef: CLIENT_B308.revision,
 			publishedAt: seedClock,
 		},
 		create: {
-			id: secondaryPartsListId,
-			projectId: secondaryPlanId,
+			id: b308PartsListId,
+			projectId: b308PlanId,
 			version: 1,
 			status: "PUBLISHED",
-			sourceRevisionRef: CLIENT_B251.revision,
+			sourceRevisionRef: CLIENT_B308.revision,
 			publishedAt: seedClock,
 			createdAt: seedClock,
 		},
 	});
-	const secondaryLotDefs = [
-		["lot-aug-hd", "LOT-B251-AUG-02", "B251 Cheese Hotdog — Aug Lot 01", "02", 720, "B251-01-08"],
-		["lot-aug-tc", "LOT-B251-AUG-03", "B251 Tacos — Aug Lot 01", "03", 720, "B251-01-11"],
+	for (const model of CLIENT_B308.models) {
+		for (const [partCode, partName] of model.parts) {
+			const id = stableId(`plan-part-${partCode}`);
+			b308PlanPartIds[partCode] = id;
+			await tx.part.upsert({
+				where: { id },
+				update: {
+					projectId: b308PlanId,
+					partCode,
+					partName,
+					sourceModelId: b308ModelIds[model.modelNumber],
+					sourceModelPartId: b308PartIds[partCode],
+					lifecycleStatus: "PUBLISHED",
+					variancePercentThreshold: 0.05,
+				},
+				create: {
+					id,
+					projectId: b308PlanId,
+					partCode,
+					partName,
+					sourceModelId: b308ModelIds[model.modelNumber],
+					sourceModelPartId: b308PartIds[partCode],
+					lifecycleStatus: "PUBLISHED",
+					variancePercentThreshold: 0.05,
+				},
+			});
+		}
+	}
+	const b308LotDefs = [
+		["lot-b308-tako", "LOT-B308-01", "B308 Takoyaki — Export Lot A", "01", 600, "B308-01-01"],
+		["lot-b308-ramen", "LOT-B308-02", "B308 Ramen Cup — Export Lot A", "02", 500, "B308-01-05"],
+		["lot-b308-oni", "LOT-B308-03", "B308 Onigiri — Export Lot A", "03", 500, "B308-01-08"],
+		["lot-b308-skewer", "LOT-B308-04", "B308 Yakitori — Export Lot A", "04", 400, "B308-01-11"],
 	];
-	const secondaryLotIds = {};
-	for (const [key, lotCode, lotName, modelNumber, qty, partCode] of secondaryLotDefs) {
+	const b308LotIds = {};
+	for (const [key, lotCode, lotName, modelNumber, qty, partCode] of b308LotDefs) {
 		const lotId = stableId(key);
-		secondaryLotIds[modelNumber] = lotId;
+		b308LotIds[modelNumber] = lotId;
 		await tx.lot.upsert({
 			where: { id: lotId },
 			update: {
-				projectId: secondaryPlanId,
+				projectId: b308PlanId,
 				lotCode: code(lotCode),
 				lotName,
-				partsListId: secondaryPartsListId,
+				partsListId: b308PartsListId,
 				partsListVersion: 1,
-				partId: planPartIds[partCode],
-				partName: CLIENT_B251.models.find((m) => m.modelNumber === modelNumber).parts[0][1],
+				partId: b308PlanPartIds[partCode],
+				partName: CLIENT_B308.models.find((m) => m.modelNumber === modelNumber).parts[0][1],
 				requiredProductionQuantity: qty,
 				status: "ACTIVE",
 				quantityMagnitude: `${qty}.000000`,
 				quantityUom: "piece",
-				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				labelPackSize: CLIENT_B308.trayQuantityStandard,
 				createdAtStage: "Planning",
 			},
 			create: {
 				id: lotId,
-				projectId: secondaryPlanId,
+				projectId: b308PlanId,
 				lotCode: code(lotCode),
 				lotName,
-				partsListId: secondaryPartsListId,
+				partsListId: b308PartsListId,
 				partsListVersion: 1,
-				partId: planPartIds[partCode],
-				partName: CLIENT_B251.models.find((m) => m.modelNumber === modelNumber).parts[0][1],
+				partId: b308PlanPartIds[partCode],
+				partName: CLIENT_B308.models.find((m) => m.modelNumber === modelNumber).parts[0][1],
 				requiredProductionQuantity: qty,
 				status: "ACTIVE",
 				quantityMagnitude: `${qty}.000000`,
 				quantityUom: "piece",
-				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				labelPackSize: CLIENT_B308.trayQuantityStandard,
 				createdAtStage: "Planning",
 				createdAt: seedClock,
 			},
 		});
-		await tx.lotPartAllocation.upsert({
-			where: {
-				lotId_partId: { lotId, partId: planPartIds[partCode] },
-			},
-			update: {
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				usageBasis: "1 per product",
-				status: "COMMITTED",
-			},
-			create: {
-				id: stableId(`alloc-aug-${lotCode}-${partCode}`),
-				lotId,
-				partId: planPartIds[partCode],
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				usageBasis: "1 per product",
-				status: "COMMITTED",
-				createdAt: seedClock,
-			},
-		});
+		for (const [pCode] of CLIENT_B308.models.find((m) => m.modelNumber === modelNumber).parts) {
+			await tx.lotPartAllocation.upsert({
+				where: {
+					lotId_partId: { lotId, partId: b308PlanPartIds[pCode] },
+				},
+				update: {
+					quantityMagnitude: `${qty}.000000`,
+					quantityUom: "piece",
+					usageBasis: "1 per product",
+					status: "COMMITTED",
+				},
+				create: {
+					id: stableId(`alloc-${lotCode}-${pCode}`),
+					lotId,
+					partId: b308PlanPartIds[pCode],
+					quantityMagnitude: `${qty}.000000`,
+					quantityUom: "piece",
+					usageBasis: "1 per product",
+					status: "COMMITTED",
+					createdAt: seedClock,
+				},
+			});
+		}
 	}
-	const secondaryBatchDefs = [
-		["batch-aug-hd-inj", "BNI-2608-001", "02", "B251-01-08", 360, injectionStageId, null],
-		["batch-aug-tc-inj", "BNI-2608-002", "03", "B251-01-11", 240, injectionStageId, null],
-		["batch-aug-tc-dec", "BNI-2608-003", "03", "B251-01-12", 120, decorationStageId, subFullSprayId],
+	// Stage mix deliberately different from B251 (more Deco/Assembly/Warehouse, less Injection)
+	const b308BatchDefs = [
+		["batch-b308-tako-inj", "BNI-2608-101", "01", "B308-01-01", 200, injectionStageId, null],
+		["batch-b308-tako-dec", "BNI-2608-102", "01", "B308-01-01", 200, decorationStageId, subFullSprayId],
+		["batch-b308-ramen-dec", "BNI-2608-103", "02", "B308-01-05", 250, decorationStageId, subMaskSprayId],
+		["batch-b308-ramen-asm", "BNI-2608-104", "02", "B308-01-06", 180, assemblyStageId, subAssortmentId],
+		["batch-b308-oni-asm", "BNI-2608-105", "03", "B308-01-08", 200, assemblyStageId, subQualityCheckId],
+		["batch-b308-skewer-wh", "BNI-2608-106", "04", "B308-01-11", 150, warehouseStageId, subMainPackingId],
+		["batch-b308-oni-dec", "BNI-2608-107", "03", "B308-01-09", 160, decorationStageId, subTampoId],
 	];
-	for (const [key, batchCode, modelNumber, partCode, qty, stageId, subStageId] of secondaryBatchDefs) {
+	for (const [key, batchCode, modelNumber, partCode, qty, stageId, subStageId] of b308BatchDefs) {
 		const id = stableId(key);
-		const lotId = secondaryLotIds[modelNumber];
+		const lotId = b308LotIds[modelNumber];
 		await tx.batch.upsert({
 			where: { id },
 			update: {
@@ -1656,7 +1798,7 @@ async function seedProfile(tx) {
 				barcodeValue: code(batchCode),
 				lotId,
 				plannedQuantity: qty,
-				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				labelPackSize: CLIENT_B308.trayQuantityStandard,
 				currentStageId: stageId,
 				currentSubStageId: subStageId,
 				status: "ACTIVE",
@@ -1668,7 +1810,7 @@ async function seedProfile(tx) {
 				barcodeValue: code(batchCode),
 				lotId,
 				plannedQuantity: qty,
-				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				labelPackSize: CLIENT_B308.trayQuantityStandard,
 				currentStageId: stageId,
 				currentSubStageId: subStageId,
 				status: "ACTIVE",
@@ -1677,7 +1819,7 @@ async function seedProfile(tx) {
 			},
 		});
 		await tx.batchPartLine.upsert({
-			where: { batchId_partId: { batchId: id, partId: planPartIds[partCode] } },
+			where: { batchId_partId: { batchId: id, partId: b308PlanPartIds[partCode] } },
 			update: {
 				quantity: qty,
 				quantityMagnitude: `${qty}.000000`,
@@ -1685,7 +1827,7 @@ async function seedProfile(tx) {
 			},
 			create: {
 				batchId: id,
-				partId: planPartIds[partCode],
+				partId: b308PlanPartIds[partCode],
 				quantity: qty,
 				quantityMagnitude: `${qty}.000000`,
 				quantityUom: "piece",
@@ -1712,6 +1854,97 @@ async function seedProfile(tx) {
 			},
 		});
 	}
+	// Distinct activity for Street Food Friends (different part names in feed)
+	const b308EventDefs = [
+		["ev-b308-tako-inj", "batch-b308-tako-inj", injectionStageId, null, "B308-01-01", 200, 1, 5],
+		["ev-b308-ramen-dec", "batch-b308-ramen-dec", decorationStageId, subMaskSprayId, "B308-01-05", 248, 2, 3],
+		["ev-b308-oni-asm", "batch-b308-oni-asm", assemblyStageId, subQualityCheckId, "B308-01-08", 200, 2, 7],
+		["ev-b308-skewer-wh", "batch-b308-skewer-wh", warehouseStageId, subMainPackingId, "B308-01-11", 150, 3, 2],
+	];
+	for (const [key, batchKey, stageId, subStageId, partCode, qty, day, hour] of b308EventDefs) {
+		const id = stableId(key);
+		const batchId = stableId(batchKey);
+		const modelNumber = b308BatchDefs.find((b) => b[0] === batchKey)[2];
+		const lotId = b308LotIds[modelNumber];
+		await tx.stageEvent.upsert({
+			where: { id },
+			update: {
+				stageId,
+				subStageId,
+				batchId,
+				lotId,
+				partId: b308PlanPartIds[partCode],
+				quantity: qty,
+				occurredAt: atOffset({ days: day, hours: hour }),
+				actor: planner.displayNameSnapshot ?? planner.id,
+				actorSubjectId: planner.id,
+				eventType: "STAGE_COMPLETED",
+				status: "ACCEPTED",
+				isRoutingViolation: false,
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+				sourceRepresentation: CLIENT_B308.formCode,
+			},
+			create: {
+				id,
+				stageId,
+				subStageId,
+				batchId,
+				lotId,
+				partId: b308PlanPartIds[partCode],
+				quantity: qty,
+				occurredAt: atOffset({ days: day, hours: hour }),
+				actor: planner.displayNameSnapshot ?? planner.id,
+				actorSubjectId: planner.id,
+				eventType: "STAGE_COMPLETED",
+				status: "ACCEPTED",
+				isRoutingViolation: false,
+				quantityMagnitude: `${qty}.000000`,
+				quantityUom: "piece",
+				sourceRepresentation: CLIENT_B308.formCode,
+			},
+		});
+	}
+	// Open QC on B308 Takoyaki deco batch (different product in QC list)
+	await tx.qualityInspection.upsert({
+		where: { id: stableId("qi-b308-open-tako") },
+		update: {
+			batchId: stableId("batch-b308-tako-dec"),
+			stageId: decorationStageId,
+			subStageId: subFullSprayId,
+			stationId: decorationStationId,
+			inspectedQuantity: "200.000000",
+			quantityUom: "piece",
+			status: "IN_PROGRESS",
+			inspectedBySubjectId: quality.id,
+			evidence: {
+				partCode: "B308-01-01",
+				partName: "Takoyaki Shell",
+				origin: "seed-provisional-variety",
+				evidenceStatus: "PROVISIONAL",
+			},
+			startedAt: atOffset({ days: 2, hours: 4 }),
+			completedAt: null,
+		},
+		create: {
+			id: stableId("qi-b308-open-tako"),
+			batchId: stableId("batch-b308-tako-dec"),
+			stageId: decorationStageId,
+			subStageId: subFullSprayId,
+			stationId: decorationStationId,
+			inspectedQuantity: "200.000000",
+			quantityUom: "piece",
+			status: "IN_PROGRESS",
+			inspectedBySubjectId: quality.id,
+			evidence: {
+				partCode: "B308-01-01",
+				partName: "Takoyaki Shell",
+				origin: "seed-provisional-variety",
+				evidenceStatus: "PROVISIONAL",
+			},
+			startedAt: atOffset({ days: 2, hours: 4 }),
+		},
+	});
 
 	await tx.auditRecord.upsert({
 		where: { id: stableId("audit-seed-b251-release") },
@@ -1778,8 +2011,10 @@ async function seedProfile(tx) {
 		profile,
 		subjects: 4,
 		primaryProduct: CLIENT_B251.productCode,
+		secondaryProduct: CLIENT_B308.productCode,
 		productName: CLIENT_B251.productName,
-		models: CLIENT_B251.models.length,
+		secondaryProductName: CLIENT_B308.productName,
+		models: CLIENT_B251.models.length + CLIENT_B308.models.length,
 		injParts: injPartCount,
 		decoParts: decoPartCount,
 		paintParts: paintPartCount,
@@ -1787,14 +2022,16 @@ async function seedProfile(tx) {
 		catalogModelParts: injPartCount + decoPartCount + paintPartCount + capsuleAttachmentCount,
 		planParts: Object.keys(planPartIds).length,
 		plans: 2,
-		lots: lotDefs.length + secondaryLotDefs.length,
-		batches: batchDefs.length + secondaryBatchDefs.length,
+		lots: lotDefs.length + b308LotDefs.length,
+		batches: batchDefs.length + b308BatchDefs.length,
 		productId: productB251Id,
+		secondaryProductId: productB308Id,
 		projectId,
+		secondaryProjectId: b308PlanId,
 		openInspectionId: inspectionOpenId,
 		adminUsername: `${profile}.admin`,
 		evidenceNote:
-			"B251 client-parts-list Rev 6.0 contour (inj+deco+paint+capsule) — PROVISIONAL seed, not Drive-approved",
+			"B251 client-parts-list + B308 Street Food Friends variety — PROVISIONAL seed, not Drive-approved",
 	};
 }
 

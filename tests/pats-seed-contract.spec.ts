@@ -46,6 +46,8 @@ describe("PATS seed contract", () => {
       "stage-warehouse",
       "BNI-2607-001",
       "Machibouke Hamburger Shop 3",
+      "Street Food Friends",
+      "CLIENT_B308",
       "PACKAGING_COMPONENT",
       "DECORATION_INPUT",
       "sharedCapsule",
@@ -65,6 +67,15 @@ describe("PATS seed contract", () => {
     expect(clientFragment).to.contain("decoPartsByModel");
     expect(clientFragment).to.contain("paintNumbers");
     expect(clientFragment).to.contain("sharedCapsule");
+
+    const varietyFragment = fs.readFileSync(
+      path.join(repositoryRoot, "scripts", "pats-seed-client-b308.mjs"),
+      "utf8",
+    );
+    expect(varietyFragment).to.contain('productCode: "B308"');
+    expect(varietyFragment).to.contain("Street Food Friends");
+    expect(varietyFragment).to.contain("Takoyaki");
+    expect(varietyFragment).to.contain("B308-01-01");
   });
 
   it("keeps seed writes additive and role subjects for demo shell coverage", () => {
