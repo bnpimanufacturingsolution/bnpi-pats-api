@@ -139,24 +139,23 @@ async function main() {
 		samples.planDetail = { etag: planEtag, status: plan.body?.status, lots: plan.body?.lots?.length };
 	}
 
-	// Create a draft plan for mutation + concurrency checks
+	// Create a draft plan for mutation + concurrency checks (unique keys each run)
+	const runSuffix = Date.now().toString(36);
+	const draftPlanCode = `DEMO-ACC-PLAN-${runSuffix}`;
+	const draftIdemKey = `journey-draft-plan-${runSuffix}`;
+	const draftBody = {
+		planCode: draftPlanCode,
+		name: "Acceptance Draft Plan",
+		requiredProductionQuantity: 120,
+		productId: productId ?? null,
+	};
 	const draftCreate = await api("POST", "/production-plans", {
-		headers: { ...plannerAuth, "Idempotency-Key": "journey-draft-plan-1" },
-		body: {
-			planCode: "DEMO-ACC-PLAN-001",
-			name: "Acceptance Draft Plan",
-			requiredProductionQuantity: 120,
-			productId: productId ?? null,
-		},
+		headers: { ...plannerAuth, "Idempotency-Key": draftIdemKey },
+		body: draftBody,
 	});
 	const draftReplay = await api("POST", "/production-plans", {
-		headers: { ...plannerAuth, "Idempotency-Key": "journey-draft-plan-1" },
-		body: {
-			planCode: "DEMO-ACC-PLAN-001",
-			name: "Acceptance Draft Plan",
-			requiredProductionQuantity: 120,
-			productId: productId ?? null,
-		},
+		headers: { ...plannerAuth, "Idempotency-Key": draftIdemKey },
+		body: draftBody,
 	});
 	const draftId = draftCreate.body?.planId ?? draftCreate.location?.split("/").pop();
 	const createOk = [200, 201].includes(draftCreate.status) && draftReplay.status === draftCreate.status;
@@ -235,7 +234,9 @@ async function main() {
 		const batches = await api("GET", "/batches", { headers: operatorAuth });
 		const batchRows = dataOf(batches.body);
 		const demoBatch =
-			batchRows.find((b) => String(b.batchCode ?? "").startsWith("DEMO-")) ?? batchRows[0];
+			batchRows.find((b) => String(b.batchCode ?? "") === "DEMO-BATCH-001") ??
+			batchRows.find((b) => String(b.batchCode ?? "").startsWith("DEMO-BATCH-")) ??
+			batchRows[0];
 		const batchId = demoBatch?.batchId ?? demoBatch?.id;
 		rec("batches", batches.status === 200 ? "PASS" : "FAIL", `count=${batchRows.length} first=${batchId}`);
 
@@ -307,16 +308,25 @@ async function main() {
 			rec("stage-event-idempotent", "BLOCKED", `batch=${eventBatchId} stage=${eventStageId}`);
 		}
 
-		// Inventory issuance needs a plan-scoped part and target stage for the same batch.
+		// Inventory issuance needs a plan-scoped part for the same batch (prefer existing inv, else batch/plan parts).
 		const invRows = dataOf(inv.body);
 		const existingInv =
-			invRows.find((row) => row.batchId === eventBatchId) ?? invRows[0];
+			invRows.find((row) => row.batchId === eventBatchId) ??
+			invRows.find((row) => String(row.withdrawalFormRef ?? "").includes("DEMO")) ??
+			invRows[0];
+		const batchRowsAll = dataOf(batches.body);
+		const batchRow = batchRowsAll.find((b) => (b.batchId ?? b.id) === eventBatchId) ?? demoBatch;
+		// Prefer part that already has inventory on this exact DEMO batch (avoids DEMO/UAT cross-mix).
+		const invForDemoBatch = invRows.find((row) => row.batchId === eventBatchId);
 		const partId =
-			existingInv?.partId ??
+			invForDemoBatch?.partId ??
+			batchRow?.parts?.[0]?.partId ??
 			planDetail?.lots?.[0]?.partAllocations?.[0]?.partId ??
 			planDetail?.parts?.[0]?.id ??
+			existingInv?.partId ??
 			null;
-		const toStageId = existingInv?.toStageId ?? eventStageId ?? stepRows[0]?.stageId;
+		const toStageId =
+			existingInv?.toStageId ?? eventStageId ?? batchRow?.currentStageId ?? stepRows[0]?.stageId;
 		const fromStageId = existingInv?.fromStageId ?? null;
 		if (eventBatchId && partId && toStageId) {
 			const body = {
@@ -334,8 +344,12 @@ async function main() {
 			const i1 = await api("POST", "/inventory-transactions", { headers, body });
 			const i2 = await api("POST", "/inventory-transactions", { headers, body });
 			const ok = [200, 201].includes(i1.status) && i2.status === i1.status;
-			rec("inventory-idempotent", ok ? "PASS" : "FAIL", `first=${i1.status} ${i1.raw.slice(0, 160)} | second=${i2.status}`);
-			samples.inventory = { first: i1.status, second: i2.status, raw: i1.raw.slice(0, 400) };
+			rec(
+				"inventory-idempotent",
+				ok ? "PASS" : "FAIL",
+				`first=${i1.status} ${i1.raw.slice(0, 160)} | second=${i2.status} part=${partId}`,
+			);
+			samples.inventory = { first: i1.status, second: i2.status, raw: i1.raw.slice(0, 400), partId, batchId: eventBatchId };
 		} else {
 			rec("inventory-idempotent", "BLOCKED", `batch=${eventBatchId} part=${partId} stage=${toStageId}`);
 		}
