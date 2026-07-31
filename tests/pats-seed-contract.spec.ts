@@ -35,8 +35,21 @@ describe("PATS seed contract", () => {
       "auditRecord",
       "outboxMessage",
       'evidenceStatus: "PROVISIONAL"',
+      "prototype-fixture-repurpose",
+      "subject-admin",
+      "product-b251",
+      "stage-warehouse",
+      "BATCH-B251-001",
     ]) {
       expect(script, `seed is missing ${required}`).to.contain(required);
     }
+  });
+
+  it("keeps seed writes additive and role subjects for demo shell coverage", () => {
+    const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+    expect(script).to.contain("production-operator");
+    expect(script).to.contain("operations-admin");
+    expect(script).to.contain("IN_PROGRESS");
+    expect(script).to.not.match(/TRUNCATE|DROP TABLE|deleteMany/i);
   });
 });

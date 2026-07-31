@@ -40,6 +40,20 @@ The seed creates synthetic development/UAT data only. It does not ingest or appr
 source files. Source evidence remains provisional until the controlled source-revision workflow
 and business approval boundary are implemented.
 
+## Prototype-fixture enrichment (2026-07-31 follow-up)
+
+`scripts/pats-seed.mjs` now repurposes prototype fixture shapes from `bnpi-pats-app` for richer
+local screens without treating fixtures as approved client truth:
+
+- second product pack (B251 hamburger-shop family) plus B250 multi-model catalog;
+- Warehouse stage/station and decoration/assembly sub-stages (Full Spray, Mask Spray, Tampo, etc.);
+- multi-lot / multi-batch WIP across Injection → Decoration → Assembly → Warehouse;
+- denser stage events, inventory receiving/issuance, open routing violation, open QC inspection;
+- `demo.admin` multi-capability subject; planner seed also includes production/inventory capabilities
+  so a single demo login can hydrate the line shell (demo/uat convenience only).
+
+All enriched values remain `PROVISIONAL` / `MANUAL` seed evidence with stable profile-scoped ids.
+
 ## I4 entry condition
 
 The API can now be validated against a complete persisted journey. The next pass exposes read
