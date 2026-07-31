@@ -10,12 +10,16 @@ The design gate has been approved for bounded implementation passes. I1–I9 fou
 seed, app transport, planning, line-operations, QC, reporting, and configuration-read slices are
 implemented. I10 added the server-owned station-history projection and canonical app adoption. The
 I11 release gate remains open: station support-card ownership, full configuration authoring, and
-planning-editor parity are still incomplete. A disposable seeded API journey (**35/35 PASS**) and a
-bounded Playwright browser smoke (**1/1 PASS**) were executed on 2026-07-31; evidence lives in
-`docs/superpowers/chains/2026-07-31-full-app-api-test-acceptance.md` and the app WWG acceptance
-report. Those checks do not close the full-transition gate. DM/cutover, client-data
-migration/publication, external system integration, hardware SDKs, and production deployment remain
-frozen.
+planning-editor parity are still incomplete. Disposable seeded API journey (**35/35 PASS**) and
+Playwright unbiased path (**10 PASS / 1 DEFERRED**) were executed on 2026-07-31 with enriched seed.
+Evidence:
+
+- `docs/superpowers/chains/2026-07-31-full-app-api-test-acceptance.md`
+- `docs/superpowers/chains/2026-07-31-app-api-integration-boundary-and-handoff.md` (API pointer)
+- App: `.wwg/reports/2026-07-31-app-api-integration-boundary-and-handoff.md` (**primary resume**)
+
+Those checks do not close the full-transition gate. DM/cutover, client-data migration/publication,
+external system integration, hardware SDKs, and production deployment remain frozen.
 
 Specification discovery: `docs/superpowers/reports/2026-07-31-full-app-api-integration-specification-discovery.md`
 
