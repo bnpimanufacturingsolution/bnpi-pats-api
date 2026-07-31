@@ -258,6 +258,9 @@ export function domainReadRouter(
 				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested production plan was not found.");
 				return;
 			}
+			// Mutable plan resources expose the optimistic-concurrency token as a strong ETag.
+			// Clients must send this value (or body.rowVersion) as If-Match on plan commands.
+			res.setHeader("ETag", `"${plan.rowVersion}"`);
 			res.setHeader("Cache-Control", "no-store").json({
 				planId: plan.id,
 				planCode: plan.projectCode,

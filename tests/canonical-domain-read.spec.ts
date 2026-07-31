@@ -130,6 +130,8 @@ describe("canonical PATS domain read contract", () => {
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
+		expect(response.headers.etag).to.equal('"2"');
+		expect(response.headers["cache-control"]).to.equal("no-store");
 		expect(response.body.lots[0]).to.include({
 			lotId: "lot-1",
 			partsListId: "route-1",

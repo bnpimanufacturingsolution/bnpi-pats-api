@@ -9,11 +9,13 @@ Repositories: `bnpi-pats-api`, `bnpi-pats-app`
 The design gate has been approved for bounded implementation passes. I1–I9 foundation, read/write,
 seed, app transport, planning, line-operations, QC, reporting, and configuration-read slices are
 implemented. I10 added the server-owned station-history projection and canonical app adoption. The
-I11 release gate remains open: station support-card ownership, full configuration authoring, the
-remaining planning-editor parity, and a clean seeded browser acceptance path are not complete. The
-current evidence is maintained in the I10/I11 chain reports and the app WWG current-task/report
-surfaces. DM/cutover, client-data migration/publication, external system integration, hardware SDKs,
-and production deployment remain frozen.
+I11 release gate remains open: station support-card ownership, full configuration authoring, and
+planning-editor parity are still incomplete. A disposable seeded API journey (**35/35 PASS**) and a
+bounded Playwright browser smoke (**1/1 PASS**) were executed on 2026-07-31; evidence lives in
+`docs/superpowers/chains/2026-07-31-full-app-api-test-acceptance.md` and the app WWG acceptance
+report. Those checks do not close the full-transition gate. DM/cutover, client-data
+migration/publication, external system integration, hardware SDKs, and production deployment remain
+frozen.
 
 Specification discovery: `docs/superpowers/reports/2026-07-31-full-app-api-integration-specification-discovery.md`
 
