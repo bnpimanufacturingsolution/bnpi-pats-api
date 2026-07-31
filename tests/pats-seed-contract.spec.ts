@@ -21,6 +21,10 @@ describe("PATS seed contract", () => {
 
   it("seeds explicit operational evidence and marks it provisional", () => {
     const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+    const clientFragment = fs.readFileSync(
+      path.join(repositoryRoot, "scripts", "pats-seed-client-b251.mjs"),
+      "utf8",
+    );
 
     for (const required of [
       "planDemandAllocation",
@@ -35,14 +39,21 @@ describe("PATS seed contract", () => {
       "auditRecord",
       "outboxMessage",
       'evidenceStatus: "PROVISIONAL"',
-      "prototype-fixture-repurpose",
+      "client-parts-list",
+      "CLIENT_B251",
       "subject-admin",
       "product-b251",
       "stage-warehouse",
-      "BATCH-B251-001",
+      "BNI-2607-001",
+      "Machibouke Hamburger Shop 3",
     ]) {
       expect(script, `seed is missing ${required}`).to.contain(required);
     }
+
+    expect(clientFragment).to.contain('productCode: "B251"');
+    expect(clientFragment).to.contain("B251-01-01");
+    expect(clientFragment).to.contain("Avocado Burger");
+    expect(clientFragment).to.contain("NEEDS_CONFIRMATION");
   });
 
   it("keeps seed writes additive and role subjects for demo shell coverage", () => {
