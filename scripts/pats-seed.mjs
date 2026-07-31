@@ -3,6 +3,7 @@
  *
  * Primary catalog/plan material is drawn from client parts-list evidence for
  * B251 Machibouke Hamburger Shop 3 (Rev 6.0) — see pats-seed-client-b251.mjs.
+ * Contour families: inj parts, deco part nos, paint nos (PN-*), shared capsule.
  * Values remain PROVISIONAL seed evidence, not Drive-approved publication.
  *
  * SEED_MODE=none|demo|uat
@@ -11,7 +12,11 @@
 import { createHash } from "node:crypto";
 import argon2 from "argon2";
 import { PrismaClient } from "../generated/pats-client/index.js";
-import { CLIENT_B251 } from "./pats-seed-client-b251.mjs";
+import {
+	CLIENT_B251,
+	decoPartDisplayName,
+	paintPartDisplayName,
+} from "./pats-seed-client-b251.mjs";
 
 const mode = (process.env.SEED_MODE ?? "none").trim().toLowerCase();
 
@@ -229,6 +234,94 @@ async function seedProfile(tx) {
 		}
 	}
 
+	const injPartCount = Object.keys(partIds).length;
+	/** @type {Record<string, string>} modelNumber -> capsule ModelPart id */
+	const capsulePartIds = {};
+	/** @type {Record<string, string>} deco partCode -> ModelPart id */
+	const decoPartIds = {};
+	/** @type {Record<string, string>} `${modelNumber}:${paintCode}` -> ModelPart id */
+	const paintPartIds = {};
+	let decoPartCount = 0;
+	let paintPartCount = 0;
+	let capsuleAttachmentCount = 0;
+
+	async function upsertModelPartRow(txClient, { modelNumber, partCode, partName, seedKey }) {
+		const modelId = modelIds[modelNumber];
+		const partId = stableId(seedKey);
+		await txClient.modelPart.upsert({
+			where: { modelId_partCode: { modelId, partCode } },
+			update: {
+				partName,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+				routingSteps: [],
+			},
+			create: {
+				id: partId,
+				modelId,
+				partCode,
+				partName,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+				routingSteps: [],
+			},
+		});
+		const resolved = await txClient.modelPart.findUnique({
+			where: { modelId_partCode: { modelId, partCode } },
+			select: { id: true },
+		});
+		return resolved?.id ?? partId;
+	}
+
+	// Shared capsule on every model (ALL MODELS packaging)
+	for (const model of CLIENT_B251.models) {
+		const partCode = CLIENT_B251.sharedCapsule.partCode;
+		const id = await upsertModelPartRow(tx, {
+			modelNumber: model.modelNumber,
+			partCode,
+			partName: CLIENT_B251.sharedCapsule.partName,
+			seedKey: `model-part-capsule-${model.modelNumber}`,
+		});
+		capsulePartIds[model.modelNumber] = id;
+		capsuleAttachmentCount += 1;
+	}
+
+	// Deco part nos — skip when code already exists as inj part on the same model
+	for (const [modelNumber, decoList] of Object.entries(CLIENT_B251.decoPartsByModel)) {
+		const injCodes = new Set(
+			(CLIENT_B251.models.find((m) => m.modelNumber === modelNumber)?.parts ?? []).map(([c]) => c),
+		);
+		for (const deco of decoList) {
+			if (injCodes.has(deco.partCode)) {
+				// Drink rows reuse bare inj codes as deco part nos — do not duplicate ModelPart.
+				continue;
+			}
+			const id = await upsertModelPartRow(tx, {
+				modelNumber,
+				partCode: deco.partCode,
+				partName: decoPartDisplayName(deco),
+				seedKey: `model-part-deco-${deco.partCode}`,
+			});
+			decoPartIds[deco.partCode] = id;
+			decoPartCount += 1;
+		}
+	}
+
+	// Paint nos — attach per model membership (same PN may appear on multiple models)
+	for (const paint of CLIENT_B251.paintNumbers) {
+		const displayName = paintPartDisplayName(paint);
+		for (const modelNumber of paint.modelNumbers) {
+			const id = await upsertModelPartRow(tx, {
+				modelNumber,
+				partCode: paint.partCode,
+				partName: displayName,
+				seedKey: `model-part-paint-${modelNumber}-${paint.partCode}`,
+			});
+			paintPartIds[`${modelNumber}:${paint.partCode}`] = id;
+			paintPartCount += 1;
+		}
+	}
+
 	// BOM + process route for model 01 (Avocado Burger) as representative published revision
 	const avocadoModelId = modelIds["01"];
 	const bomId = stableId("bom-b251-m01-r1");
@@ -278,6 +371,112 @@ async function seedProfile(tx) {
 				quantityUom: "piece",
 				usageBasis: "1 per product",
 				sourceRepresentation: partCode,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+			},
+		});
+		lineNo += 1;
+	}
+
+	// Capsule packaging line on m01 BOM
+	{
+		const partCode = CLIENT_B251.sharedCapsule.partCode;
+		const lineId = stableId(`bom-line-pack-${partCode}`);
+		await tx.bomLine.upsert({
+			where: { id: lineId },
+			update: {
+				bomDefinitionId,
+				modelPartId: capsulePartIds["01"],
+				lineNumber: lineNo,
+				relationshipKind: "PACKAGING_COMPONENT",
+				quantityMagnitude: 1,
+				quantityUom: "piece",
+				usageBasis: "shared capsule ALL MODELS (PROVISIONAL)",
+				sourceRepresentation: partCode,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+			},
+			create: {
+				id: lineId,
+				bomDefinitionId,
+				modelPartId: capsulePartIds["01"],
+				lineNumber: lineNo,
+				relationshipKind: "PACKAGING_COMPONENT",
+				quantityMagnitude: 1,
+				quantityUom: "piece",
+				usageBasis: "shared capsule ALL MODELS (PROVISIONAL)",
+				sourceRepresentation: partCode,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+			},
+		});
+		lineNo += 1;
+	}
+
+	// Deco part nos for m01 as DECORATION_INPUT
+	for (const deco of CLIENT_B251.decoPartsByModel["01"] ?? []) {
+		if (!decoPartIds[deco.partCode]) continue;
+		const lineId = stableId(`bom-line-deco-${deco.partCode}`);
+		await tx.bomLine.upsert({
+			where: { id: lineId },
+			update: {
+				bomDefinitionId,
+				modelPartId: decoPartIds[deco.partCode],
+				lineNumber: lineNo,
+				relationshipKind: "DECORATION_INPUT",
+				quantityMagnitude: 1,
+				quantityUom: "piece",
+				usageBasis: "deco part no (PROVISIONAL)",
+				sourceRepresentation: deco.partCode,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+			},
+			create: {
+				id: lineId,
+				bomDefinitionId,
+				modelPartId: decoPartIds[deco.partCode],
+				lineNumber: lineNo,
+				relationshipKind: "DECORATION_INPUT",
+				quantityMagnitude: 1,
+				quantityUom: "piece",
+				usageBasis: "deco part no (PROVISIONAL)",
+				sourceRepresentation: deco.partCode,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+			},
+		});
+		lineNo += 1;
+	}
+
+	// Paint nos used on m01 as DECORATION_INPUT (paint material identity)
+	for (const paint of CLIENT_B251.paintNumbers.filter((p) => p.modelNumbers.includes("01"))) {
+		const modelPartId = paintPartIds[`01:${paint.partCode}`];
+		if (!modelPartId) continue;
+		const lineId = stableId(`bom-line-paint-${paint.partCode}`);
+		await tx.bomLine.upsert({
+			where: { id: lineId },
+			update: {
+				bomDefinitionId,
+				modelPartId,
+				lineNumber: lineNo,
+				relationshipKind: "DECORATION_INPUT",
+				quantityMagnitude: null,
+				quantityUom: null,
+				usageBasis: "paint no (PROVISIONAL; process not modeled)",
+				sourceRepresentation: paint.partCode,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+			},
+			create: {
+				id: lineId,
+				bomDefinitionId,
+				modelPartId,
+				lineNumber: lineNo,
+				relationshipKind: "DECORATION_INPUT",
+				quantityMagnitude: null,
+				quantityUom: null,
+				usageBasis: "paint no (PROVISIONAL; process not modeled)",
+				sourceRepresentation: paint.partCode,
 				lifecycleStatus: "PUBLISHED",
 				evidenceStatus: "PROVISIONAL",
 			},
@@ -617,7 +816,7 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// Snapshot plan parts from catalog model parts (all B251 parts)
+	// Snapshot plan parts: inj + deco part nos + capsule (paints stay catalog/BOM only)
 	for (const model of CLIENT_B251.models) {
 		for (const [partCode, partName] of model.parts) {
 			const id = stableId(`plan-part-${partCode}`);
@@ -645,6 +844,61 @@ async function seedProfile(tx) {
 				},
 			});
 		}
+		for (const deco of CLIENT_B251.decoPartsByModel[model.modelNumber] ?? []) {
+			if (!decoPartIds[deco.partCode]) continue;
+			const id = stableId(`plan-part-deco-${deco.partCode}`);
+			planPartIds[deco.partCode] = id;
+			await tx.part.upsert({
+				where: { id },
+				update: {
+					projectId,
+					partCode: deco.partCode,
+					partName: decoPartDisplayName(deco),
+					sourceModelId: modelIds[model.modelNumber],
+					sourceModelPartId: decoPartIds[deco.partCode],
+					lifecycleStatus: "PUBLISHED",
+					variancePercentThreshold: 0.05,
+				},
+				create: {
+					id,
+					projectId,
+					partCode: deco.partCode,
+					partName: decoPartDisplayName(deco),
+					sourceModelId: modelIds[model.modelNumber],
+					sourceModelPartId: decoPartIds[deco.partCode],
+					lifecycleStatus: "PUBLISHED",
+					variancePercentThreshold: 0.05,
+				},
+			});
+		}
+	}
+	// One plan-level capsule part (packaging), sourced from model 01 attachment
+	{
+		const partCode = CLIENT_B251.sharedCapsule.partCode;
+		const id = stableId(`plan-part-capsule-${partCode}`);
+		planPartIds[partCode] = id;
+		await tx.part.upsert({
+			where: { id },
+			update: {
+				projectId,
+				partCode,
+				partName: CLIENT_B251.sharedCapsule.partName,
+				sourceModelId: modelIds["01"],
+				sourceModelPartId: capsulePartIds["01"],
+				lifecycleStatus: "PUBLISHED",
+				variancePercentThreshold: 0.05,
+			},
+			create: {
+				id,
+				projectId,
+				partCode,
+				partName: CLIENT_B251.sharedCapsule.partName,
+				sourceModelId: modelIds["01"],
+				sourceModelPartId: capsulePartIds["01"],
+				lifecycleStatus: "PUBLISHED",
+				variancePercentThreshold: 0.05,
+			},
+		});
 	}
 
 	await tx.partsList.upsert({
@@ -1242,7 +1496,12 @@ async function seedProfile(tx) {
 		primaryProduct: CLIENT_B251.productCode,
 		productName: CLIENT_B251.productName,
 		models: CLIENT_B251.models.length,
-		parts: Object.keys(partIds).length,
+		injParts: injPartCount,
+		decoParts: decoPartCount,
+		paintParts: paintPartCount,
+		capsuleAttachments: capsuleAttachmentCount,
+		catalogModelParts: injPartCount + decoPartCount + paintPartCount + capsuleAttachmentCount,
+		planParts: Object.keys(planPartIds).length,
 		plans: 1,
 		lots: lotDefs.length,
 		batches: batchDefs.length,
@@ -1250,7 +1509,8 @@ async function seedProfile(tx) {
 		projectId,
 		openInspectionId: inspectionOpenId,
 		adminUsername: `${profile}.admin`,
-		evidenceNote: "B251 client-parts-list Rev 6.0 — PROVISIONAL seed, not Drive-approved",
+		evidenceNote:
+			"B251 client-parts-list Rev 6.0 contour (inj+deco+paint+capsule) — PROVISIONAL seed, not Drive-approved",
 	};
 }
 

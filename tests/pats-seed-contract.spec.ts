@@ -46,6 +46,11 @@ describe("PATS seed contract", () => {
       "stage-warehouse",
       "BNI-2607-001",
       "Machibouke Hamburger Shop 3",
+      "PACKAGING_COMPONENT",
+      "DECORATION_INPUT",
+      "sharedCapsule",
+      "decoPartsByModel",
+      "paintNumbers",
     ]) {
       expect(script, `seed is missing ${required}`).to.contain(required);
     }
@@ -54,6 +59,12 @@ describe("PATS seed contract", () => {
     expect(clientFragment).to.contain("B251-01-01");
     expect(clientFragment).to.contain("Avocado Burger");
     expect(clientFragment).to.contain("NEEDS_CONFIRMATION");
+    expect(clientFragment).to.contain("C002-01-42");
+    expect(clientFragment).to.contain("B251-01-01ST");
+    expect(clientFragment).to.contain("PN-B251-");
+    expect(clientFragment).to.contain("decoPartsByModel");
+    expect(clientFragment).to.contain("paintNumbers");
+    expect(clientFragment).to.contain("sharedCapsule");
   });
 
   it("keeps seed writes additive and role subjects for demo shell coverage", () => {
