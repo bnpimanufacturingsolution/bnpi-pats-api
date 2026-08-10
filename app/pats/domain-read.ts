@@ -11,6 +11,10 @@ type DomainReadDatabase = Pick<
 	| "station"
 	| "stationStep"
 	| "workInstruction"
+	| "workProcess"
+	| "booth"
+	| "monitoringDailySheet"
+	| "monitoringStationBoard"
 	| "batch"
 	| "batchPositionProjection"
 	| "routingStep"
@@ -199,6 +203,17 @@ function boundStepsOrFilter(steps: BoundStep[]): { OR: Array<Record<string, unkn
 			step.subStageId == null
 				? { stageId: step.stageId }
 				: { stageId: step.stageId, subStageId: step.subStageId },
+		),
+	};
+}
+
+/** Same bound-step idea for RoutingViolation attempted stage/substage fields. */
+function stepFilterAsViolationWhere(steps: BoundStep[]): { OR: Array<Record<string, unknown>> } {
+	return {
+		OR: steps.map((step) =>
+			step.subStageId == null
+				? { attemptedStageId: step.stageId }
+				: { attemptedStageId: step.stageId, attemptedSubStageId: step.subStageId },
 		),
 	};
 }
@@ -451,16 +466,18 @@ export function domainReadRouter(
 				return;
 			}
 
-			const stageIds = [...new Set([station.stageId, ...station.boundSteps.map((step) => step.stageId)])];
+			const boundSteps = resolveStationBoundSteps(station);
+			const stageIds = [...new Set(boundSteps.map((step) => step.stageId))];
+			const stepFilter = boundStepsOrFilter(boundSteps);
 			const [stages, events, violations] = await Promise.all([
 				database.stage.findMany({ where: { id: { in: stageIds } }, select: { id: true, name: true } }),
 				database.stageEvent.findMany({
-					where: { stageId: { in: stageIds } },
+					where: stepFilter,
 					orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
 					include: { actorSubject: { select: { displayNameSnapshot: true } } },
 				}),
 				database.routingViolation.findMany({
-					where: { attemptedStageId: { in: stageIds }, status: "OPEN" },
+					where: { AND: [stepFilterAsViolationWhere(boundSteps), { status: "OPEN" }] },
 					orderBy: [{ detectedAt: "desc" }, { id: "desc" }],
 				}),
 			]);
@@ -654,6 +671,133 @@ export function domainReadRouter(
 			res.setHeader("Cache-Control", "no-store").json({ data: stationSteps });
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station-step configuration is unavailable.");
+		}
+	});
+
+	router.get("/work-processes", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const requestQuery = query(req);
+			const allowedKeys = new Set(["subStageId"]);
+			if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The work-process query is invalid.");
+				return;
+			}
+			const subStageId = Array.isArray(requestQuery.subStageId)
+				? requestQuery.subStageId[0]
+				: requestQuery.subStageId;
+			const processes = await database.workProcess.findMany({
+				where: {
+					isEnabled: true,
+					...(subStageId ? { subStageId } : {}),
+				},
+				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+				include: { subStage: { select: { id: true, name: true } } },
+			});
+			res.setHeader("Cache-Control", "no-store").json({
+				data: processes.map((process) => ({
+					id: process.id,
+					subStageId: process.subStageId,
+					subStageName: process.subStage.name,
+					name: process.name,
+					displayOrder: process.displayOrder,
+					labelledCycleTimeSec: process.labelledCycleTimeSec,
+					isEnabled: process.isEnabled,
+				})),
+			});
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS work-process catalog is unavailable.");
+		}
+	});
+
+	router.get("/booths", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const requestQuery = query(req);
+			const allowedKeys = new Set(["stationId"]);
+			if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The booth query is invalid.");
+				return;
+			}
+			const stationId = Array.isArray(requestQuery.stationId)
+				? requestQuery.stationId[0]
+				: requestQuery.stationId;
+			const booths = await database.booth.findMany({
+				where: {
+					isEnabled: true,
+					...(stationId ? { stationId } : {}),
+				},
+				orderBy: [{ displayOrder: "asc" }, { boothCode: "asc" }],
+			});
+			res.setHeader("Cache-Control", "no-store").json({
+				data: booths.map((booth) => ({
+					id: booth.id,
+					boothCode: booth.boothCode,
+					label: booth.label,
+					stationId: booth.stationId,
+					stageId: booth.stageId,
+					subStageId: booth.subStageId,
+					workProcessId: booth.workProcessId,
+					displayOrder: booth.displayOrder,
+					isEnabled: booth.isEnabled,
+				})),
+			});
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS booth catalog is unavailable.");
+		}
+	});
+
+	router.get("/monitoring/daily-sheets", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const sheets = await database.monitoringDailySheet.findMany({
+				orderBy: [{ productionDate: "desc" }, { updatedAt: "desc" }],
+			});
+			res.setHeader("Cache-Control", "no-store").json({
+				data: sheets.map((sheet) => sheet.payloadJson),
+			});
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS monitoring daily sheets are unavailable.");
+		}
+	});
+
+	router.get("/monitoring/daily-sheets/:sheetId", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const sheet = await database.monitoringDailySheet.findUnique({ where: { id: req.params.sheetId } });
+			if (!sheet) {
+				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The monitoring daily sheet was not found.");
+				return;
+			}
+			res.setHeader("Cache-Control", "no-store")
+				.setHeader("ETag", `"${sheet.rowVersion}"`)
+				.json(sheet.payloadJson);
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS monitoring daily sheets are unavailable.");
+		}
+	});
+
+	router.get("/monitoring/station-boards", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const boards = await database.monitoringStationBoard.findMany({
+				orderBy: [{ productionDate: "desc" }, { updatedAt: "desc" }],
+			});
+			res.setHeader("Cache-Control", "no-store").json({
+				data: boards.map((board) => board.payloadJson),
+			});
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS monitoring station boards are unavailable.");
+		}
+	});
+
+	router.get("/monitoring/station-boards/:boardId", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const board = await database.monitoringStationBoard.findUnique({ where: { id: req.params.boardId } });
+			if (!board) {
+				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The monitoring station board was not found.");
+				return;
+			}
+			res.setHeader("Cache-Control", "no-store")
+				.setHeader("ETag", `"${board.rowVersion}"`)
+				.json(board.payloadJson);
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS monitoring station boards are unavailable.");
 		}
 	});
 

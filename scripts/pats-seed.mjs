@@ -526,10 +526,16 @@ async function seedProfile(tx) {
 	const subSubAssemblyId = stableId("substage-sub-assembly");
 	const subAssortmentId = stableId("substage-assortment");
 	const subMainPackingId = stableId("substage-main-packing");
+	// Device install default (D-008): one Station per SubStage when present; stage-level otherwise.
+	// Keep legacy keys for injection/decoration-primary so QC seed rows remain stable.
 	const injectionStationId = stableId("station-injection-01");
-	const decorationStationId = stableId("station-decoration-01");
-	const assemblyStationId = stableId("station-assembly-01");
-	const warehouseStationId = stableId("station-warehouse-01");
+	const decorationStationId = stableId("station-decoration-full-spray"); // primary deco PC (was decoration-01)
+	const decorationMaskStationId = stableId("station-decoration-mask-spray");
+	const decorationTampoStationId = stableId("station-decoration-tampo");
+	const assemblyStationId = stableId("station-assembly-quality-check");
+	const assemblySubAssemblyStationId = stableId("station-assembly-sub-assembly");
+	const assemblyAssortmentStationId = stableId("station-assembly-assortment");
+	const warehouseStationId = stableId("station-warehouse-main-packing");
 
 	await tx.workflowGroup.upsert({
 		where: { id: workflowId },
@@ -644,10 +650,14 @@ async function seedProfile(tx) {
 	}
 
 	for (const [id, name, stationCode, stageId, displayOrder] of [
-		[injectionStationId, "Injection Station 01", "ST-INJ-01", injectionStageId, 1],
-		[decorationStationId, "Decoration Station 01", "ST-DEC-01", decorationStageId, 2],
-		[assemblyStationId, "Assembly Station 01", "ST-ASM-01", assemblyStageId, 3],
-		[warehouseStationId, "Warehouse Station 01", "ST-WH-01", warehouseStageId, 4],
+		[injectionStationId, "Injection · Molding", "ST-INJ-01", injectionStageId, 1],
+		[decorationStationId, "Decoration · Full Spray", "ST-DEC-FS", decorationStageId, 2],
+		[decorationMaskStationId, "Decoration · Mask Spray", "ST-DEC-MS", decorationStageId, 3],
+		[decorationTampoStationId, "Decoration · Tampo", "ST-DEC-TP", decorationStageId, 4],
+		[assemblyStationId, "Assembly · Quality Check", "ST-ASM-QC", assemblyStageId, 5],
+		[assemblySubAssemblyStationId, "Assembly · Sub-Assembly", "ST-ASM-SUB", assemblyStageId, 6],
+		[assemblyAssortmentStationId, "Assembly · Assortment", "ST-ASM-AST", assemblyStageId, 7],
+		[warehouseStationId, "Warehouse · Main Packing", "ST-WH-PK", warehouseStageId, 8],
 	]) {
 		await tx.station.upsert({
 			where: { id },
@@ -674,15 +684,90 @@ async function seedProfile(tx) {
 	}
 
 	for (const [id, stationId, stageId, subStageId] of [
+		// Injection has no floor sub-stages in seed → stage-wide bound step
 		[stableId("station-step-inj"), injectionStationId, injectionStageId, null],
-		[stableId("station-step-dec"), decorationStationId, decorationStageId, subFullSprayId],
+		[stableId("station-step-dec-fs"), decorationStationId, decorationStageId, subFullSprayId],
+		[stableId("station-step-dec-ms"), decorationMaskStationId, decorationStageId, subMaskSprayId],
+		[stableId("station-step-dec-tp"), decorationTampoStationId, decorationStageId, subTampoId],
 		[stableId("station-step-qc"), assemblyStationId, assemblyStageId, subQualityCheckId],
+		[stableId("station-step-subassy"), assemblySubAssemblyStationId, assemblyStageId, subSubAssemblyId],
+		[stableId("station-step-assort"), assemblyAssortmentStationId, assemblyStageId, subAssortmentId],
 		[stableId("station-step-wh"), warehouseStationId, warehouseStageId, subMainPackingId],
 	]) {
 		await tx.stationStep.upsert({
 			where: { id },
 			update: { stationId, stageId, subStageId },
 			create: { id, stationId, stageId, subStageId },
+		});
+	}
+
+	// Work processes under sub-stages (catalog leaf; not stations). Bridge names match current SubStages
+	// until Option A reshape (intermediate SubStage + finer processes).
+	const processFullSprayId = stableId("work-process-full-spray");
+	const processMaskSprayId = stableId("work-process-mask-spray");
+	const processTampoId = stableId("work-process-tampo");
+	const processQualityCheckId = stableId("work-process-quality-check");
+	const processMainPackingId = stableId("work-process-main-packing");
+
+	for (const [id, subStageId, name, displayOrder, labelledCycleTimeSec] of [
+		[processFullSprayId, subFullSprayId, "Full Spray", 1, 12],
+		[processMaskSprayId, subMaskSprayId, "Mask Spray", 2, 10],
+		[processTampoId, subTampoId, "Tampo", 3, 6],
+		[processQualityCheckId, subQualityCheckId, "Quality Check", 1, null],
+		[processMainPackingId, subMainPackingId, "Main Packing", 1, null],
+	]) {
+		await tx.workProcess.upsert({
+			where: { id },
+			update: {
+				subStageId,
+				name,
+				displayOrder,
+				isEnabled: true,
+				isSystemSeed: true,
+				labelledCycleTimeSec,
+			},
+			create: {
+				id,
+				subStageId,
+				name,
+				displayOrder,
+				isEnabled: true,
+				isSystemSeed: true,
+				labelledCycleTimeSec,
+			},
+		});
+	}
+
+	// Physical booths under decoration Full Spray station (1 station : N booths)
+	for (const [id, boothCode, label, displayOrder] of [
+		[stableId("booth-01"), "01", "Booth 01", 1],
+		[stableId("booth-02"), "02", "Booth 02", 2],
+	]) {
+		await tx.booth.upsert({
+			where: { id },
+			update: {
+				workspaceId: "PATS",
+				boothCode: code(boothCode),
+				label,
+				stationId: decorationStationId,
+				stageId: decorationStageId,
+				subStageId: subFullSprayId,
+				workProcessId: processFullSprayId,
+				displayOrder,
+				isEnabled: true,
+			},
+			create: {
+				id,
+				workspaceId: "PATS",
+				boothCode: code(boothCode),
+				label,
+				stationId: decorationStationId,
+				stageId: decorationStageId,
+				subStageId: subFullSprayId,
+				workProcessId: processFullSprayId,
+				displayOrder,
+				isEnabled: true,
+			},
 		});
 	}
 

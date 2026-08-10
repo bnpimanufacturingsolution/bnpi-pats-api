@@ -386,6 +386,7 @@ model SubStage {
   eligibleStages                SubStageEligibility[]
   stationSteps                  StationStep[]
   processRouteStages            ProcessRouteStage[]   @relation("ProcessRouteStageSubStage")
+  workProcesses                 WorkProcess[]
 }
 
 // A SubStage can be eligible under more than one Stage (the Capsulation/Assortment
@@ -765,8 +766,104 @@ model Station {
   displayOrder          Int
   isEnabled             Boolean       @default(true)
   boundSteps            StationStep[]
+  booths                Booth[]
 
   @@index([workspaceId])
+}
+
+/// Catalog work process under a SubStage (routing/CT/filter grain). Not a device mount.
+model WorkProcess {
+  id             String   @id @default(uuid())
+  subStageId     String
+  subStage       SubStage @relation(fields: [subStageId], references: [id])
+  name           String
+  displayOrder   Int
+  isEnabled      Boolean  @default(true)
+  isSystemSeed   Boolean  @default(false)
+  labelledCycleTimeSec Int?
+  booths         Booth[]
+  dailySheets    MonitoringDailySheet[]
+  stationBoards  MonitoringStationBoard[]
+
+  @@index([subStageId])
+  @@index([name])
+}
+
+/// Physical floor capacity cell. Many booths may share one Station PC (1:N).
+model Booth {
+  id             String       @id @default(uuid())
+  workspaceId    String
+  boothCode      String
+  label          String?
+  stationId      String?
+  station        Station?     @relation(fields: [stationId], references: [id])
+  stageId        String
+  subStageId     String?
+  workProcessId  String?
+  workProcess    WorkProcess? @relation(fields: [workProcessId], references: [id])
+  displayOrder   Int
+  isEnabled      Boolean      @default(true)
+  stationBoards  MonitoringStationBoard[]
+
+  @@unique([workspaceId, boothCode])
+  @@index([stationId])
+  @@index([stageId, subStageId])
+}
+
+/// Line Leader day encode (durable). payload mirrors app DailyMonitoringSheet fields.
+model MonitoringDailySheet {
+  id              String       @id @default(uuid())
+  workspaceId     String
+  productionDate  String
+  lineLabel       String
+  workProcessId   String?
+  workProcess     WorkProcess? @relation(fields: [workProcessId], references: [id])
+  processName     String
+  lineLeaderName  String       @default("")
+  productName     String       @default("")
+  modelName       String       @default("")
+  partName        String       @default("")
+  lotCode         String       @default("")
+  targetPerShift  Int          @default(0)
+  hourlyTarget    Int          @default(0)
+  operatorNames   String       @default("")
+  inputPartsAvailable Int?
+  defectiveQty    Int?
+  status          String       @default("draft")
+  slotsJson       Json
+  payloadJson     Json
+  rowVersion      Int          @default(1)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([workspaceId, productionDate])
+  @@index([workProcessId])
+}
+
+/// Process Station Board encode (booth-level). payload mirrors app StationBoardEntry.
+model MonitoringStationBoard {
+  id             String       @id @default(uuid())
+  workspaceId    String
+  productionDate String
+  boothId        String?
+  booth          Booth?       @relation(fields: [boothId], references: [id])
+  workProcessId  String?
+  workProcess    WorkProcess? @relation(fields: [workProcessId], references: [id])
+  boothLabel     String       @default("")
+  processName    String       @default("")
+  partName       String       @default("")
+  lotCode        String       @default("")
+  labelledCycleTimeSec Int    @default(0)
+  targetPerHour  Int          @default(0)
+  targetPerDay   Int          @default(0)
+  slotsJson      Json
+  payloadJson    Json
+  rowVersion     Int          @default(1)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([workspaceId, productionDate])
+  @@index([boothId])
 }
 
 model StationStep {
