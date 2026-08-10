@@ -60,6 +60,21 @@ function atOffset({ days = 0, hours = 0, minutes = 0 } = {}) {
 	return new Date(seedClock.getTime() + ((days * 24 + hours) * 60 + minutes) * 60_000);
 }
 
+/** Hourly grid matching app monitoring encode (10 shift slots). */
+function defaultDaySlots(actuals = []) {
+	const labels = ["9:00", "10:00", "11:00", "12:00", "1:00", "2:00", "3:00", "4:00", "5:00", "6:00"];
+	return labels.map((clockLabel, index) => ({
+		index,
+		clockLabel,
+		actualOutput: actuals[index] === undefined ? null : actuals[index],
+	}));
+}
+
+/** Calendar day for monitoring encode seed (local “today” so UI lists show data immediately). */
+function monitoringSeedDate() {
+	return new Date().toISOString().slice(0, 10);
+}
+
 async function upsertSubject(tx, key, username, displayName, roleBundles, passwordHash) {
 	const subject = await tx.subject.upsert({
 		where: { id: stableId(key) },
@@ -2092,6 +2107,226 @@ async function seedProfile(tx) {
 		},
 	});
 
+	// ── Monitoring encode seed (Line Leader sheets + booth boards) ─────────
+	// Durable demo for Management / Daily / Station monitoring in canonical mode.
+	const monDate = monitoringSeedDate();
+	const booth01Id = stableId("booth-01");
+	const booth02Id = stableId("booth-02");
+
+	const sheetFullSpraySlots = defaultDaySlots([206, 190, 190, 190, 0, 185, 175, null, null, null]);
+	const sheetFullSprayPayload = {
+		id: stableId("mon-sheet-full-spray"),
+		date: monDate,
+		lineId: "line-main",
+		lineLabel: "Main line",
+		processId: processFullSprayId,
+		processName: "Full Spray",
+		lineLeaderName: "DEMO Line Leader",
+		productId: productB251Id,
+		productName: CLIENT_B251.productName,
+		modelId: "01",
+		modelName: "Avocado Burger",
+		partId: planPartIds["B251-01-01"] ?? "part-unknown",
+		partName: "Avocado Burger body",
+		lotId: stableId("lot-avocado"),
+		lotCode: code("LOT-B251-01"),
+		targetPerShift: 1440,
+		hourlyTarget: 192,
+		operatorNames: "Operator A / Operator B",
+		inputPartsAvailable: 1500,
+		slots: sheetFullSpraySlots,
+		defectiveQty: 12,
+		status: "draft",
+		updatedAt: new Date().toISOString(),
+	};
+
+	const sheetMaskSlots = defaultDaySlots([170, 180, 0, 165, 160, null, null, null, null, null]);
+	const sheetMaskPayload = {
+		id: stableId("mon-sheet-mask-spray"),
+		date: monDate,
+		lineId: "line-main",
+		lineLabel: "Main line",
+		processId: processMaskSprayId,
+		processName: "Mask Spray",
+		lineLeaderName: "DEMO Line Leader",
+		productId: productB251Id,
+		productName: CLIENT_B251.productName,
+		modelId: "02",
+		modelName: "Cheese Hotdog",
+		partId: planPartIds["B251-01-02"] ?? "part-unknown",
+		partName: "Cheese Hotdog body",
+		lotId: stableId("lot-hotdog"),
+		lotCode: code("LOT-B251-02"),
+		targetPerShift: 1350,
+		hourlyTarget: 180,
+		operatorNames: "Operator C",
+		inputPartsAvailable: 1400,
+		slots: sheetMaskSlots,
+		defectiveQty: 4,
+		status: "draft",
+		updatedAt: new Date().toISOString(),
+	};
+
+	for (const payload of [sheetFullSprayPayload, sheetMaskPayload]) {
+		await tx.monitoringDailySheet.upsert({
+			where: { id: payload.id },
+			update: {
+				workspaceId: "PATS",
+				productionDate: payload.date,
+				lineLabel: payload.lineLabel,
+				workProcessId: payload.processId,
+				processName: payload.processName,
+				lineLeaderName: payload.lineLeaderName,
+				productName: payload.productName,
+				modelName: payload.modelName,
+				partName: payload.partName,
+				lotCode: payload.lotCode,
+				targetPerShift: payload.targetPerShift,
+				hourlyTarget: payload.hourlyTarget,
+				operatorNames: payload.operatorNames,
+				inputPartsAvailable: payload.inputPartsAvailable,
+				defectiveQty: payload.defectiveQty,
+				status: payload.status,
+				slotsJson: payload.slots,
+				payloadJson: payload,
+				rowVersion: 1,
+			},
+			create: {
+				id: payload.id,
+				workspaceId: "PATS",
+				productionDate: payload.date,
+				lineLabel: payload.lineLabel,
+				workProcessId: payload.processId,
+				processName: payload.processName,
+				lineLeaderName: payload.lineLeaderName,
+				productName: payload.productName,
+				modelName: payload.modelName,
+				partName: payload.partName,
+				lotCode: payload.lotCode,
+				targetPerShift: payload.targetPerShift,
+				hourlyTarget: payload.hourlyTarget,
+				operatorNames: payload.operatorNames,
+				inputPartsAvailable: payload.inputPartsAvailable,
+				defectiveQty: payload.defectiveQty,
+				status: payload.status,
+				slotsJson: payload.slots,
+				payloadJson: payload,
+				rowVersion: 1,
+			},
+		});
+	}
+
+	const boardSlots = defaultDaySlots([280, 300, 0, 295, 290, 310, null, null, null, null]);
+	const boardPayload = {
+		id: stableId("mon-board-booth-01"),
+		date: monDate,
+		boothId: booth01Id,
+		boothLabel: "Booth 01",
+		operatorName: "Operator A",
+		partId: planPartIds["B251-01-01"] ?? "part-unknown",
+		partName: "Avocado Burger body",
+		lotId: stableId("lot-avocado"),
+		lotCode: code("LOT-B251-01"),
+		productId: productB251Id,
+		productName: CLIENT_B251.productName,
+		modelId: "01",
+		modelName: "Avocado Burger",
+		processId: processFullSprayId,
+		processName: "Full Spray",
+		labelledCycleTimeSec: 12,
+		targetPerHour: 300,
+		targetPerDay: 2250,
+		slots: boardSlots,
+		updatedAt: new Date().toISOString(),
+	};
+
+	await tx.monitoringStationBoard.upsert({
+		where: { id: boardPayload.id },
+		update: {
+			workspaceId: "PATS",
+			productionDate: boardPayload.date,
+			boothId: boardPayload.boothId,
+			workProcessId: boardPayload.processId,
+			boothLabel: boardPayload.boothLabel,
+			processName: boardPayload.processName,
+			partName: boardPayload.partName,
+			lotCode: boardPayload.lotCode,
+			labelledCycleTimeSec: boardPayload.labelledCycleTimeSec,
+			targetPerHour: boardPayload.targetPerHour,
+			targetPerDay: boardPayload.targetPerDay,
+			slotsJson: boardPayload.slots,
+			payloadJson: boardPayload,
+			rowVersion: 1,
+		},
+		create: {
+			id: boardPayload.id,
+			workspaceId: "PATS",
+			productionDate: boardPayload.date,
+			boothId: boardPayload.boothId,
+			workProcessId: boardPayload.processId,
+			boothLabel: boardPayload.boothLabel,
+			processName: boardPayload.processName,
+			partName: boardPayload.partName,
+			lotCode: boardPayload.lotCode,
+			labelledCycleTimeSec: boardPayload.labelledCycleTimeSec,
+			targetPerHour: boardPayload.targetPerHour,
+			targetPerDay: boardPayload.targetPerDay,
+			slotsJson: boardPayload.slots,
+			payloadJson: boardPayload,
+			rowVersion: 1,
+		},
+	});
+
+	// Second booth board (lighter shift) for multi-board station list
+	const board2Slots = defaultDaySlots([250, 270, 0, 260, null, null, null, null, null, null]);
+	const board2Payload = {
+		...boardPayload,
+		id: stableId("mon-board-booth-02"),
+		boothId: booth02Id,
+		boothLabel: "Booth 02",
+		operatorName: "Operator B",
+		slots: board2Slots,
+		targetPerHour: 280,
+		targetPerDay: 2100,
+		updatedAt: new Date().toISOString(),
+	};
+	await tx.monitoringStationBoard.upsert({
+		where: { id: board2Payload.id },
+		update: {
+			workspaceId: "PATS",
+			productionDate: board2Payload.date,
+			boothId: board2Payload.boothId,
+			workProcessId: board2Payload.processId,
+			boothLabel: board2Payload.boothLabel,
+			processName: board2Payload.processName,
+			partName: board2Payload.partName,
+			lotCode: board2Payload.lotCode,
+			labelledCycleTimeSec: board2Payload.labelledCycleTimeSec,
+			targetPerHour: board2Payload.targetPerHour,
+			targetPerDay: board2Payload.targetPerDay,
+			slotsJson: board2Payload.slots,
+			payloadJson: board2Payload,
+			rowVersion: 1,
+		},
+		create: {
+			id: board2Payload.id,
+			workspaceId: "PATS",
+			productionDate: board2Payload.date,
+			boothId: board2Payload.boothId,
+			workProcessId: board2Payload.processId,
+			boothLabel: board2Payload.boothLabel,
+			processName: board2Payload.processName,
+			partName: board2Payload.partName,
+			lotCode: board2Payload.lotCode,
+			labelledCycleTimeSec: board2Payload.labelledCycleTimeSec,
+			targetPerHour: board2Payload.targetPerHour,
+			targetPerDay: board2Payload.targetPerDay,
+			slotsJson: board2Payload.slots,
+			payloadJson: board2Payload,
+			rowVersion: 1,
+		},
+	});
+
 	return {
 		profile,
 		subjects: 4,
@@ -2109,6 +2344,11 @@ async function seedProfile(tx) {
 		plans: 2,
 		lots: lotDefs.length + b308LotDefs.length,
 		batches: batchDefs.length + b308BatchDefs.length,
+		stations: 8,
+		workProcesses: 5,
+		booths: 2,
+		monitoringDailySheets: 2,
+		monitoringStationBoards: 2,
 		productId: productB251Id,
 		secondaryProductId: productB308Id,
 		projectId,
@@ -2116,7 +2356,7 @@ async function seedProfile(tx) {
 		openInspectionId: inspectionOpenId,
 		adminUsername: `${profile}.admin`,
 		evidenceNote:
-			"B251 client-parts-list + B308 Street Food Friends variety — PROVISIONAL seed, not Drive-approved",
+			"B251 client-parts-list + B308 Street Food Friends + monitoring encode seed — PROVISIONAL, not Drive-approved",
 	};
 }
 
