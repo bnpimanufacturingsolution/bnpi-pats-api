@@ -47,6 +47,28 @@ paths:
           required: true
           schema: { type: string, minLength: 1 }
       responses: { '200': { $ref: '#/components/responses/StationHistoryRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
+  /stations/{stationId}/support:
+    get:
+      operationId: stationSupportGet
+      summary: Read rebuildable station support projection (output + WIP)
+      description: >
+        Secondary workstation cards. todayOutput aggregates ACCEPTED STAGE_COMPLETED events on the
+        station's bound steps for a UTC calendar day (query date=YYYY-MM-DD). wipProgress lists
+        batch positions matching bound steps. materials, staff, and expectedOutput are always null
+        until product-owned sources exist — never invent from fixtures.
+      tags: [PATS Execution]
+      x-required-capability: execution.read
+      parameters:
+        - name: stationId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: date
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: UTC calendar day for today's output (default current UTC date)
+      responses: { '200': { $ref: '#/components/responses/ResourceRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
   /station-steps:
     get:
       operationId: stationStepCollectionGet

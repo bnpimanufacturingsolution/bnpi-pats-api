@@ -179,6 +179,16 @@ const workInstructionCreateSchema = z.object({
 	sourceRevisionRef: z.string().trim().max(160).nullable().optional(),
 }).strict();
 
+const monitoringDailySheetUpsertSchema = z.object({
+	id: z.string().trim().min(1).max(120).optional(),
+	payload: z.record(z.string(), z.unknown()),
+}).strict();
+
+const monitoringStationBoardUpsertSchema = z.object({
+	id: z.string().trim().min(1).max(120).optional(),
+	payload: z.record(z.string(), z.unknown()),
+}).strict();
+
 function resourceHeaders(id: string, rowVersion: number): Record<string, string> {
 	return { Location: `/api/v1/production-plans/${id}`, ETag: `"${rowVersion}"` };
 }
@@ -816,6 +826,123 @@ export function commandRouter(
 				const instruction = await transaction.workInstruction.create({ data: { ...body, subStageId: body.subStageId ?? null, version: body.version ?? 1, steps: JSON.parse(JSON.stringify(body.steps)) as never } });
 				await recordCommandSuccess(transaction, req, "WORK_INSTRUCTION_CREATED", "WorkInstruction", instruction.id, { stageId: instruction.stageId, version: instruction.version });
 				return { status: 201, body: { workInstructionId: instruction.id, stageId: instruction.stageId, version: instruction.version }, headers: { Location: `/api/v1/work-instructions/${instruction.id}` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.put("/monitoring/daily-sheets/:sheetId", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, monitoringDailySheetUpsertSchema);
+			const sheetId = req.params.sheetId;
+			const payload = body.payload as Record<string, unknown>;
+			const response = await executeCommand(database, req, "monitoringDailySheetUpsert", { sheetId, ...body }, async (transaction) => {
+				const existing = await transaction.monitoringDailySheet.findUnique({ where: { id: sheetId } });
+				const expectedVersion = existing ? requireIfMatch(req, "monitoring daily sheet") : null;
+				if (existing && expectedVersion !== existing.rowVersion) staleVersion();
+				const productionDate = String(payload.date ?? "");
+				const processName = String(payload.processName ?? "");
+				const slotsJson = payload.slots ?? [];
+				const data = {
+					workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS",
+					productionDate,
+					lineLabel: String(payload.lineLabel ?? ""),
+					workProcessId: typeof payload.processId === "string" && payload.processId.length > 0 ? payload.processId : null,
+					processName,
+					lineLeaderName: String(payload.lineLeaderName ?? ""),
+					productName: String(payload.productName ?? ""),
+					modelName: String(payload.modelName ?? ""),
+					partName: String(payload.partName ?? ""),
+					lotCode: String(payload.lotCode ?? ""),
+					targetPerShift: Number(payload.targetPerShift ?? 0) || 0,
+					hourlyTarget: Number(payload.hourlyTarget ?? 0) || 0,
+					operatorNames: String(payload.operatorNames ?? ""),
+					inputPartsAvailable:
+						payload.inputPartsAvailable === null || payload.inputPartsAvailable === undefined
+							? null
+							: Number(payload.inputPartsAvailable),
+					defectiveQty:
+						payload.defectiveQty === null || payload.defectiveQty === undefined
+							? null
+							: Number(payload.defectiveQty),
+					status: String(payload.status ?? "draft"),
+					slotsJson: JSON.parse(JSON.stringify(slotsJson)) as never,
+					payloadJson: JSON.parse(JSON.stringify({ ...payload, id: sheetId })) as never,
+				};
+				const sheet = existing
+					? await transaction.monitoringDailySheet.update({
+							where: { id: sheetId },
+							data: { ...data, rowVersion: existing.rowVersion + 1 },
+						})
+					: await transaction.monitoringDailySheet.create({
+							data: { id: sheetId, ...data, rowVersion: 1 },
+						});
+				await recordCommandSuccess(transaction, req, "MONITORING_DAILY_SHEET_UPSERT", "MonitoringDailySheet", sheet.id, {
+					productionDate: sheet.productionDate,
+				});
+				return {
+					status: existing ? 200 : 201,
+					body: sheet.payloadJson,
+					headers: {
+						Location: `/api/v1/monitoring/daily-sheets/${sheet.id}`,
+						ETag: `"${sheet.rowVersion}"`,
+					},
+				};
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.put("/monitoring/station-boards/:boardId", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, monitoringStationBoardUpsertSchema);
+			const boardId = req.params.boardId;
+			const payload = body.payload as Record<string, unknown>;
+			const response = await executeCommand(database, req, "monitoringStationBoardUpsert", { boardId, ...body }, async (transaction) => {
+				const existing = await transaction.monitoringStationBoard.findUnique({ where: { id: boardId } });
+				const expectedVersion = existing ? requireIfMatch(req, "monitoring station board") : null;
+				if (existing && expectedVersion !== existing.rowVersion) staleVersion();
+				const productionDate = String(payload.date ?? "");
+				const slotsJson = payload.slots ?? [];
+				const boothId =
+					typeof payload.boothId === "string" && payload.boothId.length > 0 ? payload.boothId : null;
+				const data = {
+					workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS",
+					productionDate,
+					boothId,
+					workProcessId:
+						typeof payload.processId === "string" && payload.processId.length > 0
+							? payload.processId
+							: null,
+					boothLabel: String(payload.boothLabel ?? ""),
+					processName: String(payload.processName ?? ""),
+					partName: String(payload.partName ?? ""),
+					lotCode: String(payload.lotCode ?? ""),
+					labelledCycleTimeSec: Number(payload.labelledCycleTimeSec ?? 0) || 0,
+					targetPerHour: Number(payload.targetPerHour ?? 0) || 0,
+					targetPerDay: Number(payload.targetPerDay ?? 0) || 0,
+					slotsJson: JSON.parse(JSON.stringify(slotsJson)) as never,
+					payloadJson: JSON.parse(JSON.stringify({ ...payload, id: boardId })) as never,
+				};
+				const board = existing
+					? await transaction.monitoringStationBoard.update({
+							where: { id: boardId },
+							data: { ...data, rowVersion: existing.rowVersion + 1 },
+						})
+					: await transaction.monitoringStationBoard.create({
+							data: { id: boardId, ...data, rowVersion: 1 },
+						});
+				await recordCommandSuccess(transaction, req, "MONITORING_STATION_BOARD_UPSERT", "MonitoringStationBoard", board.id, {
+					productionDate: board.productionDate,
+				});
+				return {
+					status: existing ? 200 : 201,
+					body: board.payloadJson,
+					headers: {
+						Location: `/api/v1/monitoring/station-boards/${board.id}`,
+						ETag: `"${board.rowVersion}"`,
+					},
+				};
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
