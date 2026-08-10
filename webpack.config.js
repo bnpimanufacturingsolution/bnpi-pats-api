@@ -17,11 +17,14 @@ module.exports = {
 			if (request.includes("generated/prisma")) {
 				return callback(null, "commonjs ./generated/prisma");
 			}
+			if (request.includes("generated/pats-client")) {
+				return callback(null, "commonjs ./generated/pats-client");
+			}
 			callback();
 		},
 	],
 	output: {
-		filename: "server.ts", // output file
+		filename: "server.js", // output file
 		path: path.join(__dirname, "dist"),
 		libraryTarget: "commonjs",
 	},

@@ -1,0 +1,77 @@
+name: PATS foundation
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    env:
+      PATS_DATABASE_URL: postgresql://pats:pats@localhost:55432/pats
+      # This is only a deterministic test credential. Production secrets must
+      # come from the deployment environment, never from this workflow file.
+      JWT_SECRET: ci-only-jwt-secret-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run type-check
+      - run: pnpm run prisma:pats:validate
+      - name: Run tests
+        run: pnpm test
+        env:
+          NODE_ENV: test
+      - run: pnpm run build
+      - run: docker compose --profile pats config --quiet
+
+      - name: Start PATS dependencies
+        run: docker compose up -d postgres minio minio-init
+
+      - name: Apply PATS migrations
+        run: pnpm run prisma:pats:migrate:deploy
+
+      - name: Compose health smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --profile pats up -d --build
+          healthy=false
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:3000/api/v1/health >/dev/null; then
+              healthy=true
+              break
+            fi
+            sleep 2
+          done
+          if [[ "$healthy" != "true" ]]; then
+            docker compose --profile pats ps
+            exit 1
+          fi
+
+          preflight_headers="$(mktemp)"
+          trap 'rm -f "$preflight_headers"' EXIT
+          curl --fail --silent --show-error -X OPTIONS \
+            -H 'Origin: http://localhost:5173' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type,authorization' \
+            -D "$preflight_headers" \
+            -o /dev/null \
+            http://localhost:3000/api/v1/auth/login
+          grep -qi '^access-control-allow-origin: http://localhost:5173' "$preflight_headers"
+
+      - name: Compose cleanup
+        if: always()
+        run: docker compose --profile pats down

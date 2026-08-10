@@ -1,0 +1,133 @@
+openapi: 3.1.0
+info:
+  title: Bandai PATS API v1 Identity Contract
+  version: 2026-07-15
+  description: PATS-local authentication and deployment-scoped RBAC self-projections.
+servers:
+  - url: /api/v1
+paths:
+  /auth/login:
+    post:
+      operationId: localLogin
+      summary: Authenticate a PATS-local account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Signed local bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem401'
+        '405':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem405'
+        '422':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422'
+        '429':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem429'
+        '503':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503'
+  /users/me:
+    get:
+      operationId: userMeGet
+      summary: Read the authenticated subject self-projection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Provider-safe authenticated subject projection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMe'
+        '401':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem401'
+        '403':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403'
+        '405':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem405'
+        '503':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503'
+  /users/me/capabilities:
+    get:
+      operationId: userMeCapabilitiesGet
+      summary: Read effective capabilities for the authenticated subject
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Effective capability keys
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCapabilities'
+        '401':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem401'
+        '403':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403'
+        '405':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem405'
+        '503':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: pats-local-signed-token
+  schemas:
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 128
+          description: Lowercase-normalized PATS-local account username.
+        password:
+          type: string
+          minLength: 1
+          maxLength: 1024
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken:
+          type: string
+          description: Signed bearer session containing subject identity only; roles and scopes are resolved server-side.
+        tokenType:
+          type: string
+          const: Bearer
+        expiresIn:
+          type: integer
+          minimum: 300
+          maximum: 86400
+    UserMe:
+      type: object
+      additionalProperties: false
+      required: [id, displayName, email]
+      properties:
+        id:
+          type: string
+        displayName:
+          type: [string, 'null']
+        email:
+          type: [string, 'null']
+    UserCapabilities:
+      type: object
+      additionalProperties: false
+      required: [capabilities]
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string

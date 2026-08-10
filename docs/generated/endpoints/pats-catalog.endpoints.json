@@ -1,0 +1,875 @@
+[
+  {
+    "id": "GET /api/pats/catalog/products/{productId}",
+    "method": "GET",
+    "url": "/api/pats/catalog/products/{productId}",
+    "summary": "Read a workspace-scoped PATS product catalog record",
+    "description": "Returns Product -> Model -> ModelPart data without legacy seed fallback. Optional private imageObjectKey metadata is resolved to a short-lived read URL and is never returned.",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "productId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Complete or sparse PATS catalog record",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Workspace header is missing or invalid",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Product is not linked to the requested workspace",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "Private image storage is unavailable",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogProductCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/products",
+    "summary": "Create a draft catalog product",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Draft product created",
+        "contentTypes": []
+      },
+      "409": {
+        "description": "Duplicate product or idempotency payload conflict",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Invalid product or source evidence",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogProductCollectionGet",
+    "method": "GET",
+    "url": "/api/v1/catalog/products",
+    "summary": "List deployment-scoped PATS catalog products",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "page",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      {
+        "name": "limit",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      {
+        "name": "sort",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Comma-separated product_code, product_name, created_at, updated_at fields; prefix with - for descending order."
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "Paginated normalized product summaries",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Malformed pagination or sort query",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Authentication required",
+        "contentTypes": []
+      },
+      "403": {
+        "description": "catalog.read capability required",
+        "contentTypes": []
+      },
+      "429": {
+        "description": "Request rate limit exceeded",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "Catalog persistence unavailable",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": true,
+      "hasSearchParam": false,
+      "hasSortParams": true
+    }
+  },
+  {
+    "id": "catalogModelCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/models",
+    "summary": "Create a draft catalog model",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Draft model created",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Parent product not found",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Invalid model or source evidence",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogModelPartCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/model-parts",
+    "summary": "Create a draft catalog model part",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Draft model part created",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Parent model not found",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Invalid model part or source evidence",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogProductPatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/products/{productId}",
+    "summary": "Update a draft catalog product",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "productId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Updated draft product",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogProductGet",
+    "method": "GET",
+    "url": "/api/v1/catalog/products/{productId}",
+    "summary": "Read a deployment-scoped PATS catalog product",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "productId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Complete or sparse Product to Model to ModelPart record",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Authentication required",
+        "contentTypes": []
+      },
+      "403": {
+        "description": "catalog.read capability required",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Product not found",
+        "contentTypes": []
+      },
+      "429": {
+        "description": "Request rate limit exceeded",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "Private image storage unavailable",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogModelPatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/models/{modelId}",
+    "summary": "Update a draft catalog model",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "modelId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Updated draft model",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogModelPartPatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/model-parts/{modelPartId}",
+    "summary": "Update a draft catalog model part",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "modelPartId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Updated draft model part",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogBomDefinitionCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/bom-definitions",
+    "summary": "Create a draft BOM revision",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Draft BOM revision created",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Parent model not found",
+        "contentTypes": []
+      },
+      "409": {
+        "description": "Duplicate BOM revision or idempotency conflict",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Invalid BOM revision or source evidence",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogBomDefinitionCollectionGet",
+    "method": "GET",
+    "url": "/api/v1/catalog/bom-definitions",
+    "summary": "List BOM definition revisions for a model",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "model_id",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "page",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      {
+        "name": "limit",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      {
+        "name": "sort",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Comma-separated revision, created_at, updated_at fields; prefix with - for descending order."
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "Paginated BOM definition summaries",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Malformed or incomplete collection query",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Authentication required",
+        "contentTypes": []
+      },
+      "403": {
+        "description": "catalog.read capability required",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "BOM persistence unavailable",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": true,
+      "hasSearchParam": false,
+      "hasSortParams": true
+    }
+  },
+  {
+    "id": "catalogBomLineCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/bom-lines",
+    "summary": "Add an ordered model-part line to a draft BOM",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Draft BOM line created",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "BOM or model part not found",
+        "contentTypes": []
+      },
+      "409": {
+        "description": "Duplicate line or idempotency conflict",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Cross-model or invalid BOM line",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogBomDefinitionPatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/bom-definitions/{bomDefinitionId}",
+    "summary": "Update draft BOM evidence status",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "bomDefinitionId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Updated draft BOM revision",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogBomDefinitionGet",
+    "method": "GET",
+    "url": "/api/v1/catalog/bom-definitions/{bomDefinitionId}",
+    "summary": "Read a BOM definition revision with ordered lines",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "bomDefinitionId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "BOM definition with sparse-safe ordered lines",
+        "contentTypes": []
+      },
+      "401": {
+        "description": "Authentication required",
+        "contentTypes": []
+      },
+      "403": {
+        "description": "catalog.read capability required",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "BOM definition not found",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "BOM persistence unavailable",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogBomLinePatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/bom-lines/{bomLineId}",
+    "summary": "Correct a draft BOM line without silent quantity conversion",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "bomLineId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Updated draft BOM line",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogProcessRouteCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/process-routes",
+    "summary": "Create a draft process route revision",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Draft process route created",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Parent model not found",
+        "contentTypes": []
+      },
+      "409": {
+        "description": "Duplicate route revision or idempotency conflict",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Invalid route or source evidence",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogRouteStageCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/route-stages",
+    "summary": "Add an ordered stage to a draft process route",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Draft route stage created",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Parent route not found",
+        "contentTypes": []
+      },
+      "409": {
+        "description": "Duplicate stage sequence or idempotency conflict",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Missing stage identity or invalid route stage",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogProcessRoutePatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/process-routes/{processRouteId}",
+    "summary": "Update draft process route evidence status",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "processRouteId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Updated draft process route",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogRouteStagePatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/route-stages/{routeStageId}",
+    "summary": "Correct draft route stage order or metadata",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "routeStageId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Updated draft route stage",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

@@ -1,0 +1,66 @@
+# Bandai PATS per-environment stack (skeleton — see deploy/README.md for status and usage).
+# One invocation per environment with `-p pats-<env>` and `--env-file deploy/contract/<env>.env`;
+# the contract file supplies every ${...} below.
+services:
+    web:
+        # Not built yet (readiness build-list item 5): static SPA + nginx serving the app port.
+        # Kept in the stack shape so the port contract is complete; `docker compose up web`
+        # fails cleanly until the image exists.
+        image: bnpi-pats-web:${PATS_VERSION}
+        ports:
+            - "${APP_PORT}:80"
+        environment:
+            - PATS_ENV=${PATS_ENV}
+            - API_BASE_URL=http://localhost:${API_PORT}
+        depends_on:
+            - api
+
+    api:
+        build:
+            context: ..
+            dockerfile: Dockerfile
+        environment:
+            - PORT=3000
+            - NODE_ENV=production
+            - PATS_ENV=${PATS_ENV}
+            - SEED_MODE=${SEED_MODE}
+            - CORS_ORIGINS=${CORS_ORIGINS}
+            - PATS_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+            # Air-gap posture: external SaaS integrations stay off on the appliance.
+            - REDIS_ENABLED=false
+        ports:
+            - "${API_PORT}:3000"
+        depends_on:
+            db:
+                condition: service_healthy
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+    db:
+        image: postgres:16-alpine
+        environment:
+            - POSTGRES_DB=${POSTGRES_DB}
+            - POSTGRES_USER=${POSTGRES_USER}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+        ports:
+            # Host-exposed per environment for admin/backup access (contract table in README).
+            - "${DB_HOST_PORT}:5432"
+        volumes:
+            - patsdata:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+volumes:
+    # Scoped per compose project (-p pats-<env>), so each environment gets its own volume.
+    patsdata:

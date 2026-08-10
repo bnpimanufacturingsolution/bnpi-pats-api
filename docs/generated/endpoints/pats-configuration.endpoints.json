@@ -1,0 +1,333 @@
+[
+  {
+    "id": "workflowGroupCollectionGet",
+    "method": "GET",
+    "url": "/workflow-groups",
+    "summary": "Read deployment-owned workflow groups",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stageCollectionGet",
+    "method": "GET",
+    "url": "/stages",
+    "summary": "Read configured production stages",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stageCreate",
+    "method": "POST",
+    "url": "/stages",
+    "summary": "Add a configured production stage",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "subStageCollectionGet",
+    "method": "GET",
+    "url": "/sub-stages",
+    "summary": "Read configured production substages",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "subStageCreate",
+    "method": "POST",
+    "url": "/sub-stages",
+    "summary": "Add a configured production substage",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stationCollectionGet",
+    "method": "GET",
+    "url": "/stations",
+    "summary": "Read physical production stations",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stationCreate",
+    "method": "POST",
+    "url": "/stations",
+    "summary": "Add a physical production station",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stationStepCollectionGet",
+    "method": "GET",
+    "url": "/station-steps",
+    "summary": "Read station-to-stage bindings",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stationStepCreate",
+    "method": "POST",
+    "url": "/station-steps",
+    "summary": "Bind a station to an explicit stage step",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "workInstructionCollectionGet",
+    "method": "GET",
+    "url": "/work-instructions",
+    "summary": "Read versioned work instructions",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "workInstructionCreate",
+    "method": "POST",
+    "url": "/work-instructions",
+    "summary": "Add a versioned work instruction",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

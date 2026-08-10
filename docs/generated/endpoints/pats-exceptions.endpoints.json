@@ -1,0 +1,74 @@
+[
+  {
+    "id": "routingViolationCollectionGet",
+    "method": "GET",
+    "url": "/routing-violations",
+    "summary": "Read routing violations and their resolution state",
+    "tags": [
+      "PATS Exceptions"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "routingViolationResolve",
+    "method": "POST",
+    "url": "/routing-violations/{violationId}/resolve",
+    "summary": "Resolve a routing violation with an operator note",
+    "tags": [
+      "PATS Exceptions"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "violationId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

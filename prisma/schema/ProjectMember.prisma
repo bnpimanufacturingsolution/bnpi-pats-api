@@ -7,7 +7,6 @@ enum ProjectRole {
 model ProjectMember {
   id          String      @id @default(auto()) @map("_id") @db.ObjectId
   projectId   String      @db.ObjectId
-  project     Project?    @relation(fields: [projectId], references: [id])
   workspaceId String      @db.ObjectId
   workspace   Workspace?  @relation(fields: [workspaceId], references: [id])
   userId      String

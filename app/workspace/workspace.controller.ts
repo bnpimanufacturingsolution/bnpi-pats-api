@@ -73,15 +73,14 @@ export const controller = (prisma: PrismaClient) => {
 
 		const whereClause: Prisma.WorkspaceWhereInput = { isDeleted: false };
 
-		// Superadmins can browse every workspace; everyone else only sees
-		// workspaces they're a member of.
-		if (req.role !== "superadmin") {
-			const memberships = await prisma.workspaceMember.findMany({
-				where: { userId: req.userId, isDeleted: false },
-				select: { workspaceId: true },
-			});
-			whereClause.id = { in: memberships.map((m) => m.workspaceId) };
-		}
+		// Always scope to the caller's own workspace memberships — no global
+		// role bypasses tenant isolation (Phase 5, ADOPTED_AS_WORKING_DEFAULT
+		// row 7: no separate cross-line superadmin).
+		const memberships = await prisma.workspaceMember.findMany({
+			where: { userId: req.userId, isDeleted: false },
+			select: { workspaceId: true },
+		});
+		whereClause.id = { in: memberships.map((m) => m.workspaceId) };
 
 		const searchFields = ["name", "code", "description"];
 

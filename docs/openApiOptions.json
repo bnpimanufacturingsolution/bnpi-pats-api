@@ -29,14 +29,6 @@
 		],
 		"tags": [
 			{
-				"name": "Template",
-				"description": "Template management operations",
-				"externalDocs": {
-					"description": "Find out more about templates",
-					"url": "https://bandai-pats.example/docs/templates"
-				}
-			},
-			{
 				"name": "Documentation",
 				"description": "API documentation endpoints"
 			}
@@ -63,6 +55,20 @@
 			}
 		}
 	},
-	"apis": ["./docs/models/*.yaml", "./app/**/*.router.ts", "./dist/**/*.router.js"]
+	"apis": [
+		"./docs/models/*.yaml",
+		"./app/docs/docs.router.ts",
+		"./app/workspace/workspace.router.ts",
+		"./app/workspaceMember/workspace-member.router.ts",
+		"./app/projectMember/project-member.router.ts",
+		"./app/employee/employee.router.ts",
+		"./app/product/product.router.ts",
+		"./app/pats/catalog.router.ts",
+		"./app/pats/catalog-foundation.ts",
+		"./app/pats/bom-foundation.ts",
+		"./app/pats/process-route-foundation.ts",
+		"./docs/openapi/2026-07-31-pats-api-v1-domain-reads.yaml",
+		"./docs/openapi/2026-07-31-pats-api-v1-domain-writes.yaml",
+		"./app/canonical/router.ts"
+	]
 }
-

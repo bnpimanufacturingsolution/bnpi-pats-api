@@ -1,0 +1,188 @@
+[
+  {
+    "id": "GET /api/workspace-member/me",
+    "method": "GET",
+    "url": "/api/workspace-member/me",
+    "summary": "Get current user's workspace membership",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Membership retrieved successfully",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Not a member of this workspace",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/workspace-member/{id}",
+    "method": "GET",
+    "url": "/api/workspace-member/{id}",
+    "summary": "Get workspace member by ID",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Member retrieved successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/workspace-member/{id}",
+    "method": "DELETE",
+    "url": "/api/workspace-member/{id}",
+    "summary": "Remove workspace member",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Member removed successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/workspace-member",
+    "method": "GET",
+    "url": "/api/workspace-member",
+    "summary": "Get all workspace members",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Members retrieved successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/workspace-member",
+    "method": "POST",
+    "url": "/api/workspace-member",
+    "summary": "Add a member to workspace",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Member added successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "PATCH /api/workspace-member/{id}/role",
+    "method": "PATCH",
+    "url": "/api/workspace-member/{id}/role",
+    "summary": "Update workspace member role",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Role updated successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

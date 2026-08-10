@@ -1,0 +1,69 @@
+[
+  {
+    "id": "inventoryTransactionCollectionGet",
+    "method": "GET",
+    "url": "/inventory-transactions",
+    "summary": "Read append-only inventory evidence",
+    "tags": [
+      "PATS Inventory"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "inventoryTransactionCreate",
+    "method": "POST",
+    "url": "/inventory-transactions",
+    "summary": "Record receiving or issuance evidence",
+    "tags": [
+      "PATS Inventory"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

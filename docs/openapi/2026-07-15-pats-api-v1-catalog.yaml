@@ -1,0 +1,36 @@
+openapi: 3.1.0
+info:
+  title: Bandai PATS API v1 Catalog Contract
+  version: 2026-07-15
+  description: Deployment-scoped Product to Model to ModelPart read contract for the first on-prem installation.
+servers:
+  - url: /api/v1
+paths:
+  /catalog/products/{productId}:
+    get:
+      operationId: catalogProductGet
+      summary: Read a deployment-scoped PATS catalog product
+      description: Reads the server-resolved operational catalog. The client does not select a workspace or tenant.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Complete or sparse Product to Model to ModelPart record
+        '401':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem401'
+        '403':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403'
+        '404':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404'
+        '405':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem405'
+        '429':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem429'
+        '503':
+          $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503'

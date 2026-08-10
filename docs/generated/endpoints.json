@@ -256,13 +256,13 @@
     }
   },
   {
-    "id": "GET /api/estimation/{id}",
+    "id": "GET /api/workspace/check-code/{code}",
     "method": "GET",
-    "url": "/api/estimation/{id}",
-    "summary": "Get estimation by ID",
-    "description": "Retrieve a specific estimation by its unique identifier with optional field selection",
+    "url": "/api/workspace/check-code/{code}",
+    "summary": "Check if workspace code is available",
+    "description": "Check if a workspace code already exists in the system",
     "tags": [
-      "Estimation"
+      "Workspace"
     ],
     "deprecated": false,
     "security": [
@@ -273,145 +273,32 @@
     "contentTypes": [],
     "pathParams": [
       {
-        "name": "id",
+        "name": "code",
         "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Estimation ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [
-      {
-        "name": "fields",
-        "required": false,
         "schema": {
           "type": "string"
         },
-        "description": "Comma-separated list of fields to include (supports nested fields)"
-      }
-    ],
-    "responses": {
-      "200": {
-        "description": "Estimation retrieved successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "description": "Bad request",
-        "contentTypes": []
-      },
-      "401": {
-        "description": "Unauthorized",
-        "contentTypes": []
-      },
-      "404": {
-        "description": "Estimation not found",
-        "contentTypes": []
-      },
-      "500": {
-        "description": "Internal server error",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "PATCH /api/estimation/{id}",
-    "method": "PATCH",
-    "url": "/api/estimation/{id}",
-    "summary": "Update estimation",
-    "description": "Update estimation data by ID (partial update)",
-    "tags": [
-      "Estimation"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json"
-    ],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Estimation ID"
+        "description": "Workspace code to check"
       }
     ],
     "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "minProperties": 1,
-        "properties": {
-          "estimatedCost": {
-            "type": "number"
-          },
-          "actualCost": {
-            "type": "number",
-            "nullable": true
-          },
-          "marginPercentage": {
-            "type": "number"
-          },
-          "marginAmount": {
-            "type": "number"
-          },
-          "projectedWithMargin": {
-            "type": "number"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "PENDING",
-              "APPROVED",
-              "REJECTED",
-              "REVISED"
-            ]
-          },
-          "notes": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
     "responses": {
       "200": {
-        "description": "Estimation updated successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "description": "Bad request",
-        "contentTypes": []
-      },
-      "401": {
-        "description": "Unauthorized",
-        "contentTypes": []
-      },
-      "404": {
-        "description": "Estimation not found",
-        "contentTypes": []
-      },
-      "500": {
-        "description": "Internal server error",
-        "contentTypes": []
+        "description": "Code availability status",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "available": {
+              "type": "boolean"
+            }
+          }
+        },
+        "contentTypes": [
+          "application/json"
+        ]
       }
     },
     "paginationHints": {
@@ -421,13 +308,13 @@
     }
   },
   {
-    "id": "DELETE /api/estimation/{id}",
-    "method": "DELETE",
-    "url": "/api/estimation/{id}",
-    "summary": "Delete estimation",
-    "description": "Permanently delete an estimation by ID",
+    "id": "GET /api/workspace/{id}",
+    "method": "GET",
+    "url": "/api/workspace/{id}",
+    "summary": "Get workspace by ID",
+    "description": "Retrieve a specific workspace by its unique identifier",
     "tags": [
-      "Estimation"
+      "Workspace"
     ],
     "deprecated": false,
     "security": [
@@ -444,29 +331,16 @@
           "type": "string",
           "pattern": "^[0-9a-fA-F]{24}$"
         },
-        "description": "Estimation ID"
+        "description": "Workspace ID (MongoDB ObjectId format)"
       }
     ],
     "queryParams": [],
     "responses": {
       "200": {
-        "description": "Estimation deleted successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "description": "Bad request",
-        "contentTypes": []
-      },
-      "401": {
-        "description": "Unauthorized",
+        "description": "Workspace retrieved successfully",
         "contentTypes": []
       },
       "404": {
-        "description": "Estimation not found",
-        "contentTypes": []
-      },
-      "500": {
-        "description": "Internal server error",
         "contentTypes": []
       }
     },
@@ -477,13 +351,546 @@
     }
   },
   {
-    "id": "GET /api/estimation",
-    "method": "GET",
-    "url": "/api/estimation",
-    "summary": "Get all estimations",
-    "description": "Retrieve estimations with advanced filtering, pagination, sorting, field selection, and optional grouping",
+    "id": "PATCH /api/workspace/{id}",
+    "method": "PATCH",
+    "url": "/api/workspace/{id}",
+    "summary": "Update workspace",
+    "description": "Update workspace data by ID",
     "tags": [
-      "Estimation"
+      "Workspace"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Workspace updated successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/workspace/{id}",
+    "method": "DELETE",
+    "url": "/api/workspace/{id}",
+    "summary": "Delete workspace",
+    "description": "Delete a workspace by ID",
+    "tags": [
+      "Workspace"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Workspace deleted successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/workspace",
+    "method": "GET",
+    "url": "/api/workspace",
+    "summary": "Get all workspaces",
+    "description": "Retrieve workspaces with filtering, pagination, and sorting",
+    "tags": [
+      "Workspace"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Workspaces retrieved successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/workspace",
+    "method": "POST",
+    "url": "/api/workspace",
+    "summary": "Create new workspace",
+    "description": "Create a new workspace",
+    "tags": [
+      "Workspace"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Workspace created successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/workspace-member/me",
+    "method": "GET",
+    "url": "/api/workspace-member/me",
+    "summary": "Get current user's workspace membership",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Membership retrieved successfully",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Not a member of this workspace",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/workspace-member/{id}",
+    "method": "GET",
+    "url": "/api/workspace-member/{id}",
+    "summary": "Get workspace member by ID",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Member retrieved successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/workspace-member/{id}",
+    "method": "DELETE",
+    "url": "/api/workspace-member/{id}",
+    "summary": "Remove workspace member",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Member removed successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/workspace-member",
+    "method": "GET",
+    "url": "/api/workspace-member",
+    "summary": "Get all workspace members",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Members retrieved successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/workspace-member",
+    "method": "POST",
+    "url": "/api/workspace-member",
+    "summary": "Add a member to workspace",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Member added successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "PATCH /api/workspace-member/{id}/role",
+    "method": "PATCH",
+    "url": "/api/workspace-member/{id}/role",
+    "summary": "Update workspace member role",
+    "tags": [
+      "WorkspaceMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Role updated successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/project-member/project/{projectId}/me",
+    "method": "GET",
+    "url": "/api/project-member/project/{projectId}/me",
+    "summary": "Get current user's role in a project",
+    "tags": [
+      "ProjectMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "projectId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Project role retrieved successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/project-member/project/{projectId}",
+    "method": "GET",
+    "url": "/api/project-member/project/{projectId}",
+    "summary": "Get all members of a project",
+    "tags": [
+      "ProjectMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "projectId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Project members retrieved successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/project-member/{id}",
+    "method": "GET",
+    "url": "/api/project-member/{id}",
+    "summary": "Get project member by ID",
+    "tags": [
+      "ProjectMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Member retrieved successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/project-member/{id}",
+    "method": "DELETE",
+    "url": "/api/project-member/{id}",
+    "summary": "Remove project member",
+    "tags": [
+      "ProjectMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Member removed successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/project-member",
+    "method": "GET",
+    "url": "/api/project-member",
+    "summary": "Get all project members in workspace",
+    "tags": [
+      "ProjectMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Members retrieved successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/project-member",
+    "method": "POST",
+    "url": "/api/project-member",
+    "summary": "Add a member to a project",
+    "tags": [
+      "ProjectMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Member added successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "PATCH /api/project-member/{id}/role",
+    "method": "PATCH",
+    "url": "/api/project-member/{id}/role",
+    "summary": "Update project member role",
+    "tags": [
+      "ProjectMember"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Role updated successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/employee",
+    "method": "GET",
+    "url": "/api/employee",
+    "summary": "Get all employees",
+    "description": "Retrieves employees. If syncConfig is provided, attempts to sync from\nthird-party API first, falling back to database on failure.\n",
+    "tags": [
+      "Employee"
     ],
     "deprecated": false,
     "security": [
@@ -497,132 +904,78 @@
       {
         "name": "page",
         "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 1
+          "type": "integer"
         },
-        "description": "Page number for pagination"
+        "description": "Page number"
       },
       {
         "name": "limit",
         "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 100,
-          "default": 10
+          "type": "integer"
         },
-        "description": "Number of records per page"
+        "description": "Items per page"
       },
       {
-        "name": "order",
+        "name": "search",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Search term"
+      },
+      {
+        "name": "status",
         "schema": {
           "type": "string",
           "enum": [
-            "asc",
-            "desc"
-          ],
-          "default": "desc"
-        },
-        "description": "Sort order"
-      },
-      {
-        "name": "sort",
-        "schema": {
-          "type": "string"
-        },
-        "description": "Field to sort by"
-      },
-      {
-        "name": "fields",
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include"
-      },
-      {
-        "name": "query",
-        "schema": {
-          "type": "string"
-        },
-        "description": "Search query"
-      },
-      {
-        "name": "filter",
-        "schema": {
-          "type": "string"
-        },
-        "description": "JSON array of filter objects"
-      },
-      {
-        "name": "groupBy",
-        "schema": {
-          "type": "string"
-        },
-        "description": "Group results by field"
-      },
-      {
-        "name": "document",
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
+            "ACTIVE",
+            "INACTIVE",
+            "ON_LEAVE",
+            "TERMINATED",
+            "SUSPENDED"
           ]
         },
-        "description": "Include estimation documents"
+        "description": "Filter by status"
       },
       {
-        "name": "pagination",
+        "name": "department",
         "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
+          "type": "string"
         },
-        "description": "Include pagination metadata"
+        "description": "Filter by department"
       },
       {
-        "name": "count",
+        "name": "forceDatabase",
         "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
+          "type": "boolean"
         },
-        "description": "Include total count"
+        "description": "Skip API sync and use database only"
       }
     ],
     "responses": {
       "200": {
-        "description": "Estimations retrieved successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "description": "Bad request",
+        "description": "List of employees",
         "contentTypes": []
       },
       "401": {
-        "description": "Unauthorized",
         "contentTypes": []
       },
       "500": {
-        "description": "Internal server error",
         "contentTypes": []
       }
     },
     "paginationHints": {
       "hasPaginationParams": true,
-      "hasSearchParam": true,
-      "hasSortParams": true
+      "hasSearchParam": false,
+      "hasSortParams": false
     }
   },
   {
-    "id": "POST /api/estimation",
+    "id": "POST /api/employee",
     "method": "POST",
-    "url": "/api/estimation",
-    "summary": "Create new estimation",
-    "description": "Create a new estimation with the provided data",
+    "url": "/api/employee",
+    "summary": "Create a new employee manually",
     "tags": [
-      "Estimation"
+      "Employee"
     ],
     "deprecated": false,
     "security": [
@@ -640,57 +993,51 @@
       "schema": {
         "type": "object",
         "required": [
-          "estimationNumber",
-          "projectId",
-          "estimatedCost",
-          "marginPercentage",
-          "marginAmount",
-          "projectedWithMargin"
+          "employeeNumber",
+          "firstName",
+          "lastName",
+          "email"
         ],
         "properties": {
-          "estimationNumber": {
+          "employeeNumber": {
             "type": "string",
-            "example": "EST-2025-001"
+            "example": "EMP-001"
           },
-          "projectId": {
+          "firstName": {
             "type": "string",
-            "example": "507f1f77bcf86cd799439011"
+            "example": "John"
           },
-          "estimatedCost": {
-            "type": "number",
-            "example": 100000
+          "middleName": {
+            "type": "string"
           },
-          "actualCost": {
-            "type": "number",
-            "nullable": true,
-            "example": 95000
+          "lastName": {
+            "type": "string",
+            "example": "Doe"
           },
-          "marginPercentage": {
-            "type": "number",
-            "example": 30
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "john.doe@company.com"
           },
-          "marginAmount": {
-            "type": "number",
-            "example": 30000
+          "phone": {
+            "type": "string"
           },
-          "projectedWithMargin": {
-            "type": "number",
-            "example": 130000
+          "department": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
           },
           "status": {
             "type": "string",
             "enum": [
-              "DRAFT",
-              "PENDING",
-              "APPROVED",
-              "REJECTED",
-              "REVISED"
+              "ACTIVE",
+              "INACTIVE",
+              "ON_LEAVE",
+              "TERMINATED",
+              "SUSPENDED"
             ],
-            "default": "DRAFT"
-          },
-          "notes": {
-            "type": "string",
-            "nullable": true
+            "default": "ACTIVE"
           }
         }
       },
@@ -700,627 +1047,14 @@
     },
     "responses": {
       "201": {
-        "description": "Estimation created successfully",
+        "description": "Employee created",
         "contentTypes": []
       },
       "400": {
-        "description": "Bad request",
-        "contentTypes": []
-      },
-      "401": {
-        "description": "Unauthorized",
-        "contentTypes": []
-      },
-      "404": {
-        "description": "Project not found",
-        "contentTypes": []
-      },
-      "500": {
-        "description": "Internal server error",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "POST /api/estimation/{id}/approve",
-    "method": "POST",
-    "url": "/api/estimation/{id}/approve",
-    "summary": "Approve estimation",
-    "description": "Approve an estimation and mark it as approved",
-    "tags": [
-      "Estimation"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json"
-    ],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Estimation ID"
-      }
-    ],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "required": [
-          "approvedBy"
-        ],
-        "properties": {
-          "approvedBy": {
-            "type": "string",
-            "description": "User ID who approved",
-            "example": "user_001"
-          },
-          "notes": {
-            "type": "string",
-            "description": "Optional approval notes"
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
-    "responses": {
-      "200": {
-        "description": "Estimation approved successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "description": "Bad request or already approved",
-        "contentTypes": []
-      },
-      "401": {
-        "description": "Unauthorized",
-        "contentTypes": []
-      },
-      "404": {
-        "description": "Estimation not found",
-        "contentTypes": []
-      },
-      "500": {
-        "description": "Internal server error",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "POST /api/estimation/{id}/reject",
-    "method": "POST",
-    "url": "/api/estimation/{id}/reject",
-    "summary": "Reject estimation",
-    "description": "Reject an estimation with a reason",
-    "tags": [
-      "Estimation"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json"
-    ],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Estimation ID"
-      }
-    ],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "required": [
-          "notes"
-        ],
-        "properties": {
-          "notes": {
-            "type": "string",
-            "description": "Rejection reason (required)",
-            "example": "Budget exceeds project limits"
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
-    "responses": {
-      "200": {
-        "description": "Estimation rejected successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "description": "Bad request",
-        "contentTypes": []
-      },
-      "401": {
-        "description": "Unauthorized",
-        "contentTypes": []
-      },
-      "404": {
-        "description": "Estimation not found",
-        "contentTypes": []
-      },
-      "500": {
-        "description": "Internal server error",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "GET /api/estimationItem/{id}",
-    "method": "GET",
-    "url": "/api/estimationItem/{id}",
-    "summary": "Get estimationItem by ID",
-    "description": "Retrieve a specific estimationItem by its unique identifier with optional field selection",
-    "tags": [
-      "EstimationItem"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "EstimationItem ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include"
-      }
-    ],
-    "responses": {
-      "200": {
-        "description": "EstimationItem retrieved successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "PATCH /api/estimationItem/{id}",
-    "method": "PATCH",
-    "url": "/api/estimationItem/{id}",
-    "summary": "Update estimationItem",
-    "description": "Update estimationItem data by ID",
-    "tags": [
-      "EstimationItem"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string"
-        }
-      }
-    ],
-    "queryParams": [],
-    "responses": {
-      "200": {
-        "description": "EstimationItem updated successfully",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "DELETE /api/estimationItem/{id}",
-    "method": "DELETE",
-    "url": "/api/estimationItem/{id}",
-    "summary": "Delete estimationItem",
-    "description": "Permanently delete a estimationItem by ID",
-    "tags": [
-      "EstimationItem"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string"
-        }
-      }
-    ],
-    "queryParams": [],
-    "responses": {
-      "200": {
-        "description": "EstimationItem deleted successfully",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "GET /api/estimationItem",
-    "method": "GET",
-    "url": "/api/estimationItem",
-    "summary": "Get all estimationItems",
-    "description": "Retrieve estimationItems with filtering, pagination, and grouping",
-    "tags": [
-      "EstimationItem"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [],
-    "queryParams": [
-      {
-        "name": "page",
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 1
-        }
-      },
-      {
-        "name": "limit",
-        "schema": {
-          "type": "integer",
-          "default": 10
-        }
-      },
-      {
-        "name": "type",
-        "schema": {
-          "type": "string",
-          "enum": [
-            "CAPEX",
-            "OPEX"
-          ]
-        },
-        "description": "Filter by item type"
-      },
-      {
-        "name": "document",
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include estimationItem documents in response"
-      },
-      {
-        "name": "pagination",
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include pagination metadata"
-      },
-      {
-        "name": "count",
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include total count"
-      }
-    ],
-    "responses": {
-      "200": {
-        "description": "EstimationItems retrieved successfully",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": true,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "POST /api/estimationItem",
-    "method": "POST",
-    "url": "/api/estimationItem",
-    "summary": "Create new estimationItem",
-    "description": "Create a new estimationItem (CAPEX or OPEX)",
-    "tags": [
-      "EstimationItem"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json"
-    ],
-    "pathParams": [],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "required": [
-          "projectId",
-          "type",
-          "itemName",
-          "quantity",
-          "estimatedUnitPrice",
-          "estimatedTotal"
-        ],
-        "properties": {
-          "projectId": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "CAPEX",
-              "OPEX"
-            ]
-          },
-          "category": {
-            "type": "string",
-            "description": "Category (mainly for OPEX items)"
-          },
-          "itemName": {
-            "type": "string"
-          },
-          "quantity": {
-            "type": "integer"
-          },
-          "estimatedUnitPrice": {
-            "type": "number"
-          },
-          "estimatedTotal": {
-            "type": "number"
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
-    "responses": {
-      "201": {
-        "description": "EstimationItem created successfully",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "GET /api/sequential/{id}",
-    "method": "GET",
-    "url": "/api/sequential/{id}",
-    "summary": "Get sequential by ID",
-    "description": "Retrieve a specific sequential by its unique identifier with optional field selection",
-    "tags": [
-      "Sequential"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Sequential ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include"
-      }
-    ],
-    "responses": {
-      "200": {
-        "description": "Sequential retrieved successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "description": "Bad request",
-        "contentTypes": []
-      },
-      "401": {
-        "description": "Unauthorized",
-        "contentTypes": []
-      },
-      "404": {
-        "description": "Sequential not found",
-        "contentTypes": []
-      },
-      "500": {
-        "description": "Internal server error",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "PATCH /api/sequential/{id}",
-    "method": "PATCH",
-    "url": "/api/sequential/{id}",
-    "summary": "Update sequential",
-    "description": "Update sequential data by ID (partial update)",
-    "tags": [
-      "Sequential"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json"
-    ],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Sequential ID"
-      }
-    ],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "minProperties": 1,
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "code": {
-            "type": "string"
-          },
-          "pattern": {
-            "type": "string"
-          },
-          "current": {
-            "type": "integer"
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
-    "responses": {
-      "200": {
-        "description": "Sequential updated successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "description": "Bad request",
-        "contentTypes": []
-      },
-      "401": {
-        "description": "Unauthorized",
-        "contentTypes": []
-      },
-      "404": {
-        "description": "Sequential not found",
         "contentTypes": []
       },
       "409": {
-        "description": "Sequential with this name or code already exists",
-        "contentTypes": []
-      },
-      "500": {
-        "description": "Internal server error",
+        "description": "Duplicate email or employee number",
         "contentTypes": []
       }
     },
@@ -1331,69 +1065,12 @@
     }
   },
   {
-    "id": "DELETE /api/sequential/{id}",
-    "method": "DELETE",
-    "url": "/api/sequential/{id}",
-    "summary": "Delete sequential",
-    "description": "Soft delete an sequential by ID",
-    "tags": [
-      "Sequential"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Sequential ID"
-      }
-    ],
-    "queryParams": [],
-    "responses": {
-      "200": {
-        "description": "Sequential deleted successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "description": "Bad request",
-        "contentTypes": []
-      },
-      "401": {
-        "description": "Unauthorized",
-        "contentTypes": []
-      },
-      "404": {
-        "description": "Sequential not found",
-        "contentTypes": []
-      },
-      "500": {
-        "description": "Internal server error",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "GET /api/sequential",
+    "id": "GET /api/employee/stats",
     "method": "GET",
-    "url": "/api/sequential",
-    "summary": "Get all sequentials",
-    "description": "Retrieve sequentials with advanced filtering, pagination, sorting, field selection, and optional grouping",
+    "url": "/api/employee/stats",
+    "summary": "Get employee statistics",
     "tags": [
-      "Sequential"
+      "Employee"
     ],
     "deprecated": false,
     "security": [
@@ -1403,136 +1080,30 @@
     ],
     "contentTypes": [],
     "pathParams": [],
-    "queryParams": [
-      {
-        "name": "page",
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 1
-        },
-        "description": "Page number for pagination"
-      },
-      {
-        "name": "limit",
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 100,
-          "default": 10
-        },
-        "description": "Number of records per page"
-      },
-      {
-        "name": "order",
-        "schema": {
-          "type": "string",
-          "enum": [
-            "asc",
-            "desc"
-          ],
-          "default": "desc"
-        },
-        "description": "Sort order"
-      },
-      {
-        "name": "sort",
-        "schema": {
-          "type": "string"
-        },
-        "description": "Field to sort by"
-      },
-      {
-        "name": "fields",
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include"
-      },
-      {
-        "name": "query",
-        "schema": {
-          "type": "string"
-        },
-        "description": "Search query"
-      },
-      {
-        "name": "filter",
-        "schema": {
-          "type": "string"
-        },
-        "description": "JSON array of filter objects"
-      },
-      {
-        "name": "groupBy",
-        "schema": {
-          "type": "string"
-        },
-        "description": "Group results by field"
-      },
-      {
-        "name": "document",
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include sequential documents"
-      },
-      {
-        "name": "pagination",
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include pagination metadata"
-      },
-      {
-        "name": "count",
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include total count"
-      }
-    ],
+    "queryParams": [],
     "responses": {
       "200": {
-        "description": "Sequentials retrieved successfully",
-        "contentTypes": []
-      },
-      "400": {
-        "description": "Bad request",
+        "description": "Employee statistics by status, department, and sync status",
         "contentTypes": []
       },
       "401": {
-        "description": "Unauthorized",
-        "contentTypes": []
-      },
-      "500": {
-        "description": "Internal server error",
         "contentTypes": []
       }
     },
     "paginationHints": {
-      "hasPaginationParams": true,
-      "hasSearchParam": true,
-      "hasSortParams": true
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
     }
   },
   {
-    "id": "POST /api/sequential",
+    "id": "POST /api/employee/sync",
     "method": "POST",
-    "url": "/api/sequential",
-    "summary": "Create new sequential",
-    "description": "Create a new sequential with the provided data",
+    "url": "/api/employee/sync",
+    "summary": "Trigger employee sync from external API",
+    "description": "Syncs employees from a third-party API. Falls back to database if API fails.\n",
     "tags": [
-      "Sequential"
+      "Employee"
     ],
     "deprecated": false,
     "security": [
@@ -1550,27 +1121,47 @@
       "schema": {
         "type": "object",
         "required": [
-          "name",
-          "code",
-          "pattern"
+          "apiUrl"
         ],
         "properties": {
-          "name": {
+          "apiUrl": {
             "type": "string",
-            "example": "Invoice Number"
+            "description": "Third-party API URL",
+            "example": "https://api.hris-system.com/employees"
           },
-          "code": {
+          "authType": {
             "type": "string",
-            "example": "INV"
+            "enum": [
+              "bearer",
+              "api-key",
+              "basic",
+              "none"
+            ],
+            "default": "bearer"
           },
-          "pattern": {
+          "authToken": {
             "type": "string",
-            "example": "INV-{YYYY}-{0000}"
+            "description": "Authentication token"
           },
-          "current": {
+          "apiKey": {
+            "type": "string",
+            "description": "API key (for api-key auth)"
+          },
+          "headers": {
+            "type": "object",
+            "description": "Additional headers"
+          },
+          "timeout": {
             "type": "integer",
-            "default": 0,
-            "example": 0
+            "default": 30000
+          },
+          "retryAttempts": {
+            "type": "integer",
+            "default": 3
+          },
+          "fieldMapping": {
+            "type": "object",
+            "description": "Custom field mapping from external to internal names"
           }
         }
       },
@@ -1579,24 +1170,495 @@
       ]
     },
     "responses": {
-      "201": {
-        "description": "Sequential created successfully",
+      "200": {
+        "description": "Sync result with statistics",
         "contentTypes": []
       },
       "400": {
-        "description": "Bad request",
         "contentTypes": []
       },
       "401": {
-        "description": "Unauthorized",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/employee/sync/status",
+    "method": "GET",
+    "url": "/api/employee/sync/status",
+    "summary": "Get sync status and health",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Sync status including any issues",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/employee/sync/issues",
+    "method": "GET",
+    "url": "/api/employee/sync/issues",
+    "summary": "Get employees with sync issues",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "List of employees with FAILED or PENDING sync status",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/employee/external/{externalId}",
+    "method": "GET",
+    "url": "/api/employee/external/{externalId}",
+    "summary": "Get employee by external ID",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "externalId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [
+      {
+        "name": "externalSource",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Filter by external source"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "Employee details",
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/employee/{id}",
+    "method": "GET",
+    "url": "/api/employee/{id}",
+    "summary": "Get employee by ID",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Employee ID (MongoDB ObjectId)"
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Employee details",
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "PUT /api/employee/{id}",
+    "method": "PUT",
+    "url": "/api/employee/{id}",
+    "summary": "Update employee",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [
+      "application/json"
+    ],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "requestBody": {
+      "required": true,
+      "schema": {
+        "type": "object"
+      },
+      "contentTypes": [
+        "application/json"
+      ]
+    },
+    "responses": {
+      "200": {
+        "description": "Employee updated",
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/employee/{id}",
+    "method": "DELETE",
+    "url": "/api/employee/{id}",
+    "summary": "Delete employee (soft delete)",
+    "tags": [
+      "Employee"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Employee deleted",
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/product/generate-code",
+    "method": "GET",
+    "url": "/api/product/generate-code",
+    "summary": "Generate product code",
+    "description": "Generate the next available product code within the current workspace",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Product code generated successfully",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/product/{id}",
+    "method": "GET",
+    "url": "/api/product/{id}",
+    "summary": "Get product by ID",
+    "description": "Retrieve a product and its production, BOM, and cost assumption data",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {},
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "PATCH /api/product/{id}",
+    "method": "PATCH",
+    "url": "/api/product/{id}",
+    "summary": "Update product",
+    "description": "Update a product master record by ID",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {},
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/product/{id}",
+    "method": "DELETE",
+    "url": "/api/product/{id}",
+    "summary": "Delete product",
+    "description": "Soft delete a product by ID",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {},
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/product",
+    "method": "GET",
+    "url": "/api/product",
+    "summary": "Get all products",
+    "description": "Retrieve products with filtering, searching, sorting, and pagination",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {},
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "POST /api/product",
+    "method": "POST",
+    "url": "/api/product",
+    "summary": "Create new product",
+    "description": "Create a new product master record",
+    "tags": [
+      "Product"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {},
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/pats/catalog/products/{productId}",
+    "method": "GET",
+    "url": "/api/pats/catalog/products/{productId}",
+    "summary": "Read a workspace-scoped PATS product catalog record",
+    "description": "Returns Product -> Model -> ModelPart data without legacy seed fallback. Optional private imageObjectKey metadata is resolved to a short-lived read URL and is never returned.",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "productId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Complete or sparse PATS catalog record",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Workspace header is missing or invalid",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Product is not linked to the requested workspace",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "Private image storage is unavailable",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogProductCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/products",
+    "summary": "Create a draft catalog product",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Draft product created",
         "contentTypes": []
       },
       "409": {
-        "description": "Sequential with this name or code already exists",
+        "description": "Duplicate product or idempotency payload conflict",
         "contentTypes": []
       },
-      "500": {
-        "description": "Internal server error",
+      "422": {
+        "description": "Invalid product or source evidence",
         "contentTypes": []
       }
     },
@@ -1607,281 +1669,12 @@
     }
   },
   {
-    "id": "GET /api/order/{id}",
+    "id": "catalogProductCollectionGet",
     "method": "GET",
-    "url": "/api/order/{id}",
-    "summary": "Get order by ID",
-    "description": "Retrieve a specific order by its unique identifier with optional field selection",
+    "url": "/api/v1/catalog/products",
+    "summary": "List deployment-scoped PATS catalog products",
     "tags": [
-      "Order"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Order ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include (supports nested fields with dot notation)"
-      }
-    ],
-    "responses": {
-      "200": {
-        "description": "Order retrieved successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "order": {
-                      "$ref": "#/components/schemas/Order"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "PATCH /api/order/{id}",
-    "method": "PATCH",
-    "url": "/api/order/{id}",
-    "summary": "Update order",
-    "description": "Update order data by ID (partial update)",
-    "tags": [
-      "Order"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json"
-    ],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Order ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "minProperties": 1,
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Order name",
-            "example": "Updated Email Order"
-          },
-          "description": {
-            "type": "string",
-            "description": "Order description",
-            "example": "Updated description for the order"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "sms",
-              "push",
-              "form"
-            ],
-            "description": "Order type for categorization",
-            "example": "email"
-          },
-          "isDeleted": {
-            "type": "boolean",
-            "description": "Soft delete flag",
-            "example": false
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
-    "responses": {
-      "200": {
-        "description": "Order updated successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "order": {
-                      "$ref": "#/components/schemas/Order"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "DELETE /api/order/{id}",
-    "method": "DELETE",
-    "url": "/api/order/{id}",
-    "summary": "Delete order",
-    "description": "Permanently delete a order by ID",
-    "tags": [
-      "Order"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Order ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [],
-    "responses": {
-      "200": {
-        "description": "Order deleted successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "description": "Empty object for successful deletion"
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "GET /api/order",
-    "method": "GET",
-    "url": "/api/order",
-    "summary": "Get all orders",
-    "description": "Retrieve orders with advanced filtering, pagination, sorting, field selection, and optional grouping",
-    "tags": [
-      "Order"
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -1894,185 +1687,68 @@
     "queryParams": [
       {
         "name": "page",
-        "required": false,
         "schema": {
           "type": "integer",
           "minimum": 1,
           "default": 1
-        },
-        "description": "Page number for pagination"
+        }
       },
       {
         "name": "limit",
-        "required": false,
         "schema": {
           "type": "integer",
           "minimum": 1,
           "maximum": 100,
-          "default": 10
-        },
-        "description": "Number of records per page"
-      },
-      {
-        "name": "order",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "asc",
-            "desc"
-          ],
-          "default": "desc"
-        },
-        "description": "Sort order for results"
+          "default": 50
+        }
       },
       {
         "name": "sort",
-        "required": false,
         "schema": {
           "type": "string"
         },
-        "description": "Field to sort by or JSON object for multi-field sorting"
-      },
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include (supports dot notation)"
-      },
-      {
-        "name": "query",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Search query to filter by name or description"
-      },
-      {
-        "name": "filter",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "JSON array of filter objects for advanced filtering"
-      },
-      {
-        "name": "groupBy",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Group results by a field name"
-      },
-      {
-        "name": "document",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include order documents in response"
-      },
-      {
-        "name": "pagination",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include pagination metadata in response"
-      },
-      {
-        "name": "count",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include total count in response"
+        "description": "Comma-separated product_code, product_name, created_at, updated_at fields; prefix with - for descending order."
       }
     ],
     "responses": {
       "200": {
-        "description": "Templates retrieved successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "orders": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Order"
-                      },
-                      "description": "Present when document=\"true\" and no groupBy"
-                    },
-                    "groups": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/components/schemas/Order"
-                        }
-                      },
-                      "description": "Present when groupBy is used and document=\"true\""
-                    },
-                    "count": {
-                      "type": "integer",
-                      "description": "Present when count=\"true\""
-                    },
-                    "pagination": {
-                      "$ref": "#/components/schemas/Pagination",
-                      "description": "Present when pagination=\"true\""
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
+        "description": "Paginated normalized product summaries",
+        "contentTypes": []
       },
       "400": {
+        "description": "Malformed pagination or sort query",
         "contentTypes": []
       },
       "401": {
+        "description": "Authentication required",
         "contentTypes": []
       },
-      "500": {
+      "403": {
+        "description": "catalog.read capability required",
+        "contentTypes": []
+      },
+      "429": {
+        "description": "Request rate limit exceeded",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "Catalog persistence unavailable",
         "contentTypes": []
       }
     },
     "paginationHints": {
       "hasPaginationParams": true,
-      "hasSearchParam": true,
+      "hasSearchParam": false,
       "hasSortParams": true
     }
   },
   {
-    "id": "POST /api/order",
+    "id": "catalogModelCreate",
     "method": "POST",
-    "url": "/api/order",
-    "summary": "Create new order",
-    "description": "Create a new order with the provided data",
+    "url": "/api/v1/catalog/models",
+    "summary": "Create a draft catalog model",
     "tags": [
-      "Order"
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -2080,90 +1756,20 @@
         "bearerAuth": []
       }
     ],
-    "contentTypes": [
-      "application/json",
-      "application/x-www-form-urlencoded",
-      "multipart/form-data"
-    ],
+    "contentTypes": [],
     "pathParams": [],
     "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Order name",
-            "example": "Email Welcome Order"
-          },
-          "description": {
-            "type": "string",
-            "description": "Order description",
-            "example": "Welcome email order for new users"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "sms",
-              "push",
-              "form"
-            ],
-            "description": "Order type for categorization",
-            "example": "email"
-          },
-          "isDeleted": {
-            "type": "boolean",
-            "description": "Soft delete flag",
-            "default": false
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json",
-        "application/x-www-form-urlencoded",
-        "multipart/form-data"
-      ]
-    },
     "responses": {
       "201": {
-        "description": "Order created successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "order": {
-                      "$ref": "#/components/schemas/Order"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
+        "description": "Draft model created",
         "contentTypes": []
       },
-      "401": {
+      "404": {
+        "description": "Parent product not found",
         "contentTypes": []
       },
-      "500": {
+      "422": {
+        "description": "Invalid model or source evidence",
         "contentTypes": []
       }
     },
@@ -2174,13 +1780,49 @@
     }
   },
   {
-    "id": "GET /api/payslip/{id}",
-    "method": "GET",
-    "url": "/api/payslip/{id}",
-    "summary": "Get payslip by ID",
-    "description": "Retrieve a specific payslip by its unique identifier with optional field selection",
+    "id": "catalogModelPartCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/model-parts",
+    "summary": "Create a draft catalog model part",
     "tags": [
-      "Payslip"
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Draft model part created",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Parent model not found",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Invalid model part or source evidence",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogProductPatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/products/{productId}",
+    "summary": "Update a draft catalog product",
+    "tags": [
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -2191,177 +1833,21 @@
     "contentTypes": [],
     "pathParams": [
       {
-        "name": "id",
+        "name": "productId",
         "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Payslip ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [
-      {
-        "name": "fields",
-        "required": false,
         "schema": {
           "type": "string"
-        },
-        "description": "Comma-separated list of fields to include (supports nested fields with dot notation)"
-      }
-    ],
-    "responses": {
-      "200": {
-        "description": "Payslip retrieved successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "payslip": {
-                      "$ref": "#/components/schemas/Payslip"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "PATCH /api/payslip/{id}",
-    "method": "PATCH",
-    "url": "/api/payslip/{id}",
-    "summary": "Update payslip",
-    "description": "Update payslip data by ID (partial update)",
-    "tags": [
-      "Payslip"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json"
-    ],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Payslip ID (MongoDB ObjectId format)"
+        }
       }
     ],
     "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "minProperties": 1,
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Payslip name",
-            "example": "Updated Email Payslip"
-          },
-          "description": {
-            "type": "string",
-            "description": "Payslip description",
-            "example": "Updated description for the payslip"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "sms",
-              "push",
-              "form"
-            ],
-            "description": "Payslip type for categorization",
-            "example": "email"
-          },
-          "isDeleted": {
-            "type": "boolean",
-            "description": "Soft delete flag",
-            "example": false
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
     "responses": {
       "200": {
-        "description": "Payslip updated successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "payslip": {
-                      "$ref": "#/components/schemas/Payslip"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
+        "description": "Updated draft product",
         "contentTypes": []
       },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
+      "412": {
+        "description": "Stale or missing If-Match",
         "contentTypes": []
       }
     },
@@ -2372,13 +1858,12 @@
     }
   },
   {
-    "id": "DELETE /api/payslip/{id}",
-    "method": "DELETE",
-    "url": "/api/payslip/{id}",
-    "summary": "Delete payslip",
-    "description": "Permanently delete a payslip by ID",
+    "id": "catalogProductGet",
+    "method": "GET",
+    "url": "/api/v1/catalog/products/{productId}",
+    "summary": "Read a deployment-scoped PATS catalog product",
     "tags": [
-      "Payslip"
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -2389,49 +1874,37 @@
     "contentTypes": [],
     "pathParams": [
       {
-        "name": "id",
+        "name": "productId",
         "required": true,
         "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Payslip ID (MongoDB ObjectId format)"
+          "type": "string"
+        }
       }
     ],
     "queryParams": [],
     "responses": {
       "200": {
-        "description": "Payslip deleted successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "description": "Empty object for successful deletion"
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
+        "description": "Complete or sparse Product to Model to ModelPart record",
         "contentTypes": []
       },
       "401": {
+        "description": "Authentication required",
+        "contentTypes": []
+      },
+      "403": {
+        "description": "catalog.read capability required",
         "contentTypes": []
       },
       "404": {
+        "description": "Product not found",
         "contentTypes": []
       },
-      "500": {
+      "429": {
+        "description": "Request rate limit exceeded",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "Private image storage unavailable",
         "contentTypes": []
       }
     },
@@ -2442,13 +1915,135 @@
     }
   },
   {
-    "id": "GET /api/payslip",
-    "method": "GET",
-    "url": "/api/payslip",
-    "summary": "Get all payslips",
-    "description": "Retrieve payslips with advanced filtering, pagination, sorting, field selection, and optional grouping",
+    "id": "catalogModelPatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/models/{modelId}",
+    "summary": "Update a draft catalog model",
     "tags": [
-      "Payslip"
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "modelId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Updated draft model",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogModelPartPatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/model-parts/{modelPartId}",
+    "summary": "Update a draft catalog model part",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "modelPartId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Updated draft model part",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogBomDefinitionCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/bom-definitions",
+    "summary": "Create a draft BOM revision",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Draft BOM revision created",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Parent model not found",
+        "contentTypes": []
+      },
+      "409": {
+        "description": "Duplicate BOM revision or idempotency conflict",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Invalid BOM revision or source evidence",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "catalogBomDefinitionCollectionGet",
+    "method": "GET",
+    "url": "/api/v1/catalog/bom-definitions",
+    "summary": "List BOM definition revisions for a model",
+    "tags": [
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -2459,295 +2054,73 @@
     "contentTypes": [],
     "pathParams": [],
     "queryParams": [
+      {
+        "name": "model_id",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       {
         "name": "page",
-        "required": false,
         "schema": {
           "type": "integer",
           "minimum": 1,
           "default": 1
-        },
-        "description": "Page number for pagination"
+        }
       },
       {
         "name": "limit",
-        "required": false,
         "schema": {
           "type": "integer",
           "minimum": 1,
           "maximum": 100,
-          "default": 10
-        },
-        "description": "Number of records per page"
-      },
-      {
-        "name": "order",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "asc",
-            "desc"
-          ],
-          "default": "desc"
-        },
-        "description": "Sort order for results"
+          "default": 50
+        }
       },
       {
         "name": "sort",
-        "required": false,
         "schema": {
           "type": "string"
         },
-        "description": "Field to sort by or JSON object for multi-field sorting"
-      },
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include (supports dot notation)"
-      },
-      {
-        "name": "query",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Search query to filter by name or description"
-      },
-      {
-        "name": "filter",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "JSON array of filter objects for advanced filtering"
-      },
-      {
-        "name": "groupBy",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Group results by a field name"
-      },
-      {
-        "name": "document",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include payslip documents in response"
-      },
-      {
-        "name": "pagination",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include pagination metadata in response"
-      },
-      {
-        "name": "count",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include total count in response"
+        "description": "Comma-separated revision, created_at, updated_at fields; prefix with - for descending order."
       }
     ],
     "responses": {
       "200": {
-        "description": "Templates retrieved successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "payslips": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Payslip"
-                      },
-                      "description": "Present when document=\"true\" and no groupBy"
-                    },
-                    "groups": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/components/schemas/Payslip"
-                        }
-                      },
-                      "description": "Present when groupBy is used and document=\"true\""
-                    },
-                    "count": {
-                      "type": "integer",
-                      "description": "Present when count=\"true\""
-                    },
-                    "pagination": {
-                      "$ref": "#/components/schemas/Pagination",
-                      "description": "Present when pagination=\"true\""
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
+        "description": "Paginated BOM definition summaries",
+        "contentTypes": []
       },
       "400": {
+        "description": "Malformed or incomplete collection query",
         "contentTypes": []
       },
       "401": {
+        "description": "Authentication required",
         "contentTypes": []
       },
-      "500": {
+      "403": {
+        "description": "catalog.read capability required",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "BOM persistence unavailable",
         "contentTypes": []
       }
     },
     "paginationHints": {
       "hasPaginationParams": true,
-      "hasSearchParam": true,
+      "hasSearchParam": false,
       "hasSortParams": true
     }
   },
   {
-    "id": "POST /api/payslip",
+    "id": "catalogBomLineCreate",
     "method": "POST",
-    "url": "/api/payslip",
-    "summary": "Create new payslip",
-    "description": "Create a new payslip with the provided data",
+    "url": "/api/v1/catalog/bom-lines",
+    "summary": "Add an ordered model-part line to a draft BOM",
     "tags": [
-      "Payslip"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json",
-      "application/x-www-form-urlencoded",
-      "multipart/form-data"
-    ],
-    "pathParams": [],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Payslip name",
-            "example": "Email Welcome Payslip"
-          },
-          "description": {
-            "type": "string",
-            "description": "Payslip description",
-            "example": "Welcome email payslip for new users"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "sms",
-              "push",
-              "form"
-            ],
-            "description": "Payslip type for categorization",
-            "example": "email"
-          },
-          "isDeleted": {
-            "type": "boolean",
-            "description": "Soft delete flag",
-            "default": false
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json",
-        "application/x-www-form-urlencoded",
-        "multipart/form-data"
-      ]
-    },
-    "responses": {
-      "201": {
-        "description": "Payslip created successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "payslip": {
-                      "$ref": "#/components/schemas/Payslip"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "GET /api/project/{id}",
-    "method": "GET",
-    "url": "/api/project/{id}",
-    "summary": "Get project by ID",
-    "description": "Retrieve a specific project by its unique identifier with optional field selection",
-    "tags": [
-      "Project"
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -2756,64 +2129,23 @@
       }
     ],
     "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Project ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include (supports nested fields with dot notation)"
-      }
-    ],
+    "pathParams": [],
+    "queryParams": [],
     "responses": {
-      "200": {
-        "description": "Project retrieved successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "project": {
-                      "$ref": "#/components/schemas/Project"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
+      "201": {
+        "description": "Draft BOM line created",
         "contentTypes": []
       },
       "404": {
+        "description": "BOM or model part not found",
         "contentTypes": []
       },
-      "500": {
+      "409": {
+        "description": "Duplicate line or idempotency conflict",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Cross-model or invalid BOM line",
         "contentTypes": []
       }
     },
@@ -2824,13 +2156,12 @@
     }
   },
   {
-    "id": "PATCH /api/project/{id}",
+    "id": "catalogBomDefinitionPatch",
     "method": "PATCH",
-    "url": "/api/project/{id}",
-    "summary": "Update project",
-    "description": "Update project data by ID (partial update)",
+    "url": "/api/v1/catalog/bom-definitions/{bomDefinitionId}",
+    "summary": "Update draft BOM evidence status",
     "tags": [
-      "Project"
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -2838,97 +2169,24 @@
         "bearerAuth": []
       }
     ],
-    "contentTypes": [
-      "application/json"
-    ],
+    "contentTypes": [],
     "pathParams": [
       {
-        "name": "id",
+        "name": "bomDefinitionId",
         "required": true,
         "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Project ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "minProperties": 1,
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Project name",
-            "example": "Updated Email Project"
-          },
-          "description": {
-            "type": "string",
-            "description": "Project description",
-            "example": "Updated description for the project"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "sms",
-              "push",
-              "form"
-            ],
-            "description": "Project type for categorization",
-            "example": "email"
-          },
-          "isDeleted": {
-            "type": "boolean",
-            "description": "Soft delete flag",
-            "example": false
-          }
+          "type": "string"
         }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
+      }
+    ],
+    "queryParams": [],
     "responses": {
       "200": {
-        "description": "Project updated successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "project": {
-                      "$ref": "#/components/schemas/Project"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
+        "description": "Updated draft BOM revision",
         "contentTypes": []
       },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
+      "412": {
+        "description": "Stale or missing If-Match",
         "contentTypes": []
       }
     },
@@ -2939,13 +2197,12 @@
     }
   },
   {
-    "id": "DELETE /api/project/{id}",
-    "method": "DELETE",
-    "url": "/api/project/{id}",
-    "summary": "Delete project",
-    "description": "Permanently delete a project by ID",
+    "id": "catalogBomDefinitionGet",
+    "method": "GET",
+    "url": "/api/v1/catalog/bom-definitions/{bomDefinitionId}",
+    "summary": "Read a BOM definition revision with ordered lines",
     "tags": [
-      "Project"
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -2956,431 +2213,33 @@
     "contentTypes": [],
     "pathParams": [
       {
-        "name": "id",
+        "name": "bomDefinitionId",
         "required": true,
         "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Project ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [],
-    "responses": {
-      "200": {
-        "description": "Project deleted successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "description": "Empty object for successful deletion"
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "GET /api/project",
-    "method": "GET",
-    "url": "/api/project",
-    "summary": "Get all projects",
-    "description": "Retrieve projects with advanced filtering, pagination, sorting, field selection, and optional grouping",
-    "tags": [
-      "Project"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [],
-    "queryParams": [
-      {
-        "name": "page",
-        "required": false,
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 1
-        },
-        "description": "Page number for pagination"
-      },
-      {
-        "name": "limit",
-        "required": false,
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 100,
-          "default": 10
-        },
-        "description": "Number of records per page"
-      },
-      {
-        "name": "order",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "asc",
-            "desc"
-          ],
-          "default": "desc"
-        },
-        "description": "Sort order for results"
-      },
-      {
-        "name": "sort",
-        "required": false,
-        "schema": {
           "type": "string"
-        },
-        "description": "Field to sort by or JSON object for multi-field sorting"
-      },
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include (supports dot notation)"
-      },
-      {
-        "name": "query",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Search query to filter by name or description"
-      },
-      {
-        "name": "filter",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "JSON array of filter objects for advanced filtering"
-      },
-      {
-        "name": "groupBy",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Group results by a field name"
-      },
-      {
-        "name": "document",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include project documents in response"
-      },
-      {
-        "name": "pagination",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include pagination metadata in response"
-      },
-      {
-        "name": "count",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include total count in response"
-      }
-    ],
-    "responses": {
-      "200": {
-        "description": "Templates retrieved successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "projects": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Project"
-                      },
-                      "description": "Present when document=\"true\" and no groupBy"
-                    },
-                    "groups": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/components/schemas/Project"
-                        }
-                      },
-                      "description": "Present when groupBy is used and document=\"true\""
-                    },
-                    "count": {
-                      "type": "integer",
-                      "description": "Present when count=\"true\""
-                    },
-                    "pagination": {
-                      "$ref": "#/components/schemas/Pagination",
-                      "description": "Present when pagination=\"true\""
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": true,
-      "hasSearchParam": true,
-      "hasSortParams": true
-    }
-  },
-  {
-    "id": "POST /api/project",
-    "method": "POST",
-    "url": "/api/project",
-    "summary": "Create new project",
-    "description": "Create a new project with the provided data",
-    "tags": [
-      "Project"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json",
-      "application/x-www-form-urlencoded",
-      "multipart/form-data"
-    ],
-    "pathParams": [],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Project name",
-            "example": "Email Welcome Project"
-          },
-          "description": {
-            "type": "string",
-            "description": "Project description",
-            "example": "Welcome email project for new users"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "sms",
-              "push",
-              "form"
-            ],
-            "description": "Project type for categorization",
-            "example": "email"
-          },
-          "isDeleted": {
-            "type": "boolean",
-            "description": "Soft delete flag",
-            "default": false
-          }
         }
-      },
-      "contentTypes": [
-        "application/json",
-        "application/x-www-form-urlencoded",
-        "multipart/form-data"
-      ]
-    },
-    "responses": {
-      "201": {
-        "description": "Project created successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "project": {
-                      "$ref": "#/components/schemas/Project"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "GET /api/template/{id}",
-    "method": "GET",
-    "url": "/api/template/{id}",
-    "summary": "Get template by ID",
-    "description": "Retrieve a specific template by its unique identifier with optional field selection",
-    "tags": [
-      "Template"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
       }
     ],
-    "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Template ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include (supports nested fields with dot notation)"
-      }
-    ],
+    "queryParams": [],
     "responses": {
       "200": {
-        "description": "Template retrieved successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "template": {
-                      "$ref": "#/components/schemas/Template"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
+        "description": "BOM definition with sparse-safe ordered lines",
         "contentTypes": []
       },
       "401": {
+        "description": "Authentication required",
+        "contentTypes": []
+      },
+      "403": {
+        "description": "catalog.read capability required",
         "contentTypes": []
       },
       "404": {
+        "description": "BOM definition not found",
         "contentTypes": []
       },
-      "500": {
+      "503": {
+        "description": "BOM persistence unavailable",
         "contentTypes": []
       }
     },
@@ -3391,13 +2250,12 @@
     }
   },
   {
-    "id": "PATCH /api/template/{id}",
+    "id": "catalogBomLinePatch",
     "method": "PATCH",
-    "url": "/api/template/{id}",
-    "summary": "Update template",
-    "description": "Update template data by ID (partial update)",
+    "url": "/api/v1/catalog/bom-lines/{bomLineId}",
+    "summary": "Correct a draft BOM line without silent quantity conversion",
     "tags": [
-      "Template"
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -3405,167 +2263,24 @@
         "bearerAuth": []
       }
     ],
-    "contentTypes": [
-      "application/json"
-    ],
+    "contentTypes": [],
     "pathParams": [
       {
-        "name": "id",
+        "name": "bomLineId",
         "required": true,
         "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Template ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "minProperties": 1,
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Template name",
-            "example": "Updated Email Template"
-          },
-          "description": {
-            "type": "string",
-            "description": "Template description",
-            "example": "Updated description for the template"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "sms",
-              "push",
-              "form"
-            ],
-            "description": "Template type for categorization",
-            "example": "email"
-          },
-          "isDeleted": {
-            "type": "boolean",
-            "description": "Soft delete flag",
-            "example": false
-          }
+          "type": "string"
         }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
-    "responses": {
-      "200": {
-        "description": "Template updated successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "template": {
-                      "$ref": "#/components/schemas/Template"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "DELETE /api/template/{id}",
-    "method": "DELETE",
-    "url": "/api/template/{id}",
-    "summary": "Delete template",
-    "description": "Permanently delete a template by ID",
-    "tags": [
-      "Template"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Template ID (MongoDB ObjectId format)"
       }
     ],
     "queryParams": [],
     "responses": {
       "200": {
-        "description": "Template deleted successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "description": "Empty object for successful deletion"
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
+        "description": "Updated draft BOM line",
         "contentTypes": []
       },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
+      "412": {
+        "description": "Stale or missing If-Match",
         "contentTypes": []
       }
     },
@@ -3576,204 +2291,12 @@
     }
   },
   {
-    "id": "GET /api/template",
-    "method": "GET",
-    "url": "/api/template",
-    "summary": "Get all templates",
-    "description": "Retrieve templates with advanced filtering, pagination, sorting, field selection, and optional grouping",
-    "tags": [
-      "Template"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [],
-    "queryParams": [
-      {
-        "name": "page",
-        "required": false,
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 1
-        },
-        "description": "Page number for pagination"
-      },
-      {
-        "name": "limit",
-        "required": false,
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 100,
-          "default": 10
-        },
-        "description": "Number of records per page"
-      },
-      {
-        "name": "order",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "asc",
-            "desc"
-          ],
-          "default": "desc"
-        },
-        "description": "Sort order for results"
-      },
-      {
-        "name": "sort",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Field to sort by or JSON object for multi-field sorting"
-      },
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include (supports dot notation)"
-      },
-      {
-        "name": "query",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Search query to filter by name or description"
-      },
-      {
-        "name": "filter",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "JSON array of filter objects for advanced filtering"
-      },
-      {
-        "name": "groupBy",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Group results by a field name"
-      },
-      {
-        "name": "document",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include template documents in response"
-      },
-      {
-        "name": "pagination",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include pagination metadata in response"
-      },
-      {
-        "name": "count",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include total count in response"
-      }
-    ],
-    "responses": {
-      "200": {
-        "description": "Templates retrieved successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "templates": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Template"
-                      },
-                      "description": "Present when document=\"true\" and no groupBy"
-                    },
-                    "groups": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/components/schemas/Template"
-                        }
-                      },
-                      "description": "Present when groupBy is used and document=\"true\""
-                    },
-                    "count": {
-                      "type": "integer",
-                      "description": "Present when count=\"true\""
-                    },
-                    "pagination": {
-                      "$ref": "#/components/schemas/Pagination",
-                      "description": "Present when pagination=\"true\""
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": true,
-      "hasSearchParam": true,
-      "hasSortParams": true
-    }
-  },
-  {
-    "id": "POST /api/template",
+    "id": "catalogProcessRouteCreate",
     "method": "POST",
-    "url": "/api/template",
-    "summary": "Create new template",
-    "description": "Create a new template with the provided data",
+    "url": "/api/v1/catalog/process-routes",
+    "summary": "Create a draft process route revision",
     "tags": [
-      "Template"
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -3781,90 +2304,24 @@
         "bearerAuth": []
       }
     ],
-    "contentTypes": [
-      "application/json",
-      "application/x-www-form-urlencoded",
-      "multipart/form-data"
-    ],
+    "contentTypes": [],
     "pathParams": [],
     "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Template name",
-            "example": "Email Welcome Template"
-          },
-          "description": {
-            "type": "string",
-            "description": "Template description",
-            "example": "Welcome email template for new users"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "sms",
-              "push",
-              "form"
-            ],
-            "description": "Template type for categorization",
-            "example": "email"
-          },
-          "isDeleted": {
-            "type": "boolean",
-            "description": "Soft delete flag",
-            "default": false
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json",
-        "application/x-www-form-urlencoded",
-        "multipart/form-data"
-      ]
-    },
     "responses": {
       "201": {
-        "description": "Template created successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "template": {
-                      "$ref": "#/components/schemas/Template"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
+        "description": "Draft process route created",
         "contentTypes": []
       },
-      "401": {
+      "404": {
+        "description": "Parent model not found",
         "contentTypes": []
       },
-      "500": {
+      "409": {
+        "description": "Duplicate route revision or idempotency conflict",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Invalid route or source evidence",
         "contentTypes": []
       }
     },
@@ -3875,13 +2332,12 @@
     }
   },
   {
-    "id": "GET /api/vendor/{id}",
-    "method": "GET",
-    "url": "/api/vendor/{id}",
-    "summary": "Get vendor by ID",
-    "description": "Retrieve a specific vendor by its unique identifier with optional field selection",
+    "id": "catalogRouteStageCreate",
+    "method": "POST",
+    "url": "/api/v1/catalog/route-stages",
+    "summary": "Add an ordered stage to a draft process route",
     "tags": [
-      "Vendor"
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -3890,64 +2346,23 @@
       }
     ],
     "contentTypes": [],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Vendor ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include (supports nested fields with dot notation)"
-      }
-    ],
+    "pathParams": [],
+    "queryParams": [],
     "responses": {
-      "200": {
-        "description": "Vendor retrieved successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "vendor": {
-                      "$ref": "#/components/schemas/Vendor"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
+      "201": {
+        "description": "Draft route stage created",
         "contentTypes": []
       },
       "404": {
+        "description": "Parent route not found",
         "contentTypes": []
       },
-      "500": {
+      "409": {
+        "description": "Duplicate stage sequence or idempotency conflict",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Missing stage identity or invalid route stage",
         "contentTypes": []
       }
     },
@@ -3958,128 +2373,12 @@
     }
   },
   {
-    "id": "PATCH /api/vendor/{id}",
+    "id": "catalogProcessRoutePatch",
     "method": "PATCH",
-    "url": "/api/vendor/{id}",
-    "summary": "Update vendor",
-    "description": "Update vendor data by ID (partial update)",
+    "url": "/api/v1/catalog/process-routes/{processRouteId}",
+    "summary": "Update draft process route evidence status",
     "tags": [
-      "Vendor"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json"
-    ],
-    "pathParams": [
-      {
-        "name": "id",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Vendor ID (MongoDB ObjectId format)"
-      }
-    ],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "minProperties": 1,
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Vendor name",
-            "example": "Updated Email Vendor"
-          },
-          "description": {
-            "type": "string",
-            "description": "Vendor description",
-            "example": "Updated description for the vendor"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "sms",
-              "push",
-              "form"
-            ],
-            "description": "Vendor type for categorization",
-            "example": "email"
-          },
-          "isDeleted": {
-            "type": "boolean",
-            "description": "Soft delete flag",
-            "example": false
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
-    "responses": {
-      "200": {
-        "description": "Vendor updated successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "vendor": {
-                      "$ref": "#/components/schemas/Vendor"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "DELETE /api/vendor/{id}",
-    "method": "DELETE",
-    "url": "/api/vendor/{id}",
-    "summary": "Delete vendor",
-    "description": "Permanently delete a vendor by ID",
-    "tags": [
-      "Vendor"
+      "PATS Catalog"
     ],
     "deprecated": false,
     "security": [
@@ -4090,49 +2389,21 @@
     "contentTypes": [],
     "pathParams": [
       {
-        "name": "id",
+        "name": "processRouteId",
         "required": true,
         "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{24}$"
-        },
-        "description": "Vendor ID (MongoDB ObjectId format)"
+          "type": "string"
+        }
       }
     ],
     "queryParams": [],
     "responses": {
       "200": {
-        "description": "Vendor deleted successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "description": "Empty object for successful deletion"
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
+        "description": "Updated draft process route",
         "contentTypes": []
       },
-      "401": {
-        "contentTypes": []
-      },
-      "404": {
-        "contentTypes": []
-      },
-      "500": {
+      "412": {
+        "description": "Stale or missing If-Match",
         "contentTypes": []
       }
     },
@@ -4143,295 +2414,1169 @@
     }
   },
   {
-    "id": "GET /api/vendor",
+    "id": "catalogRouteStagePatch",
+    "method": "PATCH",
+    "url": "/api/v1/catalog/route-stages/{routeStageId}",
+    "summary": "Correct draft route stage order or metadata",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "routeStageId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Updated draft route stage",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "workflowGroupCollectionGet",
     "method": "GET",
-    "url": "/api/vendor",
-    "summary": "Get all vendors",
-    "description": "Retrieve vendors with advanced filtering, pagination, sorting, field selection, and optional grouping",
+    "url": "/workflow-groups",
+    "summary": "Read deployment-owned workflow groups",
     "tags": [
-      "Vendor"
+      "PATS Configuration"
     ],
     "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
     "contentTypes": [],
     "pathParams": [],
-    "queryParams": [
-      {
-        "name": "page",
-        "required": false,
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 1
-        },
-        "description": "Page number for pagination"
-      },
-      {
-        "name": "limit",
-        "required": false,
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 100,
-          "default": 10
-        },
-        "description": "Number of records per page"
-      },
-      {
-        "name": "order",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "asc",
-            "desc"
-          ],
-          "default": "desc"
-        },
-        "description": "Sort order for results"
-      },
-      {
-        "name": "sort",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Field to sort by or JSON object for multi-field sorting"
-      },
-      {
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Comma-separated list of fields to include (supports dot notation)"
-      },
-      {
-        "name": "query",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Search query to filter by name or description"
-      },
-      {
-        "name": "filter",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "JSON array of filter objects for advanced filtering"
-      },
-      {
-        "name": "groupBy",
-        "required": false,
-        "schema": {
-          "type": "string"
-        },
-        "description": "Group results by a field name"
-      },
-      {
-        "name": "document",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include vendor documents in response"
-      },
-      {
-        "name": "pagination",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include pagination metadata in response"
-      },
-      {
-        "name": "count",
-        "required": false,
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        },
-        "description": "Include total count in response"
-      }
-    ],
+    "queryParams": [],
     "responses": {
       "200": {
-        "description": "Templates retrieved successfully",
-        "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "vendors": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Vendor"
-                      },
-                      "description": "Present when document=\"true\" and no groupBy"
-                    },
-                    "groups": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/components/schemas/Vendor"
-                        }
-                      },
-                      "description": "Present when groupBy is used and document=\"true\""
-                    },
-                    "count": {
-                      "type": "integer",
-                      "description": "Present when count=\"true\""
-                    },
-                    "pagination": {
-                      "$ref": "#/components/schemas/Pagination",
-                      "description": "Present when pagination=\"true\""
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "contentTypes": [
-          "application/json"
-        ]
-      },
-      "400": {
         "contentTypes": []
       },
-      "401": {
+      "403": {
         "contentTypes": []
       },
-      "500": {
+      "503": {
         "contentTypes": []
       }
     },
     "paginationHints": {
-      "hasPaginationParams": true,
-      "hasSearchParam": true,
-      "hasSortParams": true
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
     }
   },
   {
-    "id": "POST /api/vendor",
-    "method": "POST",
-    "url": "/api/vendor",
-    "summary": "Create new vendor",
-    "description": "Create a new vendor with the provided data",
+    "id": "stageCollectionGet",
+    "method": "GET",
+    "url": "/stages",
+    "summary": "Read configured production stages",
     "tags": [
-      "Vendor"
+      "PATS Configuration"
     ],
     "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json",
-      "application/x-www-form-urlencoded",
-      "multipart/form-data"
-    ],
+    "contentTypes": [],
     "pathParams": [],
     "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Vendor name",
-            "example": "Email Welcome Vendor"
-          },
-          "description": {
-            "type": "string",
-            "description": "Vendor description",
-            "example": "Welcome email vendor for new users"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "sms",
-              "push",
-              "form"
-            ],
-            "description": "Vendor type for categorization",
-            "example": "email"
-          },
-          "isDeleted": {
-            "type": "boolean",
-            "description": "Soft delete flag",
-            "default": false
-          }
-        }
+    "responses": {
+      "200": {
+        "contentTypes": []
       },
-      "contentTypes": [
-        "application/json",
-        "application/x-www-form-urlencoded",
-        "multipart/form-data"
-      ]
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
     },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stageCreate",
+    "method": "POST",
+    "url": "/stages",
+    "summary": "Add a configured production stage",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
     "responses": {
       "201": {
-        "description": "Vendor created successfully",
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "subStageCollectionGet",
+    "method": "GET",
+    "url": "/sub-stages",
+    "summary": "Read configured production substages",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "subStageCreate",
+    "method": "POST",
+    "url": "/sub-stages",
+    "summary": "Add a configured production substage",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stationCollectionGet",
+    "method": "GET",
+    "url": "/stations",
+    "summary": "Read physical production stations",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stationCreate",
+    "method": "POST",
+    "url": "/stations",
+    "summary": "Add a physical production station",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stationHistoryGet",
+    "method": "GET",
+    "url": "/stations/{stationId}/history",
+    "summary": "Read server-owned station event history and open violations",
+    "description": "Returns stage-event evidence and open routing violations for the station's configured stage boundaries. The projection is read-only and rebuildable from the execution ledger.",
+    "tags": [
+      "PATS Execution"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "stationId",
+        "required": true,
         "schema": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/Success"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "vendor": {
-                      "$ref": "#/components/schemas/Vendor"
-                    }
-                  }
-                }
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stationStepCollectionGet",
+    "method": "GET",
+    "url": "/station-steps",
+    "summary": "Read station-to-stage bindings",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stationStepCreate",
+    "method": "POST",
+    "url": "/station-steps",
+    "summary": "Bind a station to an explicit stage step",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "workInstructionCollectionGet",
+    "method": "GET",
+    "url": "/work-instructions",
+    "summary": "Read versioned work instructions",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "workInstructionCreate",
+    "method": "POST",
+    "url": "/work-instructions",
+    "summary": "Add a versioned work instruction",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanCollectionGet",
+    "method": "GET",
+    "url": "/production-plans",
+    "summary": "List production-plan summaries",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanCreate",
+    "method": "POST",
+    "url": "/production-plans",
+    "summary": "Create a draft production plan",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanGet",
+    "method": "GET",
+    "url": "/production-plans/{planId}",
+    "summary": "Read a production plan and its planning snapshot",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanPatch",
+    "method": "PATCH",
+    "url": "/production-plans/{planId}",
+    "summary": "Update a draft production plan",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "batchCollectionGet",
+    "method": "GET",
+    "url": "/batches",
+    "summary": "List batches and their current positions",
+    "tags": [
+      "PATS Execution"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "batchCreate",
+    "method": "POST",
+    "url": "/batches",
+    "summary": "Create a planned batch and initial position projection",
+    "tags": [
+      "PATS Execution"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "batchPositionCollectionGet",
+    "method": "GET",
+    "url": "/batch-positions",
+    "summary": "Read rebuildable station-ready batch-position projections",
+    "description": "Returns current positions together with batch, lot, part, and ordered route-step identity needed by execution workstations. The projection is rebuildable from the execution ledger and is not a second source of truth.",
+    "tags": [
+      "PATS Execution"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stageEventCollectionGet",
+    "method": "GET",
+    "url": "/stage-events",
+    "summary": "Read append-only stage execution evidence",
+    "tags": [
+      "PATS Execution"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "stageEventCreate",
+    "method": "POST",
+    "url": "/stage-events",
+    "summary": "Record a forward-only stage event or routing violation",
+    "tags": [
+      "PATS Execution"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "inventoryTransactionCollectionGet",
+    "method": "GET",
+    "url": "/inventory-transactions",
+    "summary": "Read append-only inventory evidence",
+    "tags": [
+      "PATS Inventory"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "inventoryTransactionCreate",
+    "method": "POST",
+    "url": "/inventory-transactions",
+    "summary": "Record receiving or issuance evidence",
+    "tags": [
+      "PATS Inventory"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "routingViolationCollectionGet",
+    "method": "GET",
+    "url": "/routing-violations",
+    "summary": "Read routing violations and their resolution state",
+    "tags": [
+      "PATS Exceptions"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "qualityInspectionCollectionGet",
+    "method": "GET",
+    "url": "/quality-inspections",
+    "summary": "Read quality inspections and decisions",
+    "tags": [
+      "PATS Quality"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Server-owned quality inspections with batch and latest-decision evidence.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "data"
+          ],
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/QualityInspection"
               }
             }
-          ]
+          }
         },
         "contentTypes": [
           "application/json"
         ]
       },
-      "400": {
+      "403": {
         "contentTypes": []
       },
-      "401": {
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "qualityInspectionCreate",
+    "method": "POST",
+    "url": "/quality-inspections",
+    "summary": "Open a quality inspection for a batch",
+    "tags": [
+      "PATS Quality"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
         "contentTypes": []
       },
-      "500": {
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "dashboardSummaryGet",
+    "method": "GET",
+    "url": "/dashboard-summaries",
+    "summary": "Read dashboard counts derived from server ledgers",
+    "tags": [
+      "PATS Reporting"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "lineReportGet",
+    "method": "GET",
+    "url": "/reports/line",
+    "summary": "Read the server-owned line reporting projection",
+    "tags": [
+      "PATS Reporting"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanModelAllocationUpsert",
+    "method": "POST",
+    "url": "/production-plans/{planId}/model-allocations",
+    "summary": "Upsert a model allocation and materialize plan-part evidence",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanPartsListVersionCreate",
+    "method": "POST",
+    "url": "/production-plans/{planId}/parts-list-versions",
+    "summary": "Create an immutable draft parts-list route version",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanRelease",
+    "method": "POST",
+    "url": "/production-plans/{planId}/release",
+    "summary": "Release a draft or ready production plan",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionPlanLotCreate",
+    "method": "POST",
+    "url": "/production-plans/{planId}/lots",
+    "summary": "Create a planned lot and its part allocation",
+    "tags": [
+      "PATS Planning"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "qualityDecisionCreate",
+    "method": "POST",
+    "url": "/quality-inspections/{inspectionId}/decisions",
+    "summary": "Record a quality decision and close or hold the inspection",
+    "tags": [
+      "PATS Quality"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "inspectionId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "routingViolationResolve",
+    "method": "POST",
+    "url": "/routing-violations/{violationId}/resolve",
+    "summary": "Resolve a routing violation with an operator note",
+    "tags": [
+      "PATS Exceptions"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "violationId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
         "contentTypes": []
       }
     },

@@ -1,641 +1,156 @@
 # Bandai PATS API
 
-Backend shell for Bandai Production and Assembly Tracking System.
+Backend foundation for the Bandai Production and Assembly Tracking System.
 
-This repository was cloned from the source API and rebranded as a separate Bandai PATS project. The current codebase still carries inherited project, estimation, and employee-sync modules, but it is now the local backend foundation for the manufacturing initiative.
+## Current status
 
-## 🚀 Overview
+This repository contains a partially API-backed PATS domain foundation, not yet
+the complete application API. It currently contains:
 
-The Bandai PATS API provides the local backend foundation for the production and assembly tracking program. Built with TypeScript, Express, Prisma (MongoDB), and comprehensive validation, it keeps the inherited modules runnable while the manufacturing API surface is introduced.
+- shared platform foundations for health, security, documentation, and
+  workspace tenancy;
+- inherited MongoDB/Prisma PMS, procurement, finance, employee, and product
+  modules retained as compatibility material;
+- a PostgreSQL PATS schema, migrations, generated client, and mounted catalog/BOM
+  route foundations;
+- no complete canonical PATS seed profile or full planning/execution/reporting
+  API coverage.
 
-## Local Setup
+The default Express composition does not mount quarantined legacy routes.
+Set `ENABLE_LEGACY_API=true` only for a controlled compatibility run. Auth,
+workspace membership, project membership, employee/HRIS, and legacy product
+surfaces remain unchanged pending external or security review.
 
-1. Install dependencies:
+No seeded record, initial, fixture, or legacy field name is a PATS requirement.
+The frontend still contains prototype/local transport on active surfaces while
+the full app–API transition is implemented. See
+[`docs/superpowers/plans/2026-07-31-pats-full-app-api-transition-plan.md`](docs/superpowers/plans/2026-07-31-pats-full-app-api-transition-plan.md).
+
+## Runtime boundary
+
+`createApp({ enableLegacyRoutes: false })` is the testable default composition.
+`index.ts` owns the HTTP listener, Socket.IO server, database connections,
+cron startup, and graceful shutdown.
+
+| Surface | Default behavior |
+|---|---|
+| `/`, `/health`, `/health/redis` | Shared health and infrastructure surface |
+| `/api/docs/*`, development `/api/swagger` | Documentation tooling |
+| `/api/workspace*` | Retained workspace tenancy |
+| `/api/auth/*`, `/api/workspace-member*`, `/api/project-member*`, `/api/employee*`, `/api/product*` | Blocked-review surfaces; behavior preserved |
+| Inherited PMS/procurement/finance routes | Quarantined; opt in with `ENABLE_LEGACY_API=true` |
+| `prisma/pats/schema.prisma` | Active PostgreSQL PATS schema; incomplete relative to the full frozen target |
+
+The full route/module evidence is recorded in
+[`docs/superpowers/reports/2026-07-13-api-surface-inventory.md`](docs/superpowers/reports/2026-07-13-api-surface-inventory.md),
+the frontend consumer audit, and the
+[disposition matrix](docs/superpowers/reports/2026-07-13-api-disposition-matrix.md).
+
+## Local setup
+
+Requirements: Node.js 20.x, pnpm 10.x, and the existing MongoDB/Redis
+dependencies when exercising integration behavior.
 
 ```bash
 pnpm install
-```
-
-2. Start the API:
-
-```bash
 pnpm dev
 ```
 
-3. Open the local API routes in your browser or API client.
+`pnpm dev` opens Docker Desktop if needed, starts the foundation containers
+(PostgreSQL + MinIO), then runs the API (`tsx watch`). Escape hatches:
+`pnpm dev:api` (API only), `pnpm dev:infra` (containers only),
+`SKIP_DOCKER=1 pnpm dev`.
 
-## ✨ Key Features
+Copy `.env.example` to `.env` and set a local `JWT_SECRET`. The development
+defaults enable test mode and keep `ENABLE_LEGACY_API=false`; do not carry
+those development settings into production.
 
-### Core Modules
-- **Workspace (Multi-Tenancy)** - Workspaces are the tenant boundary; `WorkspaceMember` and `ProjectMember` control per-tenant/per-project access
-- **Product & Manufacturing** - Product master records with BOM, production, and cost assumption data
-- **Purchase Orders, Delivery Orders & Invoices** - Procurement and fulfillment tracking, including payment terms and schedules
-- **Demand Planning** - Demand plans, versions, and project-conversion workflows
-- **Legacy Project Modules** - Complete project lifecycle management with status tracking
-- **Estimation System** - Detailed cost estimation with CAPEX/OPEX/MISC breakdown
-- **Item Management** - Flexible item tracking with custom fields and hierarchies
-- **ItemType System** - Categorization system for items (CAPEX, OPEX, MISC, Task, Bug, etc.)
-- **Category Management** - Organize items and costs by categories
-- **Vendor Management** - Track vendors, contacts, and orders
-- **Order Processing** - Purchase order management with delivery tracking
-- **Employee & Payslip Management** - Employee records synced from SSO/HRIS and payment tracking
-- **Field System** - Dynamic custom fields (common & custom) with multiple types
-- **Template System** - Reusable templates for estimations and projects
-- **Sequential System** - Auto-incrementing number generators for documents
+### On-prem foundation
 
-### Advanced Features
-- **Dynamic Fields** - Support for 11+ field types (text, number, date, select, user, calculated, etc.)
-- **Financial Breakdown** - Automatic CAPEX/OPEX/MISC calculations via ItemType relations
-- **Category Subtotals** - Automatic calculation of costs by category
-- **Item Hierarchy** - Parent-child relationships for complex structures
-- **Document Management** - Upload and attach documents to items
-- **Audit Logging** - Complete audit trail for all operations
-- **Activity Tracking** - User activity monitoring and logging
-- **Caching Layer** - Redis caching for improved performance
-- **Real-time Updates** - Socket.IO integration for live updates
-
-## 🏗️ Project Architecture
-
-```
-bnpi-pats-api/
-├── app/                        # Application modules (controllers, routes, repositories)
-│   ├── workspace/              # Tenant/workspace CRUD
-│   ├── workspaceMember/        # Per-workspace membership & roles
-│   ├── projectMember/          # Per-project membership & roles
-│   ├── product/                # Product master data (BOM, production, cost)
-│   ├── purchaseOrder/          # Purchase orders
-│   ├── deliveryOrder/          # Delivery orders
-│   ├── invoice/                # Invoices
-│   ├── paymentTerm/            # Payment terms
-│   ├── paymentSchedule/        # Payment schedules
-│   ├── poType/                 # PO type configuration
-│   ├── demand/                 # Demand planning
-│   ├── employee/               # Employee records (SSO/HRIS sync)
-│   ├── category/              # Category management
-│   ├── estimation/            # Estimation system
-│   ├── field/                 # Custom fields
-│   ├── item/                  # Item management
-│   ├── itemType/              # Item type categorization
-│   ├── order/                 # Order processing
-│   ├── payslip/               # Payslip management
-│   ├── project/               # Project management
-│   ├── template/              # Template system
-│   ├── vendor/                # Vendor management
-│   └── sequential/           # Auto-increment system
-├── config/                    # Configuration files
-├── generated/                 # Generated Prisma client
-├── helper/                    # Helper utilities
-│   ├── query-builder.ts      # Query construction (DMMF-validated filter/sort)
-│   ├── validation-helper.ts  # Request validation
-│   ├── success-handler.ts    # Success responses
-│   └── error-handler.ts      # Error handling
-├── middleware/               # Express middleware
-│   ├── verifyToken.ts        # JWT verification (auth is issued by an external SSO)
-│   ├── validateWorkspaceId.ts # Validates the x-workspace-id header format
-│   ├── workspaceAuth.ts      # Workspace membership/role enforcement
-│   ├── projectAuth.ts        # Project membership/role enforcement
-│   ├── cache.ts              # Redis caching
-│   └── upload.ts             # File uploads
-├── prisma/                  # Database schema and seeds
-│   ├── schema/              # Prisma schema files
-│   │   ├── project.prisma
-│   │   ├── estimation.prisma
-│   │   ├── item.prisma
-│   │   ├── itemType.prisma  # Item type definitions (NEW)
-│   │   ├── category.prisma
-│   │   ├── field.prisma
-│   │   ├── vendor.prisma
-│   │   ├── order.prisma
-│   │   └── payslip.prisma
-│   ├── seeds/               # Database seeders
-│   │   ├── projectSeeder.ts
-│   │   ├── estimationSeeder.ts
-│   │   ├── itemSeeder.ts
-│   │   ├── itemTypeSeeder.ts   # (NEW)
-│   │   ├── categorySeeder.ts
-│   │   ├── fieldSeeder.ts
-│   │   └── ...
-│   └── seed.ts              # Main seeder orchestrator
-├── tests/                   # Mocha/Chai/Supertest specs (controller-level, mostly mocked Prisma)
-│   ├── project.controller.spec.ts
-│   ├── estimation.controller.spec.ts
-│   ├── item.controller.spec.ts
-│   ├── itemType.controller.spec.ts
-│   ├── field.controller.spec.ts
-│   ├── workspace-authorization.spec.ts  # Integration test: cross-workspace access is denied
-│   └── ...
-├── utils/                   # Utility functions
-│   ├── calculations.ts     # Financial calculations
-│   ├── activityLogger.ts   # Activity logging
-│   └── auditLogger.ts      # Audit trail
-├── zod/                    # Zod validation schemas
-│   ├── project.zod.ts
-│   ├── estimation.zod.ts
-│   ├── item.zod.ts
-│   ├── itemType.zod.ts    # (NEW)
-│   └── ...
-└── docs/                   # API documentation
-    ├── openApiSpecs.ts     # Swagger/OpenAPI spec source
-    ├── openApiOptions.json
-    ├── models/             # Generated model docs
-    └── generated/          # Generated swagger/postman exports (via `pnpm export-docs`)
-
-## 📚 Documentation
-- **Swagger UI** - Served at `/api/docs` when the server is running (see `docs/openApiSpecs.ts`).
-- **[Milestone Completion](docs/MILESTONE_COMPLETION.md)** - Delivery status notes.
-```
-
-## 📊 Database Schema - ER Diagram
-
-```text
-┌──────────────────┐
-│     PROJECT      │
-│──────────────────│
-│ id (PK)          │
-│ name             │
-│ description      │
-│ type             │
-│ code (UK)        │
-│ status           │
-│ isDeleted        │
-│ createdAt        │
-│ updatedAt        │
-└────────┬─────────┘
-         │ 1
-         │
-         │ N
-         ▼
-┌─────────────────────────────┐
-│       ESTIMATION            │
-│─────────────────────────────│
-│ id (PK)                     │
-│ estimationNumber (UK)       │
-│ name                        │
-│ projectId (FK)              │
-│ estimatedCost               │
-│ actualCost                  │
-│ marginPercentage            │
-│ marginAmount                │
-│ projectedWithMargin         │
-│ projectedProjectNet         │
-│ status                      │
-│ metadata (JSON)             │◄─── Contains CAPEX/OPEX/MISC breakdown
-│   ├─ categorySubtotals      │     and item counts
-│   ├─ typeBreakdown          │
-│   └─ itemCounts             │
-│ isDeleted                   │
-│ createdAt                   │
-│ updatedAt                   │
-└──────────┬──────────────────┘
-           │ 1
-           │
-           │ N
-           ▼
-┌─────────────────────────────────┐         ┌──────────────────┐
-│           ITEM                  │ N       │    ITEMTYPE      │
-│─────────────────────────────────│◄────────│──────────────────│
-│ id (PK)                         │         │ id (PK)          │
-│ estimationId (FK)               │         │ name             │
-│ categoryId (FK)  ──────┐        │         │ description      │
-│ itemTypeId (FK)  ───────────────┼────────►│ icon             │
-│ itemName                │       │         │ defaultFields    │
-│ estimatedQuantity       │       │         │ status           │
-│ actualQuantity          │       │         │ items (reverse)  │
-│ estimatedUnitPrice      │       │         │ isDeleted        │
-│ estimatedTotal          │       │         │ createdAt        │
-│ actualUnitPrice         │       │         │ updatedAt        │
-│ actualTotal             │       │         └──────────────────┘
-│ documentUrls[]          │       │               ▲
-│ fields (ItemFields)     │       │               │
-│   ├─ common[]           │       │         Built-in Types:
-│   └─ custom[]           │       │         - CAPEX (Financial)
-│ status                  │       │         - OPEX (Financial)
-│ startDate               │       │         - MISC (Financial)
-│ endDate                 │       │         - Task, Bug, Feature
-│ estimationPoints        │       │         - Epic, Story, Milestone
-│ orderId (FK)            │       │         - Risk, Deliverable, etc.
-│ parentItemId (FK)       │       │
-│ isNewAddition           │       │
-│ isDeleted               │       │
-│ createdAt               │       │
-│ updatedAt               │       │
-└─────────────────────────┬───────┘
-                          │
-                          │ N
-                          │
-                          ▼
-                    ┌──────────────┐
-                    │  CATEGORY    │
-                    │──────────────│
-                    │ id (PK)      │
-                    │ name         │
-                    │ description  │
-                    │ color        │
-                    │ isActive     │
-                    │ isDeleted    │
-                    │ createdAt    │
-                    │ updatedAt    │
-                    └──────────────┘
-
-
-┌──────────────────┐         ┌──────────────────┐
-│      ORDER       │ N       │     VENDOR       │
-│──────────────────│◄────────│──────────────────│
-│ id (PK)          │         │ id (PK)          │
-│ orderNumber (UK) │         │ vendorId (UK)    │
-│ estimationId (FK)│         │ name             │
-│ vendorId (FK)    │─────────┤ contactPerson    │
-│ itemName         │         │ email            │
-│ quantity         │         │ phone            │
-│ deliveryDate     │         │ address          │
-│ receivedBy       │         │ notes            │
-│ condition        │         │ isDeleted        │
-│ hasWarranty      │         │ createdAt        │
-│ warrantyInfo     │         │ updatedAt        │
-│ status           │         └──────────────────┘
-│ remarks          │
-│ isDeleted        │
-│ createdAt        │
-│ updatedAt        │
-└──────────────────┘
-
-
-┌──────────────────┐         ┌──────────────────┐
-│     PAYSLIP      │         │      FIELD       │
-│──────────────────│         │──────────────────│
-│ id (PK)          │         │ id (PK)          │
-│ payslipNumber(UK)│         │ name             │
-│ estimationId (FK)│         │ type             │
-│ userId           │         │ category         │
-│ amount           │         │ value (JSON)     │
-│ paymentDate      │         │ isDeleted        │
-│ notes            │         │ createdAt        │
-│ isDeleted        │         │ updatedAt        │
-│ createdAt        │         └──────────────────┘
-│ updatedAt        │
-└──────────────────┘         Field Types:
-                             - singletext
-                             - multitext
-                             - number
-                             - date
-                             - singleselect
-                             - multipleselect
-                             - iteration
-                             - user
-                             - calculated
-                             - item
-                             - object
-```
-
-## 🔧 Installation & Setup
-
-### Prerequisites
-- Node.js 20.x or higher
-- MongoDB instance, or Docker if you want the bundled local database service
-- Redis (optional, for caching)
-- pnpm package manager
-
-### Installation Steps
-
-1. **Install Dependencies**
-   ```bash
-   pnpm install
-   ```
-
-2. **Environment Configuration**
-   Create a `.env` file with the following variables:
-   ```env
-   DATABASE_URL="mongodb://localhost:27017/bnpi_pats"
-   PORT=3000
-   JWT_SECRET="your-secret-key"
-   ENABLE_TEST_MODE=true
-   CORS_ORIGINS="http://localhost:5173"
-   REDIS_ENABLED=false
-   REDIS_URL="redis://localhost:6379"
-   SSO_BASE_URL="http://localhost:3000/api"
-   CLOUDINARY_CLOUD_NAME="your-cloud-name"
-   CLOUDINARY_API_KEY="your-api-key"
-   CLOUDINARY_API_SECRET="your-api-secret"
-   ```
-   `ENABLE_TEST_MODE=true` keeps local development self-contained by bypassing the remote auth dependency.
-   `REDIS_ENABLED=false` lets the API boot without a Redis instance.
-
-3. **Generate Prisma Client**
-   ```bash
-   npx prisma generate
-   ```
-
-4. **Seed Database**
-   ```bash
-   pnpm run prisma-seed
-   ```
-
-5. **Build Application**
-   ```bash
-   pnpm run build
-   ```
-
-6. **Start Development Server**
-   ```bash
-   pnpm run dev
-   ```
-
-If you want the local infrastructure to come up in containers instead of using a host MongoDB install, run `docker compose up --build -d`. That stack now starts MongoDB, Redis, and the API together.
-
-## 📡 API Endpoints
-
-### Project Module
-- `POST /api/project` - Create new project
-- `GET /api/project` - Get all projects (with filtering, pagination, sorting)
-- `GET /api/project/:id` - Get project by ID
-- `PATCH /api/project/:id` - Update project
-- `DELETE /api/project/:id` - Soft delete project
-
-### Estimation Module
-- `POST /api/estimation` - Create new estimation
-- `GET /api/estimation` - Get all estimations
-- `GET /api/estimation/:id` - Get estimation by ID
-- `PATCH /api/estimation/:id` - Update estimation
-- `DELETE /api/estimation/:id` - Soft delete estimation
-
-### Item Module
-- `POST /api/item` - Create new item
-- `GET /api/item` - Get all items
-- `GET /api/item/:id` - Get item by ID
-- `PATCH /api/item/:id` - Update item
-- `DELETE /api/item/:id` - Soft delete item
-
-### ItemType Module (NEW)
-- `POST /api/item-type` - Create new item type
-- `GET /api/item-type` - Get all item types (filterable by status)
-- `GET /api/item-type/:id` - Get item type by ID
-- `PATCH /api/item-type/:id` - Update item type
-- `DELETE /api/item-type/:id` - Soft delete item type
-
-### Field Module
-- `POST /api/field` - Create new field
-- `GET /api/field` - Get all fields
-- `GET /api/field/:id` - Get field by ID
-- `PATCH /api/field/:id` - Update field
-- `DELETE /api/field/:id` - Soft delete field
-
-### Category Module
-- `POST /api/category` - Create new category
-- `GET /api/category` - Get all categories
-- `GET /api/category/:id` - Get category by ID
-- `PATCH /api/category/:id` - Update category
-- `DELETE /api/category/:id` - Soft delete category
-
-### Vendor Module
-- `POST /api/vendor` - Create new vendor
-- `GET /api/vendor` - Get all vendors
-- `GET /api/vendor/:id` - Get vendor by ID
-- `PATCH /api/vendor/:id` - Update vendor
-- `DELETE /api/vendor/:id` - Soft delete vendor
-
-### Order Module
-- `POST /api/order` - Create new order
-- `GET /api/order` - Get all orders
-- `GET /api/order/:id` - Get order by ID
-- `PATCH /api/order/:id` - Update order
-- `DELETE /api/order/:id` - Soft delete order
-
-### Payslip Module
-- `POST /api/payslip` - Create new payslip
-- `GET /api/payslip` - Get all payslips
-- `GET /api/payslip/:id` - Get payslip by ID
-- `PATCH /api/payslip/:id` - Update payslip
-- `DELETE /api/payslip/:id` - Soft delete payslip
-
-## 🧪 Testing
-
-Most modules have controller-level unit tests with a fully mocked Prisma client — they cover CRUD/validation/error-handling logic but do not exercise the real Express middleware chain (auth, workspace authorization, rate limiting). `tests/workspace-authorization.spec.ts` is the exception: it builds a real middleware chain and is the only integration-style test in the suite.
+The Compose foundation starts PostgreSQL 16, MinIO, and a private bucket
+initializer. PostgreSQL is mapped to host port `55432` because the default
+local PostgreSQL port `5432` may already be owned by another installation.
+MinIO uses ports `9000` (S3 API) and `9001` (console).
 
 ```bash
-# Run all tests
+docker compose config
+docker compose up -d
+docker compose ps
+```
+
+The API image is built and defined in the `pats` profile. The legacy Mongo
+service is available only with `--profile legacy`; Redis is optional with
+`--profile redis` and is not required for the base foundation.
+
+Named volumes survive `docker compose down`. Use `docker compose down -v`
+only when intentionally deleting local database or object-storage state.
+
+## Verification commands
+
+```bash
+pnpm run lint
+pnpm run type-check
 pnpm test
+pnpm run build
 
-# Run specific test file
-pnpm test -- tests/itemType.controller.spec.ts
+# Validate the provisional draft independently; this does not connect it
+# to the runtime or create a migration.
+PATS_DATABASE_URL=postgresql://pats:pats@localhost:5432/pats \
+  npx prisma validate --schema prisma/pats/schema.prisma
 ```
 
-### Test Coverage
-- **CRUD operations** unit testing for most modules (mocked Prisma)
-- **Validation testing** for common input scenarios
-- **Error handling** testing for edge cases
-- **Soft delete** functionality testing
-- **Filtering, sorting, pagination** testing
-- **Cross-workspace access control** integration testing (`workspace-authorization.spec.ts`)
-- Not yet covered: integration tests for most other routers' auth/authorization middleware, and real-database tests
+The suite is primarily mocked controller coverage. The active-surface tests in
+`tests/active-surface.spec.ts` exercise the real Express composition boundary.
+The current baseline includes legacy warning noise from mocked activity/audit
+logging, optional Redis, and incomplete estimation mocks; warnings are not
+treated as proof that the inherited model is healthy.
 
-## 🌱 Database Seeding
+## Documentation and generated artifacts
 
-The project includes comprehensive seeders for all modules:
+Swagger UI is available at `/api/swagger` in development. The generated API
+catalog is built from the retained and blocked route sources, not from every
+quarantined compatibility router:
 
 ```bash
-# Run all seeders
-pnpm run prisma-seed
+pnpm run export-docs
 ```
 
-### Seeded Data
-- **Templates** - Project and estimation templates
-- **Sequentials** - Auto-increment configurations
-- **Projects** - Sample projects
-- **Categories** - Expense categories
-- **Fields** - 20+ predefined fields (common & custom)
-- **ItemTypes** - 15 item types including CAPEX, OPEX, MISC (NEW)
-- **Estimations** - Sample estimations with metadata
-- **Vendors** - Sample vendor records
-- **Orders** - Sample purchase orders
-- **Items** - Sample items with hierarchy
-- **Payslips** - Sample payslip records
+Generated files are written under `docs/generated/`.
 
-## 💰 Financial Calculations
+## Seeds and persistence
 
-The system automatically calculates financial breakdowns:
+`prisma/seed.ts` remains the legacy Mongo compatibility/demo seed orchestrator.
+It is not a canonical PATS seed and must not be used to satisfy the app–API
+integration goal.
 
-### CAPEX/OPEX/MISC Breakdown
-Items are categorized by `itemTypeId` relation:
-- **CAPEX** - Capital Expenditure (long-term investments)
-- **OPEX** - Operating Expenditure (day-to-day costs)
-- **MISC** - Miscellaneous expenses
-
-### Automatic Calculations
-The `updateEstimationTotalsAndMetadata()` function automatically:
-1. Calculates total estimated and actual costs
-2. Groups costs by category
-3. Breaks down costs by item type (CAPEX/OPEX/MISC)
-4. Counts items with actuals and new additions
-5. Stores all metadata in `estimation.metadata` JSON field
-
-### Metadata Structure
-```json
-{
-  "categorySubtotals": {
-    "categoryId": {
-      "estimated": 10000,
-      "actual": 9500
-    }
-  },
-  "typeBreakdown": {
-    "CAPEX": {
-      "estimated": 50000,
-      "actual": 48000
-    },
-    "OPEX": {
-      "estimated": 20000,
-      "actual": 19500
-    },
-    "MISC": {
-      "estimated": 5000,
-      "actual": 4800
-    }
-  },
-  "itemCounts": {
-    "total": 45,
-    "withActuals": 38,
-    "newAdditions": 3
-  }
-}
-```
-
-## 🔐 Security Features
-
-- **JWT Authentication** - Secure token-based authentication
-- **Role-Based Authorization** - Fine-grained access control
-- **Rate Limiting** - Prevent API abuse
-- **Input Validation** - Comprehensive Zod validation
-- **SQL Injection Protection** - Prisma ORM parameterized queries
-- **CORS Protection** - Configurable CORS policies
-- **Helmet Security** - HTTP header security
-- **Audit Logging** - Complete audit trail for all operations
-
-## 📈 Performance Features
-
-- **Redis Caching** - 5-minute cache TTL for frequently accessed data
-- **Query Optimization** - Efficient database queries with proper indexing
-- **Pagination** - Limit result sets for better performance
-- **Field Selection** - Select only required fields
-- **Lazy Loading** - Load related data only when needed
-
-## 🐳 Docker Support
+The canonical PATS seed is `scripts/pats-seed.mjs` and is invoked with
+`pnpm prisma:pats:seed`. It supports `SEED_MODE=none|demo|uat`, requires an
+explicit `PATS_SEED_PASSWORD` for writable profiles, uses deterministic IDs and
+upserts, never clears/deletes records, and marks seeded values as provisional
+evidence. Example:
 
 ```bash
-# Build and start
-docker compose up --build -d
-
-# View logs
-docker compose logs -f
-
-# Stop services
-docker compose down
+SEED_MODE=demo \
+PATS_DATABASE_URL=postgresql://pats:pats@localhost:5432/pats \
+PATS_SEED_PASSWORD='replace-with-a-development-password' \
+pnpm prisma:pats:seed
 ```
 
-## 📝 Development Commands
+Seed profiles are development/UAT data, not client-data migration or source
+publication. The legacy seed remains unchanged and explicitly compatibility-only.
 
-```bash
-pnpm run dev              # Start development server with hot reload
-pnpm run build            # Production build
-pnpm test                 # Run test suite
-pnpm run prisma-seed      # Seed database
-npx prisma generate       # Generate Prisma client
-npx prisma studio         # Open Prisma Studio (database GUI)
-```
+## Technology
 
-## 🛠️ Tech Stack
+- TypeScript and Express 5
+- Prisma 6 with the current MongoDB runtime
+- Standalone PostgreSQL Prisma draft for future PATS design
+- Zod validation, JWT/SSO boundary, Redis, Socket.IO, OpenAPI/Swagger
+- Mocha, Chai, Supertest, ESLint, and webpack
 
-- **Runtime**: Node.js 20.x
-- **Language**: TypeScript 5.x
-- **Framework**: Express.js
-- **Database**: MongoDB with Prisma ORM
-- **Validation**: Zod
-- **Testing**: Mocha + Chai
-- **Caching**: Redis
-- **Real-time**: Socket.IO
-- **Authentication**: JWT
-- **File Upload**: Multer + Cloudinary
-- **Logging**: Winston + Logtail
-- **Documentation**: OpenAPI/Swagger
+## Scope boundary
 
-## 🎯 Project Milestones
-
-### ✅ Phase 1: Core Foundation (Completed)
-- [x] Project scaffolding and architecture setup
-- [x] MongoDB integration with Prisma ORM
-- [x] Express.js REST API framework
-- [x] TypeScript configuration and type safety
-- [x] Authentication & authorization (JWT)
-- [x] Logging system (Winston + Logtail)
-- [x] Error handling and validation (Zod)
-- [x] Redis caching layer
-- [x] Docker containerization
-
-### ✅ Phase 2: Core Modules (Completed)
-- [x] Project management module
-- [x] Estimation system with financial calculations
-- [x] Item management with hierarchies
-- [x] Category management
-- [x] Vendor management
-- [x] Order processing
-- [x] Payslip tracking
-- [x] Template system
-- [x] Sequential number generators
-
-### ✅ Phase 3: Advanced Features (Completed)
-- [x] Dynamic field system (11+ field types)
-- [x] ItemType categorization system
-- [x] CAPEX/OPEX/MISC financial breakdown
-- [x] Automatic metadata calculations
-- [x] Category subtotals
-- [x] Item hierarchy (parent-child)
-- [x] Document upload (Cloudinary)
-- [x] Controller-level unit test suites (mocked Prisma) plus one cross-workspace authorization integration test
-- [x] Database seeders for all modules
-- [x] OpenAPI/Swagger documentation
-
-### 🚧 Phase 4: Enhanced Features (In Progress)
-- [ ] User management and roles
-- [ ] Real-time notifications (Socket.IO)
-- [ ] Advanced reporting and analytics
-- [ ] Export functionality (PDF, Excel)
-- [ ] Budget vs Actual variance reporting
-- [ ] Timeline and Gantt chart data
-- [ ] Resource management tracking
-- [ ] Multi-currency support
-
-### 📋 Phase 5: Integration & Optimization (Planned)
-- [ ] Email notifications
-- [ ] Webhook support
-- [ ] API rate limiting per user
-- [ ] Advanced caching strategies
-- [ ] Database query optimization
-- [ ] GraphQL API layer
-- [ ] Batch operations API
-- [ ] Data import/export wizards
-
-### 🔮 Phase 6: Enterprise Features (Future)
-- [ ] Multi-tenant architecture
-- [ ] Advanced permission system (RBAC)
-- [ ] Workflow automation
-- [ ] Custom dashboard builder
-- [ ] Mobile app API endpoints
-- [ ] Third-party integrations (Slack, Teams, etc.)
-- [ ] AI-powered cost predictions
-- [ ] Advanced analytics and forecasting
-
-### 📊 Progress Summary
-- **Completed**: 35+ features
-- **In Progress**: 8 features
-- **Planned**: 16+ features
-- **Code Coverage**: 70%+ (unit tests)
-- **API Endpoints**: 45+ endpoints
-- **Database Models**: 12 models
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🏷️ Keywords
-
-`production-tracking`, `assembly-tracking`, `manufacturing`, `estimation-system`, `cost-tracking`, `mongodb`, `prisma`, `typescript`, `express`, `rest-api`, `capex-opex`, `financial-breakdown`, `audit-logging`, `dynamic-fields`, `vendor-management`, `order-processing`, `payroll-tracking`
-
+The current foundation still does not provide complete PATS CRUD, planning,
+execution, scanning, or reporting integration for the frontend. Full app–API
+adoption, canonical seed profiles, and the remaining domain model are planned
+in the transition chain. DM/cutover, Drive publication, and production
+deployment remain separate boundaries.
