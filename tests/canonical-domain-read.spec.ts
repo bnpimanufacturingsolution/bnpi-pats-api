@@ -398,6 +398,109 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.openViolations[0].attemptedStep).to.deep.equal({ stageId: "stage-injection", subStageId: null, stepName: "Injection" });
 	});
 
+	it("returns station support projection with today's output and WIP only (no invented materials)", async () => {
+		const day = "2026-08-10";
+		const inWindow = new Date("2026-08-10T12:00:00.000Z");
+		let eventWhere: Record<string, unknown> | undefined;
+		let positionWhere: Record<string, unknown> | undefined;
+		const app = appFor({
+			station: {
+				findUnique: async () => ({
+					id: "station-deco-fs",
+					stationCode: "ST-DECO-FS",
+					name: "Full Spray PC",
+					stageId: "stage-decoration",
+					boundSteps: [{ stageId: "stage-decoration", subStageId: "sub-full-spray" }],
+				}),
+			},
+			stageEvent: {
+				findMany: async (args: { where: Record<string, unknown> }) => {
+					eventWhere = args.where;
+					return [
+						{
+							id: "event-1",
+							quantity: 40,
+							quantityMagnitude: null,
+							stageId: "stage-decoration",
+							subStageId: "sub-full-spray",
+						},
+						{
+							id: "event-2",
+							quantity: null,
+							quantityMagnitude: "12.5",
+							stageId: "stage-decoration",
+							subStageId: "sub-full-spray",
+						},
+					];
+				},
+			},
+			batchPositionProjection: {
+				findMany: async (args: { where: Record<string, unknown> }) => {
+					positionWhere = args.where;
+					return [
+						{
+							stageId: "stage-decoration",
+							subStageId: "sub-full-spray",
+							quantityMagnitude: "100",
+							batch: {
+								id: "batch-1",
+								batchCode: "BNI-2607-01",
+								plannedQuantity: 200,
+								status: "IN_PROGRESS",
+								lot: { id: "lot-1", lotCode: "LOT-B251-01" },
+							},
+						},
+					];
+				},
+			},
+		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/stations/station-deco-fs/support")
+			.query({ date: day })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.stationId).to.equal("station-deco-fs");
+		expect(response.body.date).to.equal(day);
+		expect(response.body.todayOutput).to.deep.equal({
+			quantity: 52.5,
+			eventCount: 2,
+			targetQuantity: null,
+		});
+		expect(response.body.wipProgress.batchCount).to.equal(1);
+		expect(response.body.wipProgress.totalQuantity).to.equal(100);
+		expect(response.body.wipProgress.batches[0]).to.deep.include({
+			batchCode: "BNI-2607-01",
+			lotCode: "LOT-B251-01",
+			quantity: 100,
+			plannedQuantity: 200,
+			progressRatio: 0.5,
+		});
+		expect(response.body.materials).to.equal(null);
+		expect(response.body.staff).to.equal(null);
+		expect(response.body.expectedOutput).to.equal(null);
+		expect(eventWhere).to.have.property("AND");
+		expect(positionWhere).to.deep.equal({
+			OR: [{ stageId: "stage-decoration", subStageId: "sub-full-spray" }],
+		});
+		// silence unused inWindow for local mental model of the day window
+		expect(inWindow.toISOString().startsWith(day)).to.equal(true);
+	});
+
+	it("rejects invalid station support date query", async () => {
+		const app = appFor({
+			station: { findUnique: async () => null },
+		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/stations/station-x/support")
+			.query({ date: "10-08-2026" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(400);
+	});
+
 	it("returns dashboard counts from active server batches and their lot ownership", async () => {
 		const app = appFor({
 			project: { count: async () => 4 },

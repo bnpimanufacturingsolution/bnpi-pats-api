@@ -182,6 +182,53 @@ function reportDateBuckets(now: Date): string[] {
 	return buckets;
 }
 
+type BoundStep = { stageId: string; subStageId: string | null };
+
+/** StationStep rows when present; otherwise whole station.stageId (stage-wide). */
+function resolveStationBoundSteps(
+	station: { stageId: string; boundSteps: BoundStep[] },
+): BoundStep[] {
+	if (station.boundSteps.length > 0) return station.boundSteps;
+	return [{ stageId: station.stageId, subStageId: null }];
+}
+
+/** Prisma OR filter: null subStageId on a step means entire stage (all substages). */
+function boundStepsOrFilter(steps: BoundStep[]): { OR: Array<Record<string, unknown>> } {
+	return {
+		OR: steps.map((step) =>
+			step.subStageId == null
+				? { stageId: step.stageId }
+				: { stageId: step.stageId, subStageId: step.subStageId },
+		),
+	};
+}
+
+function eventQuantity(event: { quantity?: number | null; quantityMagnitude?: unknown }): number {
+	const magnitude = Number(event.quantityMagnitude ?? event.quantity ?? 0);
+	return Number.isFinite(magnitude) ? magnitude : 0;
+}
+
+/**
+ * UTC calendar day for support "today" window.
+ * Query `date=YYYY-MM-DD` preferred for tests; default = current UTC date.
+ */
+function parseSupportDateWindow(
+	raw: string | string[] | undefined,
+): { ok: true; dateKey: string; start: Date; end: Date } | { ok: false } {
+	const value = Array.isArray(raw) ? raw[0] : raw;
+	const dateKey =
+		typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+			? value
+			: value === undefined || value === ""
+				? reportDateKey(new Date())
+				: null;
+	if (!dateKey) return { ok: false };
+	const [year, month, day] = dateKey.split("-").map(Number);
+	const start = new Date(Date.UTC(year, month - 1, day));
+	const end = new Date(Date.UTC(year, month - 1, day + 1));
+	return { ok: true, dateKey, start, end };
+}
+
 export function domainReadRouter(
 	database: DomainReadDatabase,
 	requireCapability: (capability: string) => RequestHandler,
@@ -466,6 +513,131 @@ export function domainReadRouter(
 			});
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station history data is unavailable.");
+		}
+	});
+
+	/**
+	 * Rebuildable station support projection for workstation secondary cards.
+	 * - todayOutput: STAGE_COMPLETED + ACCEPTED events on bound steps for the UTC date window
+	 * - wipProgress: batch positions matching bound steps
+	 * - materials / staff / expectedOutput: always null until product owns sources (I11)
+	 */
+	router.get("/stations/:stationId/support", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const requestQuery = query(req);
+			const allowedKeys = new Set(["date"]);
+			if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The support query is invalid.");
+				return;
+			}
+			const window = parseSupportDateWindow(requestQuery.date);
+			if (!window.ok) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The support date must be YYYY-MM-DD.");
+				return;
+			}
+
+			const station = await database.station.findUnique({
+				where: { id: req.params.stationId },
+				select: {
+					id: true,
+					stationCode: true,
+					name: true,
+					stageId: true,
+					boundSteps: { select: { stageId: true, subStageId: true } },
+				},
+			});
+			if (!station) {
+				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested station was not found.");
+				return;
+			}
+
+			const boundSteps = resolveStationBoundSteps(station);
+			const stepFilter = boundStepsOrFilter(boundSteps);
+
+			const [completedEvents, positions] = await Promise.all([
+				database.stageEvent.findMany({
+					where: {
+						AND: [
+							stepFilter,
+							{
+								status: "ACCEPTED",
+								eventType: "STAGE_COMPLETED",
+								occurredAt: { gte: window.start, lt: window.end },
+							},
+						],
+					},
+					select: {
+						id: true,
+						quantity: true,
+						quantityMagnitude: true,
+						stageId: true,
+						subStageId: true,
+					},
+				}),
+				database.batchPositionProjection.findMany({
+					where: stepFilter,
+					orderBy: [{ updatedAt: "desc" }, { batchId: "asc" }],
+					include: {
+						batch: {
+							select: {
+								id: true,
+								batchCode: true,
+								plannedQuantity: true,
+								status: true,
+								lot: { select: { id: true, lotCode: true } },
+							},
+						},
+					},
+				}),
+			]);
+
+			const quantity = completedEvents.reduce((sum, event) => sum + eventQuantity(event), 0);
+			const wipBatches = positions.map((position) => {
+				const qty = Number(position.quantityMagnitude ?? 0);
+				const quantityAtStation = Number.isFinite(qty) ? qty : 0;
+				const planned =
+					position.batch.plannedQuantity != null && Number.isFinite(Number(position.batch.plannedQuantity))
+						? Number(position.batch.plannedQuantity)
+						: null;
+				const progressRatio =
+					planned != null && planned > 0 ? Math.min(1, quantityAtStation / planned) : null;
+				return {
+					batchId: position.batch.id,
+					batchCode: position.batch.batchCode,
+					lotId: position.batch.lot.id,
+					lotCode: position.batch.lot.lotCode,
+					stageId: position.stageId,
+					subStageId: position.subStageId,
+					status: position.batch.status,
+					quantity: quantityAtStation,
+					plannedQuantity: planned,
+					progressRatio,
+				};
+			});
+
+			res.setHeader("Cache-Control", "no-store").json({
+				stationId: station.id,
+				stationCode: station.stationCode,
+				name: station.name,
+				asOf: new Date().toISOString(),
+				date: window.dateKey,
+				todayOutput: {
+					quantity,
+					eventCount: completedEvents.length,
+					/** No schedule/target resource yet — always null (do not invent). */
+					targetQuantity: null,
+				},
+				wipProgress: {
+					batchCount: wipBatches.length,
+					totalQuantity: wipBatches.reduce((sum, row) => sum + row.quantity, 0),
+					batches: wipBatches,
+				},
+				materials: null,
+				staff: null,
+				expectedOutput: null,
+			});
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station support data is unavailable.");
 		}
 	});
 

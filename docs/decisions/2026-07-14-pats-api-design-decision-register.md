@@ -14,7 +14,7 @@ contracts.
 | D-005 | Catalog ownership | Use deployment-owned catalog configuration for the first implementation; decide later whether system/shared templates or line layers are required | NEEDS_CONFIRMATION |
 | D-006 | Identity provider | Use an on-prem OIDC-compatible directory adapter boundary; persist provider/issuer/providerSubject and keep provider claims out of authorization truth | NEEDS_CONFIRMATION |
 | D-007 | PMRS | PATS owns approved PATS-scope material requirements and issue evidence; PMRS is a generated/reconciled control projection; external ERP remains physical stock/procurement authority | PROPOSED |
-| D-008 | Station granularity | Decide whether a station represents a Stage, SubStage, or configurable bundle | NEEDS_CONFIRMATION |
+| D-008 | Station granularity | **Station = device endpoint** bound to Stage and/or SubStage steps (configurable bundle via StationStep). **Default install:** one Station per SubStage when sub-stages exist; Stage-level Station when no sub-stages or shared PC. **Process is not a device mount** (cost). Physical **Booth** is separate capacity (N booths : 1 Station). Product owner 2026-08-10. | WORKING DEFAULT |
 | D-009 | Rework and reversal | Current working rule is forward-only; define hold, correction, rework, and reversal policy | NEEDS_CONFIRMATION |
 | D-010 | Lot cardinality | Resolve whether a Lot is plan-wide, part-specific, or a controlled grouping | NEEDS_CONFIRMATION |
 | D-011 | Route versioning | Published Parts List versions are immutable; active batches retain their version | PROPOSED |
@@ -167,7 +167,7 @@ directions, not accepted business decisions.
 | D-001/D-029 operational context and ProductionLine | No client artifact proves tenancy or shared-line scope | Retain one server-resolved deployment context; defer persisted ProductionLine until a real shared-database/line business boundary is confirmed | `NEEDS_CONFIRMATION` |
 | D-006 identity provider | Document names do not identify provider or subject model | Keep provider-neutral Subject/Assignment design; require provider and issuer mapping before identity implementation | `NEEDS_CONFIRMATION` |
 | D-007 PMRS | PMRS is operationally important but ownership is not proven | PATS owns PATS-scope requirements/issues; PMRS remains a reconciled control projection and external physical stock/procurement stays external | `PROPOSED` |
-| D-008 station granularity | Process evidence does not map physical stations to Stage/SubStage | Keep station mapping open; process specs must not decide it implicitly | `NEEDS_CONFIRMATION` |
+| D-008 station granularity | Device vs catalog vs booth clarified 2026-08-10 | Station at Stage/SubStage only; default SubStage; Booth physical; Process no PC default | `WORKING DEFAULT` |
 | D-009 rework/reversal | Client files do not provide execution correction policy | Preserve append-only/forward-only working rule; defer rework and reversal | `NEEDS_CONFIRMATION` |
 | D-010 Lot cardinality | PMRS model quantities do not prove Lot grouping | Keep `LotPartAllocation` decision-neutral; do not infer Lot cardinality from demand lines | `NEEDS_CONFIRMATION` |
 | D-020 Withdrawal Form | PMRS issue/balance fields do not prove form ownership | Keep external reference only until the owner confirms the form boundary | `NEEDS_CONFIRMATION` |
