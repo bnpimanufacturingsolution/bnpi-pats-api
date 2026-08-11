@@ -745,7 +745,7 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get("/monitoring/daily-sheets", requireCapability("execution.read"), async (req, res) => {
+	router.get("/monitoring/daily-sheets", requireCapability("monitoring.read"), async (req, res) => {
 		try {
 			const sheets = await database.monitoringDailySheet.findMany({
 				orderBy: [{ productionDate: "desc" }, { updatedAt: "desc" }],
@@ -758,7 +758,7 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get("/monitoring/daily-sheets/:sheetId", requireCapability("execution.read"), async (req, res) => {
+	router.get("/monitoring/daily-sheets/:sheetId", requireCapability("monitoring.read"), async (req, res) => {
 		try {
 			const sheet = await database.monitoringDailySheet.findUnique({ where: { id: req.params.sheetId } });
 			if (!sheet) {
@@ -773,7 +773,7 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get("/monitoring/station-boards", requireCapability("execution.read"), async (req, res) => {
+	router.get("/monitoring/station-boards", requireCapability("monitoring.read"), async (req, res) => {
 		try {
 			const boards = await database.monitoringStationBoard.findMany({
 				orderBy: [{ productionDate: "desc" }, { updatedAt: "desc" }],
@@ -786,7 +786,7 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get("/monitoring/station-boards/:boardId", requireCapability("execution.read"), async (req, res) => {
+	router.get("/monitoring/station-boards/:boardId", requireCapability("monitoring.read"), async (req, res) => {
 		try {
 			const board = await database.monitoringStationBoard.findUnique({ where: { id: req.params.boardId } });
 			if (!board) {

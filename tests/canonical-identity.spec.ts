@@ -76,7 +76,13 @@ describe("canonical identity boundary", () => {
 			.expect(200);
 
 		assert.deepStrictEqual(response.body, {
-			capabilities: ["execution.read", "material-requirement.manage", "planning.manage", "planning.read"],
+			capabilities: [
+				"execution.read",
+				"material-requirement.manage",
+				"monitoring.read",
+				"planning.manage",
+				"planning.read",
+			],
 		});
 	});
 

@@ -831,7 +831,7 @@ export function commandRouter(
 		} catch (error) { commandError(error, req, res, next); }
 	});
 
-	router.put("/monitoring/daily-sheets/:sheetId", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
+	router.put("/monitoring/daily-sheets/:sheetId", requireCapability("daily-metrics.encode", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, monitoringDailySheetUpsertSchema);
 			const sheetId = req.params.sheetId;
@@ -893,7 +893,7 @@ export function commandRouter(
 		} catch (error) { commandError(error, req, res, next); }
 	});
 
-	router.put("/monitoring/station-boards/:boardId", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
+	router.put("/monitoring/station-boards/:boardId", requireCapability("monitoring.station.encode", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, monitoringStationBoardUpsertSchema);
 			const boardId = req.params.boardId;

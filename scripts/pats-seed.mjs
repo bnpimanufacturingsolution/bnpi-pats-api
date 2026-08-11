@@ -75,7 +75,12 @@ function monitoringSeedDate() {
 	return new Date().toISOString().slice(0, 10);
 }
 
-async function upsertSubject(tx, key, username, displayName, roleBundles, passwordHash) {
+/**
+ * @param {string[]} roleBundles
+ * @param {{ kind: "ROLE_BUNDLE" | "CAPABILITY"; key: string }[]} [extraAssignments]
+ *   Direct CAPABILITY grants (e.g. Line Leader `daily-metrics.encode`). Not a fourth business role.
+ */
+async function upsertSubject(tx, key, username, displayName, roleBundles, passwordHash, extraAssignments = []) {
 	const subject = await tx.subject.upsert({
 		where: { id: stableId(key) },
 		update: {
@@ -105,6 +110,25 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
 			where: { subjectId_kind_key: { subjectId: subject.id, kind: "ROLE_BUNDLE", key: role } },
 			update: { status: "ACTIVE", suspendedAt: null, revokedAt: null },
 			create: { subjectId: subject.id, kind: "ROLE_BUNDLE", key: role, status: "ACTIVE" },
+		});
+	}
+
+	for (const assignment of extraAssignments) {
+		await tx.subjectAssignment.upsert({
+			where: {
+				subjectId_kind_key: {
+					subjectId: subject.id,
+					kind: assignment.kind,
+					key: assignment.key,
+				},
+			},
+			update: { status: "ACTIVE", suspendedAt: null, revokedAt: null },
+			create: {
+				subjectId: subject.id,
+				kind: assignment.kind,
+				key: assignment.key,
+				status: "ACTIVE",
+			},
 		});
 	}
 
@@ -142,6 +166,16 @@ async function seedProfile(tx) {
 		`${prefix} Operator`,
 		["production-operator", "inventory-controller"],
 		passwordHash,
+	);
+	// Line Leader = floor operator + daily-metrics.encode assignment (not a fourth business role).
+	await upsertSubject(
+		tx,
+		"subject-lineleader",
+		`${profile}.lineleader`,
+		`${prefix} Line Leader`,
+		["production-operator"],
+		passwordHash,
+		[{ kind: "CAPABILITY", key: "daily-metrics.encode" }],
 	);
 	const quality = await upsertSubject(
 		tx,
