@@ -43,7 +43,26 @@ export type PrintJobStore = {
 		findFirst: (args: {
 			where: { id: string; batchId: string };
 		}) => Promise<{ id: string } | null>;
-		create: (args: { data: Record<string, unknown> }) => Promise<{ id: string }>;
+		create: (args: {
+			data: {
+				batchId: string;
+				stationId: string;
+				fromStageId: string;
+				fromSubStageId: string | null;
+				toStageId: string | null;
+				toSubStageId: string | null;
+				barcodeValue: string;
+				quantity: number;
+				sequence: number;
+				reprintOf: string | null;
+				language: string;
+				renderedPayload: string;
+				status: "QUEUED" | "SENT" | "FAILED" | "SIMULATED";
+				failureReason: string | null;
+				actor: string;
+				actorSubjectId: string;
+			};
+		}) => Promise<{ id: string }>;
 	};
 	stage: {
 		findUnique: (args: { where: { id: string }; select: { name: true } }) => Promise<{ name: string } | null>;
@@ -52,7 +71,23 @@ export type PrintJobStore = {
 		findUnique: (args: { where: { id: string }; select: { name: true } }) => Promise<{ name: string } | null>;
 	};
 	inventoryTransaction: {
-		create: (args: { data: Record<string, unknown> }) => Promise<{ id: string }>;
+		create: (args: {
+			data: {
+				transactionType: "RECEIVING" | "ISSUANCE";
+				batchId: string;
+				partId: string;
+				lotId: string;
+				fromStageId: string;
+				fromSubStageId: string | null;
+				toStageId: string;
+				toSubStageId: string | null;
+				expectedQuantity: number;
+				actualQuantity: number;
+				recordedBy: string;
+				recordedBySubjectId: string;
+				status: string;
+			};
+		}) => Promise<{ id: string }>;
 	};
 	routingStep: {
 		findMany: (args: {
@@ -267,12 +302,12 @@ export async function recordPrintJob(
 		nextStep &&
 		sequence === 1 &&
 		Boolean(batch.parts[0]?.partId);
-	if (shouldIssue) {
+	if (shouldIssue && nextStep && batch.parts[0]?.partId) {
 		await store.inventoryTransaction.create({
 			data: {
 				transactionType: "ISSUANCE",
 				batchId: batch.id,
-				partId: batch.parts[0]?.partId,
+				partId: batch.parts[0].partId,
 				lotId: batch.lot.id,
 				fromStageId,
 				fromSubStageId,

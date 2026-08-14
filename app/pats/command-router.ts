@@ -707,7 +707,7 @@ export function commandRouter(
 			const body = parseCommandBody(req, printJobCreateSchema);
 			const response = await executeCommand(database, req, "printJobCreate", body, async (transaction) => {
 				try {
-					const job = await recordPrintJob(transaction, {
+					const job = await recordPrintJob(transaction as unknown as Parameters<typeof recordPrintJob>[0], {
 						batchId: body.batchId,
 						stationId: body.stationId,
 						reprintOf: body.reprintOf ?? null,
