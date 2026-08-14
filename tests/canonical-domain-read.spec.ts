@@ -183,6 +183,9 @@ describe("canonical PATS domain read contract", () => {
 		const startedAt = new Date("2026-07-31T00:00:00.000Z");
 		const app = appFor(
 			{
+				qualityStageAssignment: {
+					findMany: async () => [{ stageId: "stage-assembly" }],
+				},
 				qualityInspection: {
 					findMany: async () => [
 						{

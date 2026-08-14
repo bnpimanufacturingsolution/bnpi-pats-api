@@ -35,6 +35,8 @@ describe("PATS seed contract", () => {
       "routingViolation",
       "qualityInspection",
       "qualityDecision",
+      "qualityStageAssignment",
+      "[quality.id, [decorationStageId, injectionStageId]]",
       "batchPositionProjection",
       "auditRecord",
       "outboxMessage",

@@ -363,9 +363,10 @@ model Stage {
   nameLocalized      Json?
   displayOrder       Int
   isSystemSeed       Boolean               @default(false)
-  subStageLinks      SubStageEligibility[]
-  stationSteps       StationStep[]
-  processRouteStages ProcessRouteStage[]   @relation("ProcessRouteStageStage")
+  subStageLinks             SubStageEligibility[]
+  stationSteps              StationStep[]
+  processRouteStages        ProcessRouteStage[]   @relation("ProcessRouteStageStage")
+  qualityStageAssignments   QualityStageAssignment[]
 
   @@index([workflowGroupId])
 }
@@ -1012,6 +1013,30 @@ model QualityDecision {
   @@index([inspectionId, decidedAt])
 }
 
+enum QualityStageAssignmentStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+/// Journey D stage allow-list (v1 stage grain only). Not a SubjectAssignment.key.
+/// Fail closed: quality.resolve with zero ACTIVE rows cannot create/decide.
+model QualityStageAssignment {
+  id          String                       @id @default(uuid())
+  subjectId   String
+  subject     Subject                      @relation("QualityStageAssignee", fields: [subjectId], references: [id])
+  workspaceId String
+  stageId     String
+  stage       Stage                        @relation(fields: [stageId], references: [id])
+  status      QualityStageAssignmentStatus @default(ACTIVE)
+  assignedAt  DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+
+  @@unique([subjectId, workspaceId, stageId])
+  @@index([subjectId, workspaceId, status])
+  @@index([stageId])
+}
+
 model AuditRecord {
   id             String       @id @default(uuid())
   actorSubjectId String?
@@ -1110,6 +1135,7 @@ model Subject {
   processChangeRecords        ProcessChangeLog[]     @relation("ProcessChangeActor")
   qualityInspections          QualityInspection[]    @relation("QualityInspectionInspector")
   qualityDecisions            QualityDecision[]      @relation("QualityDecisionActor")
+  qualityStageAssignments     QualityStageAssignment[] @relation("QualityStageAssignee")
   releasedPlans               Project[]              @relation("PlanReleaseActor")
   createdBatches              Batch[]                @relation("BatchCreator")
   auditRecords                AuditRecord[]          @relation("AuditActor")

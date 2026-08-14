@@ -1,6 +1,9 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
 import type { PrismaClient as PatsPrismaClient } from "../../generated/pats-client";
 import { buildOffsetPage, parseOffsetPagination } from "../canonical/collection";
+import { actorId, CommandProblem, sendCommandProblem } from "./command-support";
+import { parseResolveCode, resolveQualityInspectionByCode } from "./quality-resolve";
+import { listAllowedQualityStageIds } from "./quality-stage-scope";
 
 type DomainReadDatabase = Pick<
 	PatsPrismaClient,
@@ -23,6 +26,7 @@ type DomainReadDatabase = Pick<
 	| "routingViolation"
 	| "qualityInspection"
 	| "qualityDecision"
+	| "qualityStageAssignment"
 	| "planDemandAllocation"
 	| "lot"
 	| "part"
@@ -948,12 +952,40 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get("/quality-inspections", requireCapability("quality.read"), async (_req, res) => {
+	router.get("/quality-inspections/resolve", requireCapability("quality.resolve"), async (req, res) => {
 		try {
-			const inspections = await database.qualityInspection.findMany({ orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] }, batch: { select: { id: true, batchCode: true, lotId: true, plannedQuantity: true, parts: { orderBy: [{ partId: "asc" }], take: 1, select: { partId: true, quantity: true, quantityMagnitude: true, quantityUom: true, part: { select: { id: true, partCode: true, partName: true } } } } } } } });
+			const requestQuery = query(req);
+			if (Object.keys(requestQuery).some((key) => key !== "code")) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The resolve query is invalid.");
+				return;
+			}
+			const code = parseResolveCode(requestQuery.code);
+			const body = await resolveQualityInspectionByCode(database, { subjectId: actorId(req), code });
+			res.setHeader("Cache-Control", "no-store").json(body);
+		} catch (error) {
+			if (error instanceof CommandProblem) {
+				sendCommandProblem(req, res, error);
+				return;
+			}
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS quality resolve is unavailable.");
+		}
+	});
+
+	router.get("/quality-inspections", requireCapability("quality.read"), async (req, res) => {
+		try {
+			const allowedStageIds = await listAllowedQualityStageIds(database, actorId(req));
+			if (allowedStageIds.length === 0) {
+				res.setHeader("Cache-Control", "no-store").json({ data: [] });
+				return;
+			}
+			const inspections = await database.qualityInspection.findMany({
+				where: { stageId: { in: allowedStageIds } },
+				orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+				include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] }, batch: { select: { id: true, batchCode: true, lotId: true, plannedQuantity: true, parts: { orderBy: [{ partId: "asc" }], take: 1, select: { partId: true, quantity: true, quantityMagnitude: true, quantityUom: true, part: { select: { id: true, partCode: true, partName: true } } } } } } },
+			});
 			res.setHeader("Cache-Control", "no-store").json({ data: inspections.map((inspection) => ({ ...inspection, inspectedQuantity: decimal(inspection.inspectedQuantity), startedAt: inspection.startedAt.toISOString(), completedAt: date(inspection.completedAt) })) });
 		} catch {
-			problem(_req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS quality inspection data is unavailable.");
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS quality inspection data is unavailable.");
 		}
 	});
 
