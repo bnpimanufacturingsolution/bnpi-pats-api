@@ -766,10 +766,51 @@ model Station {
   printerAttached       Boolean       @default(true)
   displayOrder          Int
   isEnabled             Boolean       @default(true)
+  printerConnection     String?
+  printerAddress        String?
+  printerLanguage       String?
+  printerDpi            Int?
+  printerModel          String?
+  labelWidthMm          Int?
+  labelHeightMm         Int?
+  printerAgent          String?
   boundSteps            StationStep[]
   booths                Booth[]
+  printJobs             PrintJob[]
 
   @@index([workspaceId])
+}
+
+enum PrintJobStatus {
+  QUEUED
+  SENT
+  FAILED
+  SIMULATED
+}
+
+model PrintJob {
+  id               String         @id @default(uuid())
+  batchId          String
+  stationId        String
+  station          Station        @relation(fields: [stationId], references: [id])
+  fromStageId      String
+  fromSubStageId   String?
+  toStageId        String?
+  toSubStageId     String?
+  barcodeValue     String
+  quantity         Int
+  sequence         Int
+  reprintOf        String?
+  language         String
+  renderedPayload  String
+  status           PrintJobStatus @default(QUEUED)
+  failureReason    String?
+  actor            String
+  actorSubjectId   String?
+  occurredAt       DateTime       @default(now())
+
+  @@index([batchId, occurredAt])
+  @@index([stationId, occurredAt])
 }
 
 /// Catalog work process under a SubStage (routing/CT/filter grain). Not a device mount.

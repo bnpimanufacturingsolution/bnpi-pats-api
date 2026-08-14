@@ -2,6 +2,7 @@ import { Router, type Request, type RequestHandler, type Response } from "expres
 import type { PrismaClient as PatsPrismaClient } from "../../generated/pats-client";
 import { buildOffsetPage, parseOffsetPagination } from "../canonical/collection";
 import { actorId, CommandProblem, sendCommandProblem } from "./command-support";
+import { parseBatchResolveCode, resolveBatchByCode } from "./batch-resolve";
 import { parseResolveCode, resolveQualityInspectionByCode } from "./quality-resolve";
 import { listAllowedQualityStageIds } from "./quality-stage-scope";
 
@@ -27,6 +28,7 @@ type DomainReadDatabase = Pick<
 	| "qualityInspection"
 	| "qualityDecision"
 	| "qualityStageAssignment"
+	| "printJob"
 	| "planDemandAllocation"
 	| "lot"
 	| "part"
@@ -827,6 +829,45 @@ export function domainReadRouter(
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(batches, page, totalItems));
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS batch data is unavailable.");
+		}
+	});
+
+	router.get("/batches/resolve", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const requestQuery = query(req);
+			if (Object.keys(requestQuery).some((key) => key !== "code")) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The resolve query is invalid.");
+				return;
+			}
+			const code = parseBatchResolveCode(requestQuery.code);
+			const body = await resolveBatchByCode(database, code);
+			res.setHeader("Cache-Control", "no-store").json(body);
+		} catch (error) {
+			if (error instanceof CommandProblem) {
+				sendCommandProblem(req, res, error);
+				return;
+			}
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS batch resolve is unavailable.");
+		}
+	});
+
+	router.get("/print-jobs", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const batchId = query(req).batchId ?? query(req).batch_id;
+			const where = typeof batchId === "string" && batchId.trim() ? { batchId } : {};
+			const jobs = await database.printJob.findMany({
+				where,
+				orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+				take: 50,
+			});
+			res.setHeader("Cache-Control", "no-store").json({
+				data: jobs.map((job) => ({
+					...job,
+					occurredAt: job.occurredAt.toISOString(),
+				})),
+			});
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS print jobs are unavailable.");
 		}
 	});
 

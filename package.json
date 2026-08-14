@@ -34,7 +34,10 @@
 		"api-list": "curl -X GET 'http://localhost:3000/api/docs/api-list?format=json' | jq",
 		"analyze:intake": "ts-node scripts/analyze-workbooks.ts",
 		"analyze:source": "ts-node scripts/analyze-source-run.ts",
-		"zod-generate": "node scripts/zod-generate.js"
+		"zod-generate": "node scripts/zod-generate.js",
+		"print:glory-l:usb": "tsx scripts/glory-l-usb-test-print.ts",
+		"print:glory-l:net": "tsx scripts/glory-l-test-print.ts",
+		"print:glory-l:calibrate": "tsx scripts/glory-l-calibrate-print.ts"
 	},
 	"prisma": {
 		"seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",

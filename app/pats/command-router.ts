@@ -23,6 +23,8 @@ import {
 } from "./command-support";
 import type { CommandTransaction } from "./command-support";
 import { assertQualityStageAllowed } from "./quality-stage-scope";
+import { recordPrintJob } from "./print-job";
+import { allowUnauthenticatedDeskPrint, deliverDeskLabel } from "./print-desk";
 
 const decimalString = z.string().trim().regex(/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/, "Must be a non-negative decimal with up to 6 places.");
 
@@ -103,6 +105,29 @@ const stageEventCreateSchema = z.object({
 	usageBasis: z.string().trim().max(120).nullable().optional(),
 	sourceRepresentation: z.string().trim().max(240).nullable().optional(),
 }).strict();
+
+const printJobCreateSchema = z.object({
+	batchId: z.string().trim().min(1).max(100),
+	stationId: z.string().trim().min(1).max(100),
+	reprintOf: z.string().trim().min(1).max(100).nullable().optional(),
+}).strict();
+
+const deskPrintSchema = z.object({
+	barcodeValue: z.string().trim().min(1).max(240),
+	batchCode: z.string().trim().min(1).max(120),
+	lotCode: z.string().trim().min(1).max(120),
+	partName: z.string().trim().max(160).optional(),
+	partCode: z.string().trim().max(80).optional(),
+	quantity: z.number().int().positive(),
+	fromStepLabel: z.string().trim().max(160).optional(),
+	toStepLabel: z.string().trim().max(160).optional(),
+	atLabel: z.string().trim().max(160).optional(),
+	operatorName: z.string().trim().max(120).optional(),
+	machineName: z.string().trim().max(160).optional(),
+	qrValue: z.string().trim().max(600).optional(),
+	widthMm: z.number().positive().optional(),
+	heightMm: z.number().positive().optional(),
+});
 
 const inventoryTransactionCreateSchema = z.object({
 	transactionType: z.enum(["RECEIVING", "ISSUANCE"]),
@@ -632,6 +657,91 @@ export function commandRouter(
 				}
 				await recordCommandSuccess(transaction, req, accepted ? "STAGE_EVENT_ACCEPTED" : "ROUTING_VIOLATION_DETECTED", "StageEvent", event.id, { batchId: event.batchId, status: event.status, routingViolationId });
 				return { status: 201, body: { stageEventId: event.id, status: event.status, routingViolationId }, headers: { Location: `/api/v1/stage-events/${event.id}` } };
+			});
+			respondCommand(res, response);
+		} catch (error) {
+			commandError(error, req, res, next);
+		}
+	});
+
+	router.post("/print-jobs/desk", (req, res, next) => {
+		if (allowUnauthenticatedDeskPrint(req)) {
+			next();
+			return;
+		}
+		requireCapability("execution.write", requireCanonicalCapability)(req, res, next);
+	}, async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, deskPrintSchema);
+			const result = await deliverDeskLabel({
+				barcodeValue: body.barcodeValue,
+				batchCode: body.batchCode,
+				lotCode: body.lotCode,
+				partName: body.partName ?? "",
+				partCode: body.partCode ?? "",
+				quantity: body.quantity,
+				fromStepLabel: body.fromStepLabel ?? "",
+				toStepLabel: body.toStepLabel ?? "",
+				atLabel: body.atLabel ?? body.toStepLabel ?? "",
+				operatorName: body.operatorName ?? "",
+				machineName: body.machineName ?? "",
+				qrValue: body.qrValue ?? body.barcodeValue,
+				printedAt: new Date().toISOString(),
+				sequence: 1,
+				widthMm: body.widthMm ?? 102,
+				heightMm: body.heightMm ?? 152,
+				dpi: 300,
+			});
+			res.status(result.status === "FAILED" ? 503 : 200).json({
+				status: result.status,
+				failureReason: result.failureReason,
+				language: result.language,
+			});
+		} catch (error) {
+			commandError(error, req, res, next);
+		}
+	});
+
+	router.post("/print-jobs", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, printJobCreateSchema);
+			const response = await executeCommand(database, req, "printJobCreate", body, async (transaction) => {
+				try {
+					const job = await recordPrintJob(transaction, {
+						batchId: body.batchId,
+						stationId: body.stationId,
+						reprintOf: body.reprintOf ?? null,
+						actor: actorDisplay(req),
+						actorSubjectId: actorId(req),
+					});
+					await recordCommandSuccess(transaction, req, "PRINT_JOB_RECORDED", "PrintJob", job.id, {
+						batchId: job.batchId,
+						status: job.status,
+					});
+					return {
+						status: job.status === "FAILED" ? 201 : 201,
+						body: {
+							printJobId: job.id,
+							status: job.status,
+							barcodeValue: job.barcodeValue,
+							quantity: job.quantity,
+							sequence: job.sequence,
+							failureReason: job.failureReason,
+						},
+						headers: { Location: `/api/v1/print-jobs/${job.id}` },
+					};
+				} catch (error) {
+					if (error instanceof Error && error.message === "NOT_FOUND_STATION") {
+						notFound("The requested station was not found.");
+					}
+					if (error instanceof Error && error.message === "NOT_FOUND_BATCH") {
+						notFound("The requested batch was not found.");
+					}
+					if (error instanceof Error && error.message === "NOT_FOUND_REPRINT") {
+						notFound("The reprint source print job was not found for this batch.");
+					}
+					throw error;
+				}
 			});
 			respondCommand(res, response);
 		} catch (error) {
