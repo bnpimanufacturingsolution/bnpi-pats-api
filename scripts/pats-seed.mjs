@@ -571,17 +571,19 @@ async function seedProfile(tx) {
 	const subFullSprayId = stableId("substage-full-spray");
 	const subMaskSprayId = stableId("substage-mask-spray");
 	const subTampoId = stableId("substage-tampo");
-	const subQualityCheckId = stableId("substage-quality-check");
+	// Retired: Quality is Journey D, not a SubStage / Station / Process.
+	const retiredQualityCheckSubId = stableId("substage-quality-check");
+	const retiredQualityCheckStationId = stableId("station-assembly-quality-check");
+	const retiredQualityCheckProcessId = stableId("work-process-quality-check");
 	const subSubAssemblyId = stableId("substage-sub-assembly");
 	const subAssortmentId = stableId("substage-assortment");
 	const subMainPackingId = stableId("substage-main-packing");
 	// Device install default (D-008): one Station per SubStage when present; stage-level otherwise.
-	// Keep legacy keys for injection/decoration-primary so QC seed rows remain stable.
+	// Keep legacy keys for injection/decoration-primary so existing station ids stay stable.
 	const injectionStationId = stableId("station-injection-01");
 	const decorationStationId = stableId("station-decoration-full-spray"); // primary deco PC (was decoration-01)
 	const decorationMaskStationId = stableId("station-decoration-mask-spray");
 	const decorationTampoStationId = stableId("station-decoration-tampo");
-	const assemblyStationId = stableId("station-assembly-quality-check");
 	const assemblySubAssemblyStationId = stableId("station-assembly-sub-assembly");
 	const assemblyAssortmentStationId = stableId("station-assembly-assortment");
 	const warehouseStationId = stableId("station-warehouse-main-packing");
@@ -619,12 +621,41 @@ async function seedProfile(tx) {
 		});
 	}
 
+	// Journey D allowedStages (v1 stage grain). Fail closed without these rows.
+	// demo.quality = Story 2 (Decoration + Injection). planner/admin all stages = fat-shell convenience, not product RBAC.
+	const qualityWorkspaceId = process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS";
+	const allCatalogStageIds = [injectionStageId, decorationStageId, assemblyStageId, warehouseStageId];
+	for (const [subjectId, stageIds] of [
+		[quality.id, [decorationStageId, injectionStageId]],
+		[planner.id, allCatalogStageIds],
+		[admin.id, allCatalogStageIds],
+	]) {
+		for (const stageId of stageIds) {
+			await tx.qualityStageAssignment.upsert({
+				where: {
+					subjectId_workspaceId_stageId: {
+						subjectId,
+						workspaceId: qualityWorkspaceId,
+						stageId,
+					},
+				},
+				update: { status: "ACTIVE" },
+				create: {
+					id: stableId(`qsa-${subjectId}-${stageId}`),
+					subjectId,
+					workspaceId: qualityWorkspaceId,
+					stageId,
+					status: "ACTIVE",
+				},
+			});
+		}
+	}
+
 	for (const [id, name, displayOrder, flags] of [
 		[subFullSprayId, "Full Spray", 1, { isConfigurable: true }],
 		[subMaskSprayId, "Mask Spray", 2, { isConfigurable: true }],
 		[subTampoId, "Tampo", 3, { isConfigurable: true }],
-		[subQualityCheckId, "Quality Check", 1, { hasQualityCheckpoint: true, isMandatoryCheckpoint: true }],
-		[subSubAssemblyId, "Sub-Assembly", 2, { isConfigurable: true }],
+		[subSubAssemblyId, "Sub-Assembly", 1, { isConfigurable: true }],
 		[subAssortmentId, "Assortment", 3, { isConfigurable: true }],
 		[subMainPackingId, "Main Packing", 1, { isConfigurable: true }],
 	]) {
@@ -654,7 +685,6 @@ async function seedProfile(tx) {
 		[decorationStageId, subFullSprayId],
 		[decorationStageId, subMaskSprayId],
 		[decorationStageId, subTampoId],
-		[assemblyStageId, subQualityCheckId],
 		[assemblyStageId, subSubAssemblyId],
 		[assemblyStageId, subAssortmentId],
 		[warehouseStageId, subMainPackingId],
@@ -669,7 +699,7 @@ async function seedProfile(tx) {
 	for (const [id, stageId, subStageId, sequence, name] of [
 		[stableId("route-stage-inj"), injectionStageId, null, 1, "Injection"],
 		[stableId("route-stage-deco"), decorationStageId, subFullSprayId, 2, "Decoration / Full Spray"],
-		[stableId("route-stage-assy"), assemblyStageId, subQualityCheckId, 3, "Assembly / Quality Check"],
+		[stableId("route-stage-assy"), assemblyStageId, subSubAssemblyId, 3, "Assembly / Sub-Assembly"],
 		[stableId("route-stage-wh"), warehouseStageId, subMainPackingId, 4, "Warehouse / Main Packing"],
 	]) {
 		await tx.processRouteStage.upsert({
@@ -703,8 +733,7 @@ async function seedProfile(tx) {
 		[decorationStationId, "Decoration · Full Spray", "ST-DEC-FS", decorationStageId, 2],
 		[decorationMaskStationId, "Decoration · Mask Spray", "ST-DEC-MS", decorationStageId, 3],
 		[decorationTampoStationId, "Decoration · Tampo", "ST-DEC-TP", decorationStageId, 4],
-		[assemblyStationId, "Assembly · Quality Check", "ST-ASM-QC", assemblyStageId, 5],
-		[assemblySubAssemblyStationId, "Assembly · Sub-Assembly", "ST-ASM-SUB", assemblyStageId, 6],
+		[assemblySubAssemblyStationId, "Assembly · Sub-Assembly", "ST-ASM-SUB", assemblyStageId, 5],
 		[assemblyAssortmentStationId, "Assembly · Assortment", "ST-ASM-AST", assemblyStageId, 7],
 		[warehouseStationId, "Warehouse · Main Packing", "ST-WH-PK", warehouseStageId, 8],
 	]) {
@@ -738,7 +767,6 @@ async function seedProfile(tx) {
 		[stableId("station-step-dec-fs"), decorationStationId, decorationStageId, subFullSprayId],
 		[stableId("station-step-dec-ms"), decorationMaskStationId, decorationStageId, subMaskSprayId],
 		[stableId("station-step-dec-tp"), decorationTampoStationId, decorationStageId, subTampoId],
-		[stableId("station-step-qc"), assemblyStationId, assemblyStageId, subQualityCheckId],
 		[stableId("station-step-subassy"), assemblySubAssemblyStationId, assemblyStageId, subSubAssemblyId],
 		[stableId("station-step-assort"), assemblyAssortmentStationId, assemblyStageId, subAssortmentId],
 		[stableId("station-step-wh"), warehouseStationId, warehouseStageId, subMainPackingId],
@@ -755,14 +783,12 @@ async function seedProfile(tx) {
 	const processFullSprayId = stableId("work-process-full-spray");
 	const processMaskSprayId = stableId("work-process-mask-spray");
 	const processTampoId = stableId("work-process-tampo");
-	const processQualityCheckId = stableId("work-process-quality-check");
 	const processMainPackingId = stableId("work-process-main-packing");
 
 	for (const [id, subStageId, name, displayOrder, labelledCycleTimeSec] of [
 		[processFullSprayId, subFullSprayId, "Full Spray", 1, 12],
 		[processMaskSprayId, subMaskSprayId, "Mask Spray", 2, 10],
 		[processTampoId, subTampoId, "Tampo", 3, 6],
-		[processQualityCheckId, subQualityCheckId, "Quality Check", 1, null],
 		[processMainPackingId, subMainPackingId, "Main Packing", 1, null],
 	]) {
 		await tx.workProcess.upsert({
@@ -786,6 +812,48 @@ async function seedProfile(tx) {
 			},
 		});
 	}
+
+	// Quality Inspection is Journey D. Remount leftover Quality Check hops (additive — no deletes).
+	await tx.qualityInspection.updateMany({
+		where: { OR: [{ subStageId: retiredQualityCheckSubId }, { stationId: retiredQualityCheckStationId }] },
+		data: { subStageId: subSubAssemblyId, stationId: assemblySubAssemblyStationId },
+	});
+	await tx.batch.updateMany({
+		where: { currentSubStageId: retiredQualityCheckSubId },
+		data: { currentSubStageId: subSubAssemblyId },
+	});
+	await tx.batchPositionProjection.updateMany({
+		where: { subStageId: retiredQualityCheckSubId },
+		data: { subStageId: subSubAssemblyId },
+	});
+	await tx.stageEvent.updateMany({
+		where: { subStageId: retiredQualityCheckSubId },
+		data: { subStageId: subSubAssemblyId },
+	});
+	await tx.routingStep.updateMany({
+		where: { subStageId: retiredQualityCheckSubId },
+		data: { subStageId: subSubAssemblyId },
+	});
+	await tx.processRouteStage.updateMany({
+		where: { subStageId: retiredQualityCheckSubId },
+		data: { subStageId: subSubAssemblyId },
+	});
+	await tx.workInstruction.updateMany({
+		where: { subStageId: retiredQualityCheckSubId },
+		data: { subStageId: subSubAssemblyId },
+	});
+	await tx.workProcess.updateMany({
+		where: { id: retiredQualityCheckProcessId },
+		data: { isEnabled: false },
+	});
+	await tx.booth.updateMany({
+		where: { OR: [{ stationId: retiredQualityCheckStationId }, { subStageId: retiredQualityCheckSubId }] },
+		data: { stationId: assemblySubAssemblyStationId, subStageId: subSubAssemblyId },
+	});
+	await tx.station.updateMany({
+		where: { id: retiredQualityCheckStationId },
+		data: { isEnabled: false },
+	});
 
 	// Physical booths under decoration Full Spray station (1 station : N booths)
 	for (const [id, boothCode, label, displayOrder] of [
@@ -823,7 +891,7 @@ async function seedProfile(tx) {
 	for (const [stageId, title, subStageId] of [
 		[injectionStageId, "Injection — verify mold cavity and shot count", null],
 		[decorationStageId, "Decoration — paint process and drying check", subFullSprayId],
-		[assemblyStageId, "Assembly — quality checkpoint before assortment", subQualityCheckId],
+		[assemblyStageId, "Assembly — scan and confirm the Sub-Assembly hop", subSubAssemblyId],
 		[warehouseStageId, "Warehouse — capsule pack and palletize", subMainPackingId],
 	]) {
 		const instructionId = stableId(`work-instruction-${stageId}`);
@@ -1070,7 +1138,7 @@ async function seedProfile(tx) {
 		for (const [stageId, subStageId] of [
 			[injectionStageId, null],
 			[decorationStageId, subFullSprayId],
-			[assemblyStageId, subQualityCheckId],
+			[assemblyStageId, subSubAssemblyId],
 			[warehouseStageId, subMainPackingId],
 		]) {
 			const id = stableId(`route-step-${partCode}-${stepOrder}`);
@@ -1232,7 +1300,7 @@ async function seedProfile(tx) {
 	const batchDefs = [
 		["batch-av-inj", "BNI-2607-001", "01", "B251-01-01", 480, injectionStageId, null, "ACTIVE"],
 		["batch-av-dec", "BNI-2607-002", "01", "B251-01-01", 480, decorationStageId, subFullSprayId, "ACTIVE"],
-		["batch-av-qc", "BNI-2607-003", "01", "B251-01-04", 480, assemblyStageId, subQualityCheckId, "ACTIVE"],
+		["batch-av-qc", "BNI-2607-003", "01", "B251-01-04", 480, assemblyStageId, subSubAssemblyId, "ACTIVE"],
 		["batch-hd-inj", "BNI-2607-004", "02", "B251-01-08", 360, injectionStageId, null, "ACTIVE"],
 		["batch-hd-dec", "BNI-2607-005", "02", "B251-01-10", 360, decorationStageId, subMaskSprayId, "ACTIVE"],
 		["batch-tc-inj", "BNI-2607-006", "03", "B251-01-11", 360, injectionStageId, null, "ACTIVE"],
@@ -1243,7 +1311,7 @@ async function seedProfile(tx) {
 		["batch-dr-dec", "BNI-2607-011", "05", "B251-01-20", 240, decorationStageId, subFullSprayId, "ACTIVE"],
 		["batch-tr-inj", "BNI-2607-012", "06", "B251-01-23", 120, injectionStageId, null, "ACTIVE"],
 		["batch-tr-asm", "BNI-2607-013", "06", "B251-01-23", 120, assemblyStageId, subAssortmentId, "ACTIVE"],
-		["batch-hd-asm", "BNI-2607-014", "02", "B251-01-10", 240, assemblyStageId, subQualityCheckId, "ACTIVE"],
+		["batch-hd-asm", "BNI-2607-014", "02", "B251-01-10", 240, assemblyStageId, subSubAssemblyId, "ACTIVE"],
 		["batch-fw-inj", "BNI-2607-015", "04", "B251-01-16", 240, injectionStageId, null, "ACTIVE"],
 	];
 
@@ -1314,7 +1382,7 @@ async function seedProfile(tx) {
 		["ev-dr-dec", "batch-dr-dec", decorationStageId, subFullSprayId, "B251-01-20", 235, 2, 6, "STAGE_COMPLETED", "ACCEPTED", false],
 		["ev-tr-inj", "batch-tr-inj", injectionStageId, null, "B251-01-23", 120, 3, 1, "STAGE_COMPLETED", "ACCEPTED", false],
 		["ev-tr-asm", "batch-tr-asm", assemblyStageId, subAssortmentId, "B251-01-23", 120, 3, 2, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-hd-asm", "batch-hd-asm", assemblyStageId, subQualityCheckId, "B251-01-10", 240, 3, 3, "STAGE_SCAN_RECORDED", "ACCEPTED", false],
+		["ev-hd-asm", "batch-hd-asm", assemblyStageId, subSubAssemblyId, "B251-01-10", 240, 3, 3, "STAGE_SCAN_RECORDED", "ACCEPTED", false],
 		["ev-fw-inj", "batch-fw-inj", injectionStageId, null, "B251-01-16", 240, 3, 4, "STAGE_COMPLETED", "ACCEPTED", false],
 	];
 
@@ -1374,7 +1442,7 @@ async function seedProfile(tx) {
 			expectedSteps: [
 				{ stageId: injectionStageId, order: 1 },
 				{ stageId: decorationStageId, subStageId: subFullSprayId, order: 2 },
-				{ stageId: assemblyStageId, subStageId: subQualityCheckId, order: 3 },
+				{ stageId: assemblyStageId, subStageId: subSubAssemblyId, order: 3 },
 			],
 			detectedAt: atOffset({ hours: 6 }),
 			status: "OPEN",
@@ -1390,7 +1458,7 @@ async function seedProfile(tx) {
 			expectedSteps: [
 				{ stageId: injectionStageId, order: 1 },
 				{ stageId: decorationStageId, subStageId: subFullSprayId, order: 2 },
-				{ stageId: assemblyStageId, subStageId: subQualityCheckId, order: 3 },
+				{ stageId: assemblyStageId, subStageId: subSubAssemblyId, order: 3 },
 			],
 			detectedAt: atOffset({ hours: 6 }),
 			status: "OPEN",
@@ -1486,8 +1554,8 @@ async function seedProfile(tx) {
 	// [key, batchKey, partCode, partName, qty, stage, sub, status, day, hour]
 	const qcOpenDefs = [
 		["qi-b251-open-taco", "batch-tc-asm", "B251-01-12", "Right Taco", 360, assemblyStageId, subAssortmentId, "IN_PROGRESS", 1, 3],
-		["qi-b251-open-av", "batch-av-qc", "B251-01-04", "Cheese & Patty", 480, assemblyStageId, subQualityCheckId, "IN_PROGRESS", 0, 7],
-		["qi-b251-open-hd", "batch-hd-asm", "B251-01-10", "Cheese Hotdog", 240, assemblyStageId, subQualityCheckId, "IN_PROGRESS", 3, 3],
+		["qi-b251-open-av", "batch-av-qc", "B251-01-04", "Cheese & Patty", 480, assemblyStageId, subSubAssemblyId, "IN_PROGRESS", 0, 7],
+		["qi-b251-open-hd", "batch-hd-asm", "B251-01-10", "Cheese Hotdog", 240, assemblyStageId, subSubAssemblyId, "IN_PROGRESS", 3, 3],
 		["qi-b251-open-tray", "batch-tr-asm", "B251-01-23", "Tray", 120, assemblyStageId, subAssortmentId, "IN_PROGRESS", 3, 2],
 		["qi-b251-open-drink", "batch-dr-dec", "B251-01-20", "Ice L", 240, decorationStageId, subFullSprayId, "IN_PROGRESS", 2, 6],
 	];
@@ -1500,7 +1568,7 @@ async function seedProfile(tx) {
 				batchId: batchIds[batchKey],
 				stageId,
 				subStageId,
-				stationId: stageId === decorationStageId ? decorationStationId : assemblyStationId,
+				stationId: stageId === decorationStageId ? decorationStationId : assemblySubAssemblyStationId,
 				inspectedQuantity: `${qty}.000000`,
 				quantityUom: "piece",
 				status,
@@ -1519,7 +1587,7 @@ async function seedProfile(tx) {
 				batchId: batchIds[batchKey],
 				stageId,
 				subStageId,
-				stationId: stageId === decorationStageId ? decorationStationId : assemblyStationId,
+				stationId: stageId === decorationStageId ? decorationStationId : assemblySubAssemblyStationId,
 				inspectedQuantity: `${qty}.000000`,
 				quantityUom: "piece",
 				status,
@@ -1556,7 +1624,7 @@ async function seedProfile(tx) {
 						? warehouseStationId
 						: stageId === decorationStageId
 							? decorationStationId
-							: assemblyStationId,
+							: assemblySubAssemblyStationId,
 				inspectedQuantity: `${qty}.000000`,
 				quantityUom: "piece",
 				status: "COMPLETED",
@@ -1580,7 +1648,7 @@ async function seedProfile(tx) {
 						? warehouseStationId
 						: stageId === decorationStageId
 							? decorationStationId
-							: assemblyStationId,
+							: assemblySubAssemblyStationId,
 				inspectedQuantity: `${qty}.000000`,
 				quantityUom: "piece",
 				status: "COMPLETED",
@@ -1918,7 +1986,7 @@ async function seedProfile(tx) {
 		["batch-b308-tako-dec", "BNI-2608-102", "01", "B308-01-01", 200, decorationStageId, subFullSprayId],
 		["batch-b308-ramen-dec", "BNI-2608-103", "02", "B308-01-05", 250, decorationStageId, subMaskSprayId],
 		["batch-b308-ramen-asm", "BNI-2608-104", "02", "B308-01-06", 180, assemblyStageId, subAssortmentId],
-		["batch-b308-oni-asm", "BNI-2608-105", "03", "B308-01-08", 200, assemblyStageId, subQualityCheckId],
+		["batch-b308-oni-asm", "BNI-2608-105", "03", "B308-01-08", 200, assemblyStageId, subSubAssemblyId],
 		["batch-b308-skewer-wh", "BNI-2608-106", "04", "B308-01-11", 150, warehouseStageId, subMainPackingId],
 		["batch-b308-oni-dec", "BNI-2608-107", "03", "B308-01-09", 160, decorationStageId, subTampoId],
 	];
@@ -1992,7 +2060,7 @@ async function seedProfile(tx) {
 	const b308EventDefs = [
 		["ev-b308-tako-inj", "batch-b308-tako-inj", injectionStageId, null, "B308-01-01", 200, 1, 5],
 		["ev-b308-ramen-dec", "batch-b308-ramen-dec", decorationStageId, subMaskSprayId, "B308-01-05", 248, 2, 3],
-		["ev-b308-oni-asm", "batch-b308-oni-asm", assemblyStageId, subQualityCheckId, "B308-01-08", 200, 2, 7],
+		["ev-b308-oni-asm", "batch-b308-oni-asm", assemblyStageId, subSubAssemblyId, "B308-01-08", 200, 2, 7],
 		["ev-b308-skewer-wh", "batch-b308-skewer-wh", warehouseStageId, subMainPackingId, "B308-01-11", 150, 3, 2],
 	];
 	for (const [key, batchKey, stageId, subStageId, partCode, qty, day, hour] of b308EventDefs) {

@@ -22,6 +22,7 @@ import {
 	respondCommand,
 } from "./command-support";
 import type { CommandTransaction } from "./command-support";
+import { assertQualityStageAllowed } from "./quality-stage-scope";
 
 const decimalString = z.string().trim().regex(/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/, "Must be a non-negative decimal with up to 6 places.");
 
@@ -687,6 +688,7 @@ export function commandRouter(
 		try {
 			const body = parseCommandBody(req, qualityInspectionCreateSchema);
 			const response = await executeCommand(database, req, "qualityInspectionCreate", body, async (transaction) => {
+				await assertQualityStageAllowed(transaction, actorId(req), body.stageId);
 				const batch = await transaction.batch.findUnique({ where: { id: body.batchId }, select: { id: true } });
 				if (!batch) notFound("The requested batch was not found.");
 				const inspection = await transaction.qualityInspection.create({
@@ -718,6 +720,7 @@ export function commandRouter(
 			const response = await executeCommand(database, req, "qualityDecisionCreate", { inspectionId: req.params.inspectionId, body, expectedVersion }, async (transaction) => {
 				const inspection = await transaction.qualityInspection.findUnique({ where: { id: req.params.inspectionId } });
 				if (!inspection) notFound("The requested quality inspection was not found.");
+				await assertQualityStageAllowed(transaction, actorId(req), inspection.stageId);
 				if (inspection.rowVersion !== expectedVersion) staleVersion();
 				if (inspection.status === QualityInspectionStatus.COMPLETED || inspection.status === QualityInspectionStatus.CANCELLED) conflict("This quality inspection has already been closed.");
 				const decision = await transaction.qualityDecision.create({
