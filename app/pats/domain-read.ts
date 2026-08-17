@@ -719,7 +719,8 @@ export function domainReadRouter(
 			}
 			for (const job of printedHere) {
 				const hop = wipBatches.find((row) => row.batchId === job.batchId);
-				const plan = hop ? lotPlanMap.get(hop.lotId) : undefined;
+				if (!hop) continue;
+				const plan = lotPlanMap.get(hop.lotId);
 				if (!plan) continue;
 				plan.completedBatchCount += 1;
 				plan.completedQuantity += Number(job.quantity) || hop.quantity || 0;
