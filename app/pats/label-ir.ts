@@ -94,7 +94,7 @@ export function renderZpl(ir: LabelIr): string {
 		.replace(/[^A-Z0-9]+/g, "-")
 		.replace(/(^-|-$)/g, "");
 	const from = zplSafe(ir.fromStepLabel || "EXTERNAL").toUpperCase();
-	const productLine = zplSafe(ir.productLine || "TAMAGOTCHI PARADISE MEJIRUSHI ACCESSORY");
+	const productLine = ir.productLine ? zplSafe(ir.productLine) : "";
 	const operator = zplSafe((ir.operatorName || "—").toUpperCase());
 	const machine = zplSafe((ir.machineName || "—").toUpperCase());
 	const header = `${at} MANUAL`;
@@ -124,7 +124,9 @@ export function renderZpl(ir: LabelIr): string {
 			// Identity Block (Centered, matching UI flex layout Y-coordinates)
 			`^FO0,${mm(60)}^FB${labelWidth},1,0,C^A0N,${mm(4)},${mm(4)}^FD${batch}^FS`,
 			`^FO0,${mm(66)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FDFROM: ${from}^FS`,
-			`^FO0,${mm(72)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FD${productLine}^FS`,
+			productLine
+				? `^FO0,${mm(72)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FD${productLine}^FS`
+				: "",
 			
 			// Part Name
 			`^FO0,${mm(78)}^FB${labelWidth},2,5,C^A0N,${mm(5)},${mm(5)}^FD${part}^FS`,

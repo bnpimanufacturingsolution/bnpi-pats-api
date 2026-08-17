@@ -59,7 +59,7 @@ describe("label IR renderers", () => {
 		expect(zpl).to.include("INJECTION-MOLDING MANUAL");
 		expect(zpl).to.include("BNI-2606-001");
 		expect(zpl).to.include("FROM: INJECTION (MOLDING)");
-		expect(zpl).to.include("TAMAGOTCHI PARADISE MEJIRUSHI ACCESSORY");
+		expect(zpl).not.to.include("TAMAGOTCHI PARADISE MEJIRUSHI ACCESSORY");
 		expect(zpl).to.include("QUANTITY");
 		expect(zpl).to.include("240 PCS");
 		expect(zpl).to.include("OPERATOR");
