@@ -52,10 +52,12 @@ paths:
       operationId: stationSupportGet
       summary: Read rebuildable station support projection (output + WIP)
       description: >
-        Secondary workstation cards. todayOutput aggregates ACCEPTED STAGE_COMPLETED events on the
-        station's bound steps for a UTC calendar day (query date=YYYY-MM-DD). wipProgress lists
-        batch positions matching bound steps. materials, staff, and expectedOutput are always null
-        until product-owned sources exist — never invent from fixtures.
+        Secondary workstation cards. todayOutput aggregates first-success PrintJobs (SENT|SIMULATED,
+        sequence 1) at this station for a UTC calendar day (query date=YYYY-MM-DD). materials are
+        hop inventory (bound-step positions minus first-success print here). lotPlans carry
+        ceil(lot.requiredProductionQuantity / lot.labelPackSize) for Lot Progress — the
+        denominator is the lot plan, not hop occupancy. staff and expectedOutput stay null until
+        product-owned sources exist.
       tags: [PATS Execution]
       x-required-capability: execution.read
       parameters:

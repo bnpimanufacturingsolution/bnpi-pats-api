@@ -920,7 +920,8 @@ async function seedProfile(tx) {
 	const planPartIds = {};
 
 	// Plan demand: 18 trays × 240 = 4320 (client tray standard)
-	const planQty = 18 * CLIENT_B251.trayQuantityStandard;
+	const tray = CLIENT_B251.trayQuantityStandard;
+	const planQty = 18 * tray;
 
 	await tx.project.upsert({
 		where: { id: projectId },
@@ -969,12 +970,12 @@ async function seedProfile(tx) {
 
 	// Model allocations for models 01–04 (confirmed); 05 deferred in name only still allocated
 	const modelPlanQtys = {
-		"01": 1440,
-		"02": 720,
-		"03": 720,
-		"04": 480,
-		"05": 480,
-		"06": 480,
+		"01": 4 * tray,
+		"02": 3 * tray,
+		"03": 2 * tray,
+		"04": 2 * tray,
+		"05": 2 * tray,
+		"06": 2 * tray,
 	};
 	for (const [modelNumber, qty] of Object.entries(modelPlanQtys)) {
 		await tx.projectModelAllocation.upsert({
@@ -1220,14 +1221,14 @@ async function seedProfile(tx) {
 		},
 	});
 
-	// Lots: one active lot per model family (including drink + tray)
+	// Lots: required pcs = seeded batches for that lot × tray size (240).
 	const lotDefs = [
-		["lot-avocado", "LOT-B251-01", "B251 Avocado Burger — Lot 01", "01", 1440],
-		["lot-hotdog", "LOT-B251-02", "B251 Cheese Hotdog — Lot 01", "02", 720],
-		["lot-tacos", "LOT-B251-03", "B251 Tacos — Lot 01", "03", 720],
-		["lot-fries", "LOT-B251-04", "B251 Potato Wedge — Lot 01", "04", 480],
-		["lot-drink", "LOT-B251-05", "B251 Cola / Ice Coffee — Lot 01", "05", 480],
-		["lot-tray", "LOT-B251-06", "B251 Tray — Lot 01", "06", 480],
+		["lot-avocado", "LOT-B251-01", "B251 Avocado Burger — Lot 01", "01", 4 * tray],
+		["lot-hotdog", "LOT-B251-02", "B251 Cheese Hotdog — Lot 01", "02", 3 * tray],
+		["lot-tacos", "LOT-B251-03", "B251 Tacos — Lot 01", "03", 2 * tray],
+		["lot-fries", "LOT-B251-04", "B251 Potato Wedge — Lot 01", "04", 2 * tray],
+		["lot-drink", "LOT-B251-05", "B251 Cola / Ice Coffee — Lot 01", "05", 2 * tray],
+		["lot-tray", "LOT-B251-06", "B251 Tray — Lot 01", "06", 2 * tray],
 	];
 	const lotIds = {};
 	const lotAllocIds = {};
@@ -1295,24 +1296,24 @@ async function seedProfile(tx) {
 		}
 	}
 
-	// Batches — factory-style codes, WIP across all stages / model families
+	// Batches — one tray per batch (qty === labelPackSize). Keys kept so reseed updates in place.
 	// [key, code, modelNumber, partCode, qty, stage, sub, status]
 	const batchDefs = [
-		["batch-av-inj", "BNI-2607-001", "01", "B251-01-01", 480, injectionStageId, null, "ACTIVE"],
-		["batch-av-dec", "BNI-2607-002", "01", "B251-01-01", 480, decorationStageId, subFullSprayId, "ACTIVE"],
-		["batch-av-qc", "BNI-2607-003", "01", "B251-01-04", 480, assemblyStageId, subSubAssemblyId, "ACTIVE"],
-		["batch-hd-inj", "BNI-2607-004", "02", "B251-01-08", 360, injectionStageId, null, "ACTIVE"],
-		["batch-hd-dec", "BNI-2607-005", "02", "B251-01-10", 360, decorationStageId, subMaskSprayId, "ACTIVE"],
-		["batch-tc-inj", "BNI-2607-006", "03", "B251-01-11", 360, injectionStageId, null, "ACTIVE"],
-		["batch-tc-asm", "BNI-2607-007", "03", "B251-01-12", 360, assemblyStageId, subAssortmentId, "ACTIVE"],
-		["batch-fw-dec", "BNI-2607-008", "04", "B251-01-15", 240, decorationStageId, subTampoId, "ACTIVE"],
-		["batch-av-wh", "BNI-2607-009", "01", "B251-01-01", 240, warehouseStageId, subMainPackingId, "CLOSED"],
-		["batch-dr-inj", "BNI-2607-010", "05", "B251-01-22", 240, injectionStageId, null, "ACTIVE"],
-		["batch-dr-dec", "BNI-2607-011", "05", "B251-01-20", 240, decorationStageId, subFullSprayId, "ACTIVE"],
-		["batch-tr-inj", "BNI-2607-012", "06", "B251-01-23", 120, injectionStageId, null, "ACTIVE"],
-		["batch-tr-asm", "BNI-2607-013", "06", "B251-01-23", 120, assemblyStageId, subAssortmentId, "ACTIVE"],
-		["batch-hd-asm", "BNI-2607-014", "02", "B251-01-10", 240, assemblyStageId, subSubAssemblyId, "ACTIVE"],
-		["batch-fw-inj", "BNI-2607-015", "04", "B251-01-16", 240, injectionStageId, null, "ACTIVE"],
+		["batch-av-inj", "BNI-2607-001", "01", "B251-01-01", tray, injectionStageId, null, "ACTIVE"],
+		["batch-av-dec", "BNI-2607-002", "01", "B251-01-01", tray, decorationStageId, subFullSprayId, "ACTIVE"],
+		["batch-av-qc", "BNI-2607-003", "01", "B251-01-04", tray, assemblyStageId, subSubAssemblyId, "ACTIVE"],
+		["batch-hd-inj", "BNI-2607-004", "02", "B251-01-08", tray, injectionStageId, null, "ACTIVE"],
+		["batch-hd-dec", "BNI-2607-005", "02", "B251-01-10", tray, decorationStageId, subMaskSprayId, "ACTIVE"],
+		["batch-tc-inj", "BNI-2607-006", "03", "B251-01-11", tray, injectionStageId, null, "ACTIVE"],
+		["batch-tc-asm", "BNI-2607-007", "03", "B251-01-12", tray, assemblyStageId, subAssortmentId, "ACTIVE"],
+		["batch-fw-dec", "BNI-2607-008", "04", "B251-01-15", tray, decorationStageId, subTampoId, "ACTIVE"],
+		["batch-av-wh", "BNI-2607-009", "01", "B251-01-01", tray, warehouseStageId, subMainPackingId, "CLOSED"],
+		["batch-dr-inj", "BNI-2607-010", "05", "B251-01-22", tray, injectionStageId, null, "ACTIVE"],
+		["batch-dr-dec", "BNI-2607-011", "05", "B251-01-20", tray, decorationStageId, subFullSprayId, "ACTIVE"],
+		["batch-tr-inj", "BNI-2607-012", "06", "B251-01-23", tray, injectionStageId, null, "ACTIVE"],
+		["batch-tr-asm", "BNI-2607-013", "06", "B251-01-23", tray, assemblyStageId, subAssortmentId, "ACTIVE"],
+		["batch-hd-asm", "BNI-2607-014", "02", "B251-01-10", tray, assemblyStageId, subSubAssemblyId, "ACTIVE"],
+		["batch-fw-inj", "BNI-2607-015", "04", "B251-01-16", tray, injectionStageId, null, "ACTIVE"],
 	];
 
 	const batchIds = {};
@@ -1369,21 +1370,21 @@ async function seedProfile(tx) {
 
 	// Stage events (named parts / batches for activity feed)
 	const eventDefs = [
-		["ev-av-inj", "batch-av-inj", injectionStageId, null, "B251-01-01", 480, 0, 2, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-av-dec", "batch-av-dec", decorationStageId, subFullSprayId, "B251-01-01", 475, 0, 5, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-av-skip", "batch-av-qc", assemblyStageId, null, "B251-01-04", 480, 0, 6, "STAGE_SCAN_RECORDED", "BLOCKED", true],
-		["ev-hd-inj", "batch-hd-inj", injectionStageId, null, "B251-01-08", 360, 1, 1, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-hd-dec", "batch-hd-dec", decorationStageId, subMaskSprayId, "B251-01-10", 355, 1, 3, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-tc-inj", "batch-tc-inj", injectionStageId, null, "B251-01-11", 360, 1, 4, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-tc-asm", "batch-tc-asm", assemblyStageId, subAssortmentId, "B251-01-12", 360, 2, 1, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-fw-dec", "batch-fw-dec", decorationStageId, subTampoId, "B251-01-15", 240, 2, 2, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-av-wh", "batch-av-wh", warehouseStageId, subMainPackingId, "B251-01-01", 240, 2, 4, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-dr-inj", "batch-dr-inj", injectionStageId, null, "B251-01-22", 240, 2, 5, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-dr-dec", "batch-dr-dec", decorationStageId, subFullSprayId, "B251-01-20", 235, 2, 6, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-tr-inj", "batch-tr-inj", injectionStageId, null, "B251-01-23", 120, 3, 1, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-tr-asm", "batch-tr-asm", assemblyStageId, subAssortmentId, "B251-01-23", 120, 3, 2, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-hd-asm", "batch-hd-asm", assemblyStageId, subSubAssemblyId, "B251-01-10", 240, 3, 3, "STAGE_SCAN_RECORDED", "ACCEPTED", false],
-		["ev-fw-inj", "batch-fw-inj", injectionStageId, null, "B251-01-16", 240, 3, 4, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-av-inj", "batch-av-inj", injectionStageId, null, "B251-01-01", tray, 0, 2, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-av-dec", "batch-av-dec", decorationStageId, subFullSprayId, "B251-01-01", tray - 2, 0, 5, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-av-skip", "batch-av-qc", assemblyStageId, null, "B251-01-04", tray, 0, 6, "STAGE_SCAN_RECORDED", "BLOCKED", true],
+		["ev-hd-inj", "batch-hd-inj", injectionStageId, null, "B251-01-08", tray, 1, 1, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-hd-dec", "batch-hd-dec", decorationStageId, subMaskSprayId, "B251-01-10", tray - 2, 1, 3, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-tc-inj", "batch-tc-inj", injectionStageId, null, "B251-01-11", tray, 1, 4, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-tc-asm", "batch-tc-asm", assemblyStageId, subAssortmentId, "B251-01-12", tray, 2, 1, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-fw-dec", "batch-fw-dec", decorationStageId, subTampoId, "B251-01-15", tray, 2, 2, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-av-wh", "batch-av-wh", warehouseStageId, subMainPackingId, "B251-01-01", tray, 2, 4, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-dr-inj", "batch-dr-inj", injectionStageId, null, "B251-01-22", tray, 2, 5, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-dr-dec", "batch-dr-dec", decorationStageId, subFullSprayId, "B251-01-20", tray - 2, 2, 6, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-tr-inj", "batch-tr-inj", injectionStageId, null, "B251-01-23", tray, 3, 1, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-tr-asm", "batch-tr-asm", assemblyStageId, subAssortmentId, "B251-01-23", tray, 3, 2, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-hd-asm", "batch-hd-asm", assemblyStageId, subSubAssemblyId, "B251-01-10", tray, 3, 3, "STAGE_SCAN_RECORDED", "ACCEPTED", false],
+		["ev-fw-inj", "batch-fw-inj", injectionStageId, null, "B251-01-16", tray, 3, 4, "STAGE_COMPLETED", "ACCEPTED", false],
 	];
 
 	for (const [key, batchKey, stageId, subStageId, partCode, qty, day, hour, eventType, status, isViolation] of eventDefs) {
@@ -1468,11 +1469,11 @@ async function seedProfile(tx) {
 
 	// Inventory transactions with real part codes
 	const invDefs = [
-		["inv-1", "ISSUANCE", "batch-av-dec", "B251-01-01", injectionStageId, decorationStageId, 480, 475, 0, 4],
-		["inv-2", "RECEIVING", "batch-av-inj", "B251-01-01", null, injectionStageId, 480, 480, 0, 1],
-		["inv-3", "ISSUANCE", "batch-hd-dec", "B251-01-10", injectionStageId, decorationStageId, 360, 355, 1, 2],
-		["inv-4", "RECEIVING", "batch-tc-inj", "B251-01-11", null, injectionStageId, 360, 358, 1, 3],
-		["inv-5", "ISSUANCE", "batch-av-wh", "B251-01-01", assemblyStageId, warehouseStageId, 240, 240, 2, 3],
+		["inv-1", "ISSUANCE", "batch-av-dec", "B251-01-01", injectionStageId, decorationStageId, tray, tray - 2, 0, 4],
+		["inv-2", "RECEIVING", "batch-av-inj", "B251-01-01", null, injectionStageId, tray, tray, 0, 1],
+		["inv-3", "ISSUANCE", "batch-hd-dec", "B251-01-10", injectionStageId, decorationStageId, tray, tray - 2, 1, 2],
+		["inv-4", "RECEIVING", "batch-tc-inj", "B251-01-11", null, injectionStageId, tray, tray - 2, 1, 3],
+		["inv-5", "ISSUANCE", "batch-av-wh", "B251-01-01", assemblyStageId, warehouseStageId, tray, tray, 2, 3],
 	];
 	for (const [key, type, batchKey, partCode, fromStageId, toStageId, expected, actual, day, hour] of invDefs) {
 		const modelNumber = batchDefs.find((b) => b[0] === batchKey)[2];
@@ -1553,11 +1554,11 @@ async function seedProfile(tx) {
 	// QC worklist + history on B251 batches (PROVISIONAL demo dispositions)
 	// [key, batchKey, partCode, partName, qty, stage, sub, status, day, hour]
 	const qcOpenDefs = [
-		["qi-b251-open-taco", "batch-tc-asm", "B251-01-12", "Right Taco", 360, assemblyStageId, subAssortmentId, "IN_PROGRESS", 1, 3],
-		["qi-b251-open-av", "batch-av-qc", "B251-01-04", "Cheese & Patty", 480, assemblyStageId, subSubAssemblyId, "IN_PROGRESS", 0, 7],
-		["qi-b251-open-hd", "batch-hd-asm", "B251-01-10", "Cheese Hotdog", 240, assemblyStageId, subSubAssemblyId, "IN_PROGRESS", 3, 3],
-		["qi-b251-open-tray", "batch-tr-asm", "B251-01-23", "Tray", 120, assemblyStageId, subAssortmentId, "IN_PROGRESS", 3, 2],
-		["qi-b251-open-drink", "batch-dr-dec", "B251-01-20", "Ice L", 240, decorationStageId, subFullSprayId, "IN_PROGRESS", 2, 6],
+		["qi-b251-open-taco", "batch-tc-asm", "B251-01-12", "Right Taco", tray, assemblyStageId, subAssortmentId, "IN_PROGRESS", 1, 3],
+		["qi-b251-open-av", "batch-av-qc", "B251-01-04", "Cheese & Patty", tray, assemblyStageId, subSubAssemblyId, "IN_PROGRESS", 0, 7],
+		["qi-b251-open-hd", "batch-hd-asm", "B251-01-10", "Cheese Hotdog", tray, assemblyStageId, subSubAssemblyId, "IN_PROGRESS", 3, 3],
+		["qi-b251-open-tray", "batch-tr-asm", "B251-01-23", "Tray", tray, assemblyStageId, subAssortmentId, "IN_PROGRESS", 3, 2],
+		["qi-b251-open-drink", "batch-dr-dec", "B251-01-20", "Ice L", tray, decorationStageId, subFullSprayId, "IN_PROGRESS", 2, 6],
 	];
 	const inspectionOpenId = stableId("qi-b251-open-taco");
 	for (const [key, batchKey, partCode, partName, qty, stageId, subStageId, status, day, hour] of qcOpenDefs) {
@@ -1605,9 +1606,9 @@ async function seedProfile(tx) {
 
 	// Completed inspections with decisions for history panel
 	const qcDoneDefs = [
-		["qi-b251-hold", "batch-av-dec", "B251-01-01", "Avocado Burger Upper Bun", 480, decorationStageId, subFullSprayId, "HOLD", "ROUTING_REVIEW", "Batch advanced without full decoration completion evidence.", 0, 6],
+		["qi-b251-hold", "batch-av-dec", "B251-01-01", "Avocado Burger Upper Bun", tray, decorationStageId, subFullSprayId, "HOLD", "ROUTING_REVIEW", "Batch advanced without full decoration completion evidence.", 0, 6],
 		["qi-b251-pass-wh", "batch-av-wh", "B251-01-01", "Avocado Burger Upper Bun", 240, warehouseStageId, subMainPackingId, "PASSED", "VISUAL_OK", "Pack appearance and label match B251 tray standard.", 2, 4],
-		["qi-b251-fail-hd", "batch-hd-dec", "B251-01-10", "Cheese Hotdog", 360, decorationStageId, subMaskSprayId, "FAILED", "PAINT_DEFECT", "Mask spray miss on Cheese Hotdog body — return to Decoration.", 1, 3],
+		["qi-b251-fail-hd", "batch-hd-dec", "B251-01-10", "Cheese Hotdog", tray, decorationStageId, subMaskSprayId, "FAILED", "PAINT_DEFECT", "Mask spray miss on Cheese Hotdog body — return to Decoration.", 1, 3],
 		["qi-b251-pass-fw", "batch-fw-dec", "B251-01-15", "Fries", 240, decorationStageId, subTampoId, "PASSED", "TAMPO_OK", "Tampo registration within tolerance for Potato Wedge fries.", 2, 2],
 	];
 	for (const [key, batchKey, partCode, partName, qty, stageId, subStageId, decision, reasonCode, reasonNote, day, hour] of qcDoneDefs) {
@@ -1792,7 +1793,8 @@ async function seedProfile(tx) {
 
 	// B308 export plan — WIP skewed to Decoration / Assembly / Warehouse (vs B251 Injection-heavy)
 	const b308PlanId = stableId("production-plan-b308-export");
-	const b308PlanQty = 10 * CLIENT_B308.trayQuantityStandard; // 2000
+	const b308Tray = CLIENT_B308.trayQuantityStandard;
+	const b308PlanQty = 7 * b308Tray; // matches seeded B308 batches
 	const b308PlanPartIds = {};
 	await tx.project.upsert({
 		where: { id: b308PlanId },
@@ -1837,7 +1839,7 @@ async function seedProfile(tx) {
 			createdAt: seedClock,
 		},
 	});
-	const b308ModelPlanQtys = { "01": 600, "02": 500, "03": 500, "04": 400 };
+	const b308ModelPlanQtys = { "01": 2 * b308Tray, "02": 2 * b308Tray, "03": 2 * b308Tray, "04": 1 * b308Tray };
 	for (const [modelNumber, qty] of Object.entries(b308ModelPlanQtys)) {
 		await tx.projectModelAllocation.upsert({
 			where: {
@@ -1912,10 +1914,10 @@ async function seedProfile(tx) {
 		}
 	}
 	const b308LotDefs = [
-		["lot-b308-tako", "LOT-B308-01", "B308 Takoyaki — Export Lot A", "01", 600, "B308-01-01"],
-		["lot-b308-ramen", "LOT-B308-02", "B308 Ramen Cup — Export Lot A", "02", 500, "B308-01-05"],
-		["lot-b308-oni", "LOT-B308-03", "B308 Onigiri — Export Lot A", "03", 500, "B308-01-08"],
-		["lot-b308-skewer", "LOT-B308-04", "B308 Yakitori — Export Lot A", "04", 400, "B308-01-11"],
+		["lot-b308-tako", "LOT-B308-01", "B308 Takoyaki — Export Lot A", "01", 2 * b308Tray, "B308-01-01"],
+		["lot-b308-ramen", "LOT-B308-02", "B308 Ramen Cup — Export Lot A", "02", 2 * b308Tray, "B308-01-05"],
+		["lot-b308-oni", "LOT-B308-03", "B308 Onigiri — Export Lot A", "03", 2 * b308Tray, "B308-01-08"],
+		["lot-b308-skewer", "LOT-B308-04", "B308 Yakitori — Export Lot A", "04", 1 * b308Tray, "B308-01-11"],
 	];
 	const b308LotIds = {};
 	for (const [key, lotCode, lotName, modelNumber, qty, partCode] of b308LotDefs) {
@@ -1982,13 +1984,13 @@ async function seedProfile(tx) {
 	}
 	// Stage mix deliberately different from B251 (more Deco/Assembly/Warehouse, less Injection)
 	const b308BatchDefs = [
-		["batch-b308-tako-inj", "BNI-2608-101", "01", "B308-01-01", 200, injectionStageId, null],
-		["batch-b308-tako-dec", "BNI-2608-102", "01", "B308-01-01", 200, decorationStageId, subFullSprayId],
-		["batch-b308-ramen-dec", "BNI-2608-103", "02", "B308-01-05", 250, decorationStageId, subMaskSprayId],
-		["batch-b308-ramen-asm", "BNI-2608-104", "02", "B308-01-06", 180, assemblyStageId, subAssortmentId],
-		["batch-b308-oni-asm", "BNI-2608-105", "03", "B308-01-08", 200, assemblyStageId, subSubAssemblyId],
-		["batch-b308-skewer-wh", "BNI-2608-106", "04", "B308-01-11", 150, warehouseStageId, subMainPackingId],
-		["batch-b308-oni-dec", "BNI-2608-107", "03", "B308-01-09", 160, decorationStageId, subTampoId],
+		["batch-b308-tako-inj", "BNI-2608-101", "01", "B308-01-01", b308Tray, injectionStageId, null],
+		["batch-b308-tako-dec", "BNI-2608-102", "01", "B308-01-01", b308Tray, decorationStageId, subFullSprayId],
+		["batch-b308-ramen-dec", "BNI-2608-103", "02", "B308-01-05", b308Tray, decorationStageId, subMaskSprayId],
+		["batch-b308-ramen-asm", "BNI-2608-104", "02", "B308-01-06", b308Tray, assemblyStageId, subAssortmentId],
+		["batch-b308-oni-asm", "BNI-2608-105", "03", "B308-01-08", b308Tray, assemblyStageId, subSubAssemblyId],
+		["batch-b308-skewer-wh", "BNI-2608-106", "04", "B308-01-11", b308Tray, warehouseStageId, subMainPackingId],
+		["batch-b308-oni-dec", "BNI-2608-107", "03", "B308-01-09", b308Tray, decorationStageId, subTampoId],
 	];
 	for (const [key, batchCode, modelNumber, partCode, qty, stageId, subStageId] of b308BatchDefs) {
 		const id = stableId(key);
@@ -2058,10 +2060,10 @@ async function seedProfile(tx) {
 	}
 	// Distinct activity for Street Food Friends (different part names in feed)
 	const b308EventDefs = [
-		["ev-b308-tako-inj", "batch-b308-tako-inj", injectionStageId, null, "B308-01-01", 200, 1, 5],
-		["ev-b308-ramen-dec", "batch-b308-ramen-dec", decorationStageId, subMaskSprayId, "B308-01-05", 248, 2, 3],
-		["ev-b308-oni-asm", "batch-b308-oni-asm", assemblyStageId, subSubAssemblyId, "B308-01-08", 200, 2, 7],
-		["ev-b308-skewer-wh", "batch-b308-skewer-wh", warehouseStageId, subMainPackingId, "B308-01-11", 150, 3, 2],
+		["ev-b308-tako-inj", "batch-b308-tako-inj", injectionStageId, null, "B308-01-01", b308Tray, 1, 5],
+		["ev-b308-ramen-dec", "batch-b308-ramen-dec", decorationStageId, subMaskSprayId, "B308-01-05", b308Tray, 2, 3],
+		["ev-b308-oni-asm", "batch-b308-oni-asm", assemblyStageId, subSubAssemblyId, "B308-01-08", b308Tray, 2, 7],
+		["ev-b308-skewer-wh", "batch-b308-skewer-wh", warehouseStageId, subMainPackingId, "B308-01-11", b308Tray, 3, 2],
 	];
 	for (const [key, batchKey, stageId, subStageId, partCode, qty, day, hour] of b308EventDefs) {
 		const id = stableId(key);

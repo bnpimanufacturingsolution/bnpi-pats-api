@@ -541,9 +541,12 @@ export function domainReadRouter(
 
 	/**
 	 * Rebuildable station support projection for workstation secondary cards.
-	 * - todayOutput: STAGE_COMPLETED + ACCEPTED events on bound steps for the UTC date window
-	 * - wipProgress: batch positions matching bound steps
-	 * - materials / staff / expectedOutput: always null until product owns sources (I11)
+	 * - todayOutput: first-success PrintJobs (SENT|SIMULATED, sequence 1) at this station today
+	 * - materials: positions on bound steps that have not had a first-success print here
+	 * - lotPlans: ceil(lot.requiredProductionQuantity / lot.labelPackSize) — Lot Progress
+	 *   denominator is the lot plan, never hop occupancy (how many sit at this PC)
+	 * - wipProgress: same positions (compat)
+	 * - staff / expectedOutput / targetQuantity: null until product owns sources
 	 */
 	router.get("/stations/:stationId/support", requireCapability("execution.read"), async (req, res) => {
 		try {
@@ -577,25 +580,24 @@ export function domainReadRouter(
 			const boundSteps = resolveStationBoundSteps(station);
 			const stepFilter = boundStepsOrFilter(boundSteps);
 
-			const [completedEvents, positions] = await Promise.all([
-				database.stageEvent.findMany({
+			const [todaysPrints, printedHere, positions] = await Promise.all([
+				database.printJob.findMany({
 					where: {
-						AND: [
-							stepFilter,
-							{
-								status: "ACCEPTED",
-								eventType: "STAGE_COMPLETED",
-								occurredAt: { gte: window.start, lt: window.end },
-							},
-						],
+						stationId: station.id,
+						sequence: 1,
+						status: { in: ["SENT", "SIMULATED"] },
+						occurredAt: { gte: window.start, lt: window.end },
 					},
-					select: {
-						id: true,
-						quantity: true,
-						quantityMagnitude: true,
-						stageId: true,
-						subStageId: true,
+					select: { id: true, batchId: true, quantity: true },
+				}),
+				database.printJob.findMany({
+					where: {
+						stationId: station.id,
+						sequence: 1,
+						status: { in: ["SENT", "SIMULATED"] },
 					},
+					// PrintJob.batchId is a scalar — there is no Prisma `batch` relation.
+					select: { batchId: true, quantity: true },
 				}),
 				database.batchPositionProjection.findMany({
 					where: stepFilter,
@@ -605,16 +607,30 @@ export function domainReadRouter(
 							select: {
 								id: true,
 								batchCode: true,
+								barcodeValue: true,
 								plannedQuantity: true,
 								status: true,
-								lot: { select: { id: true, lotCode: true } },
+								lot: {
+									select: {
+										id: true,
+										lotCode: true,
+										requiredProductionQuantity: true,
+										labelPackSize: true,
+									},
+								},
+								parts: {
+									orderBy: { partId: "asc" },
+									take: 1,
+									select: { part: { select: { partName: true } } },
+								},
 							},
 						},
 					},
 				}),
 			]);
 
-			const quantity = completedEvents.reduce((sum, event) => sum + eventQuantity(event), 0);
+			const issuedBatchIds = new Set(printedHere.map((job) => job.batchId));
+			const quantity = todaysPrints.reduce((sum, job) => sum + (Number(job.quantity) || 0), 0);
 			const wipBatches = positions.map((position) => {
 				const qty = Number(position.quantityMagnitude ?? 0);
 				const quantityAtStation = Number.isFinite(qty) ? qty : 0;
@@ -627,8 +643,12 @@ export function domainReadRouter(
 				return {
 					batchId: position.batch.id,
 					batchCode: position.batch.batchCode,
+					barcodeValue: position.batch.barcodeValue,
+					partName: position.batch.parts[0]?.part.partName ?? position.batch.batchCode,
 					lotId: position.batch.lot.id,
 					lotCode: position.batch.lot.lotCode,
+					lotRequiredQuantity: Number(position.batch.lot.requiredProductionQuantity) || 0,
+					lotBatchSize: Number(position.batch.lot.labelPackSize) || 0,
 					stageId: position.stageId,
 					subStageId: position.subStageId,
 					status: position.batch.status,
@@ -637,6 +657,75 @@ export function domainReadRouter(
 					progressRatio,
 				};
 			});
+			const materials = wipBatches
+				.filter((row) => !issuedBatchIds.has(row.batchId))
+				.map((row) => ({
+					batchId: row.batchId,
+					barcodeValue: row.barcodeValue,
+					partName: row.partName,
+					quantity: row.quantity,
+				}));
+
+			type LotPlanRow = {
+				lotId: string;
+				lotCode: string;
+				requiredQuantity: number;
+				batchSize: number;
+				plannedBatchCount: number;
+				completedBatchCount: number;
+				completedQuantity: number;
+			};
+			const lotPlanMap = new Map<string, LotPlanRow>();
+			const upsertLotPlan = (
+				lot:
+					| {
+							id: string;
+							lotCode: string;
+							requiredProductionQuantity?: number;
+							labelPackSize?: number;
+					  }
+					| undefined,
+				batchSizeFallback = 0,
+			) => {
+				if (!lot) return;
+				const requiredQuantity = Number(lot.requiredProductionQuantity) || 0;
+				const batchSize = (Number(lot.labelPackSize) || 0) || batchSizeFallback;
+				const plannedBatchCount =
+					requiredQuantity > 0 && batchSize > 0
+						? Math.ceil(requiredQuantity / batchSize)
+						: 0;
+				if (plannedBatchCount <= 0 || lotPlanMap.has(lot.id)) return;
+				lotPlanMap.set(lot.id, {
+					lotId: lot.id,
+					lotCode: lot.lotCode,
+					requiredQuantity,
+					batchSize,
+					plannedBatchCount,
+					completedBatchCount: 0,
+					completedQuantity: 0,
+				});
+			};
+
+			for (const row of wipBatches) {
+				upsertLotPlan(
+					{
+						id: row.lotId,
+						lotCode: row.lotCode,
+						requiredProductionQuantity: row.lotRequiredQuantity,
+						labelPackSize: row.lotBatchSize,
+					},
+					row.quantity,
+				);
+			}
+			for (const job of printedHere) {
+				const hop = wipBatches.find((row) => row.batchId === job.batchId);
+				if (!hop) continue;
+				const plan = lotPlanMap.get(hop.lotId);
+				if (!plan) continue;
+				plan.completedBatchCount += 1;
+				plan.completedQuantity += Number(job.quantity) || hop.quantity || 0;
+			}
+			const lotPlans = [...lotPlanMap.values()];
 
 			res.setHeader("Cache-Control", "no-store").json({
 				stationId: station.id,
@@ -646,7 +735,7 @@ export function domainReadRouter(
 				date: window.dateKey,
 				todayOutput: {
 					quantity,
-					eventCount: completedEvents.length,
+					eventCount: todaysPrints.length,
 					/** No schedule/target resource yet — always null (do not invent). */
 					targetQuantity: null,
 				},
@@ -655,11 +744,13 @@ export function domainReadRouter(
 					totalQuantity: wipBatches.reduce((sum, row) => sum + row.quantity, 0),
 					batches: wipBatches,
 				},
-				materials: null,
+				materials,
+				lotPlans,
 				staff: null,
 				expectedOutput: null,
 			});
-		} catch {
+		} catch (error) {
+			console.error("station support unavailable", error);
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station support data is unavailable.");
 		}
 	});
@@ -894,6 +985,8 @@ export function domainReadRouter(
 									lotName: true,
 									projectId: true,
 									partsListId: true,
+									requiredProductionQuantity: true,
+									labelPackSize: true,
 								},
 							},
 							parts: {
