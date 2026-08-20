@@ -36,6 +36,11 @@ export function actorId(req: Request): string {
 	return (req as Request & { canonicalSubject?: { id?: string } }).canonicalSubject?.id ?? "canonical-subject";
 }
 
+/** Injection is origin: no Receiving / In-scan. Live stage ids are hashes; match the catalog name. */
+export function isInjectionOriginStage(stage: { name?: string | null } | null | undefined): boolean {
+	return Boolean(stage?.name && /\binjection\b/i.test(stage.name));
+}
+
 export function actorDisplay(req: Request): string {
 	return (req as Request & { canonicalSubject?: { displayNameSnapshot?: string } }).canonicalSubject?.displayNameSnapshot ?? actorId(req);
 }
@@ -85,7 +90,7 @@ function isUniqueConstraint(error: unknown): boolean {
 }
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {
-	return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+	return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
 }
 
 function headersValue(value: unknown): Record<string, string> | null {

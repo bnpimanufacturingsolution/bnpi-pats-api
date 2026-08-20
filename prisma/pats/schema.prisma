@@ -367,6 +367,7 @@ model Stage {
   stationSteps              StationStep[]
   processRouteStages        ProcessRouteStage[]   @relation("ProcessRouteStageStage")
   qualityStageAssignments   QualityStageAssignment[]
+  lineLeaderAssignments     LineLeaderAssignment[]
 
   @@index([workflowGroupId])
 }
@@ -388,6 +389,7 @@ model SubStage {
   stationSteps                  StationStep[]
   processRouteStages            ProcessRouteStage[]   @relation("ProcessRouteStageSubStage")
   workProcesses                 WorkProcess[]
+  lineLeaderAssignments         LineLeaderAssignment[]
 }
 
 // A SubStage can be eligible under more than one Stage (the Capsulation/Assortment
@@ -826,6 +828,7 @@ model WorkProcess {
   booths         Booth[]
   dailySheets    MonitoringDailySheet[]
   stationBoards  MonitoringStationBoard[]
+  lineLeaderAssignments LineLeaderAssignment[]
 
   @@index([subStageId])
   @@index([name])
@@ -852,14 +855,45 @@ model Booth {
   @@index([stageId, subStageId])
 }
 
+enum LineLeaderAssignmentStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+/// Journey B encode scope. Not a fourth business role. Null subStage/process = whole parent.
+model LineLeaderAssignment {
+  id             String                      @id @default(uuid())
+  subjectId      String
+  subject        Subject                     @relation("LineLeaderAssignee", fields: [subjectId], references: [id])
+  workspaceId    String
+  stageId        String
+  stage          Stage                       @relation(fields: [stageId], references: [id])
+  subStageId     String?
+  subStage       SubStage?                   @relation(fields: [subStageId], references: [id])
+  workProcessId  String?
+  workProcess    WorkProcess?                @relation(fields: [workProcessId], references: [id])
+  status         LineLeaderAssignmentStatus  @default(ACTIVE)
+  assignedAt     DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+  rowVersion     Int                         @default(1)
+
+  @@index([subjectId, workspaceId, status])
+  @@index([stageId, subStageId])
+}
+
 /// Line Leader day encode (durable). payload mirrors app DailyMonitoringSheet fields.
 model MonitoringDailySheet {
   id              String       @id @default(uuid())
   workspaceId     String
   productionDate  String
   lineLabel       String
+  stageId         String?
+  subStageId      String?
   workProcessId   String?
   workProcess     WorkProcess? @relation(fields: [workProcessId], references: [id])
+  encodedBySubjectId String?
+  encodedBySubject   Subject?  @relation("DailySheetEncoder", fields: [encodedBySubjectId], references: [id])
   processName     String
   lineLeaderName  String       @default("")
   productName     String       @default("")
@@ -1177,6 +1211,8 @@ model Subject {
   qualityInspections          QualityInspection[]    @relation("QualityInspectionInspector")
   qualityDecisions            QualityDecision[]      @relation("QualityDecisionActor")
   qualityStageAssignments     QualityStageAssignment[] @relation("QualityStageAssignee")
+  lineLeaderAssignments       LineLeaderAssignment[]   @relation("LineLeaderAssignee")
+  encodedDailySheets          MonitoringDailySheet[]   @relation("DailySheetEncoder")
   releasedPlans               Project[]              @relation("PlanReleaseActor")
   createdBatches              Batch[]                @relation("BatchCreator")
   auditRecords                AuditRecord[]          @relation("AuditActor")

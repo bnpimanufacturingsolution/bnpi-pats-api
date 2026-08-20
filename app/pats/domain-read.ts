@@ -448,7 +448,11 @@ export function domainReadRouter(
 
 	router.get("/stations", requireCapability("execution.read"), async (req, res) => {
 		try {
-			const stations = await database.station.findMany({ orderBy: [{ displayOrder: "asc" }, { id: "asc" }], include: { boundSteps: true } });
+			const stations = await database.station.findMany({
+				where: { isEnabled: true },
+				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+				include: { boundSteps: true },
+			});
 			res.setHeader("Cache-Control", "no-store").json({ data: stations });
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station configuration is unavailable.");
@@ -1107,13 +1111,31 @@ export function domainReadRouter(
 
 	router.get("/quality-inspections", requireCapability("quality.read"), async (req, res) => {
 		try {
+			const requestQuery = query(req);
+			const statusFilter = requestQuery.status;
+			if (Object.keys(requestQuery).some((key) => key !== "status")) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The collection query is invalid.");
+				return;
+			}
+			if (Array.isArray(statusFilter)) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The collection query is invalid.");
+				return;
+			}
+			const allowedStatuses = new Set(["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
+			if (statusFilter && !allowedStatuses.has(statusFilter)) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The collection query is invalid.");
+				return;
+			}
 			const allowedStageIds = await listAllowedQualityStageIds(database, actorId(req));
 			if (allowedStageIds.length === 0) {
 				res.setHeader("Cache-Control", "no-store").json({ data: [] });
 				return;
 			}
 			const inspections = await database.qualityInspection.findMany({
-				where: { stageId: { in: allowedStageIds } },
+				where: {
+					stageId: { in: allowedStageIds },
+					...(statusFilter ? { status: statusFilter } : {}),
+				},
 				orderBy: [{ createdAt: "desc" }, { id: "desc" }],
 				include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] }, batch: { select: { id: true, batchCode: true, lotId: true, plannedQuantity: true, parts: { orderBy: [{ partId: "asc" }], take: 1, select: { partId: true, quantity: true, quantityMagnitude: true, quantityUom: true, part: { select: { id: true, partCode: true, partName: true } } } } } } },
 			});

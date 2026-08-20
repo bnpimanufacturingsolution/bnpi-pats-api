@@ -568,6 +568,26 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.status).to.equal(400);
 	});
 
+	it("lists only enabled stations", async () => {
+		let receivedWhere: unknown;
+		const app = appFor({
+			station: {
+				findMany: async (args: { where?: Record<string, unknown> }) => {
+					receivedWhere = args.where;
+					return [];
+				},
+			},
+		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/stations")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedWhere).to.deep.equal({ isEnabled: true });
+		expect(response.body).to.deep.equal({ data: [] });
+	});
+
 	it("returns dashboard counts from active server batches and their lot ownership", async () => {
 		const app = appFor({
 			project: { count: async () => 4 },

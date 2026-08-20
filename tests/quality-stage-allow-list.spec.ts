@@ -186,6 +186,70 @@ describe("Journey D quality stage allow-list", () => {
 		expect(response.body.decision).to.equal("PASSED");
 	});
 
+	it("rejects FAILED without a reasonCode", async () => {
+		const database = idempotentDatabase({
+			qualityStageAssignment: {
+				findMany: async () => [{ stageId: "stage-decoration" }],
+			},
+			qualityInspection: {
+				findUnique: async () => ({
+					id: "inspection-1",
+					stageId: "stage-decoration",
+					status: "OPEN",
+					rowVersion: 1,
+				}),
+			},
+			qualityDecision: { create: async () => ({ id: "decision-1", decision: "FAILED" }) },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		});
+		const app = commandApp(database);
+		const response = await request(app)
+			.post("/api/v1/quality-inspections/inspection-1/decisions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "qc-fail-no-reason")
+			.set("If-Match", '"1"')
+			.send({ decision: "FAILED" });
+
+		expect(response.status).to.equal(422);
+	});
+
+	it("records FAILED when reasonCode is present", async () => {
+		let decided = 0;
+		const database = idempotentDatabase({
+			qualityStageAssignment: {
+				findMany: async () => [{ stageId: "stage-decoration" }],
+			},
+			qualityInspection: {
+				findUnique: async () => ({
+					id: "inspection-1",
+					stageId: "stage-decoration",
+					status: "OPEN",
+					rowVersion: 1,
+				}),
+				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
+			},
+			qualityDecision: {
+				create: async () => {
+					decided += 1;
+					return { id: "decision-1", decision: "FAILED" };
+				},
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		});
+		const app = commandApp(database);
+		const response = await request(app)
+			.post("/api/v1/quality-inspections/inspection-1/decisions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "qc-fail-reason")
+			.set("If-Match", '"1"')
+			.send({ decision: "FAILED", reasonCode: "COSMETIC" });
+
+		expect(response.status).to.equal(201);
+		expect(decided).to.equal(1);
+	});
+
 	it("rejects decide when the inspection stage is not assigned", async () => {
 		let decided = 0;
 		const database = idempotentDatabase({
@@ -243,7 +307,33 @@ describe("Journey D quality stage allow-list", () => {
 			.set("Authorization", "Bearer read-token");
 
 		expect(response.status).to.equal(200);
-		expect(listWhere).to.deep.equal({ stageId: { in: ["stage-decoration"] } });
+		expect(listWhere).to.deep.include({ stageId: { in: ["stage-decoration"] } });
+	});
+
+	it("filters the quality inspection list by OPEN status", async () => {
+		let listWhere: Record<string, unknown> | undefined;
+		const app = readApp({
+			qualityStageAssignment: {
+				findMany: async () => [{ stageId: "stage-decoration" }],
+			},
+			qualityInspection: {
+				findMany: async (args: { where?: Record<string, unknown> }) => {
+					listWhere = args.where;
+					return [];
+				},
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/quality-inspections")
+			.query({ status: "OPEN" })
+			.set("Authorization", "Bearer read-token");
+
+		expect(response.status).to.equal(200);
+		expect(listWhere).to.deep.equal({
+			stageId: { in: ["stage-decoration"] },
+			status: "OPEN",
+		});
 	});
 
 	it("resolves a scanned batch code and creates an open inspection", async () => {

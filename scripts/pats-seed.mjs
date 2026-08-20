@@ -168,7 +168,7 @@ async function seedProfile(tx) {
 		passwordHash,
 	);
 	// Line Leader = floor operator + daily-metrics.encode assignment (not a fourth business role).
-	await upsertSubject(
+	const lineLeader = await upsertSubject(
 		tx,
 		"subject-lineleader",
 		`${profile}.lineleader`,
@@ -185,7 +185,7 @@ async function seedProfile(tx) {
 		["quality-reviewer"],
 		passwordHash,
 	);
-	await upsertSubject(
+	const admin = await upsertSubject(
 		tx,
 		"subject-admin",
 		`${profile}.admin`,
@@ -564,6 +564,7 @@ async function seedProfile(tx) {
 
 	// ── Line configuration (factory stage vocabulary) ────────────────────────
 	const workflowId = stableId("workflow-main-production");
+	const warehouseWorkflowId = stableId("workflow-warehouse");
 	const injectionStageId = stableId("stage-injection");
 	const decorationStageId = stableId("stage-decoration");
 	const assemblyStageId = stableId("stage-assembly");
@@ -577,7 +578,10 @@ async function seedProfile(tx) {
 	const retiredQualityCheckProcessId = stableId("work-process-quality-check");
 	const subSubAssemblyId = stableId("substage-sub-assembly");
 	const subAssortmentId = stableId("substage-assortment");
+	const subCapsulationId = stableId("substage-capsulation");
+	const subSealingId = stableId("substage-sealing");
 	const subMainPackingId = stableId("substage-main-packing");
+	const subPalletizingId = stableId("substage-palletizing");
 	// Device install default (D-008): one Station per SubStage when present; stage-level otherwise.
 	// Keep legacy keys for injection/decoration-primary so existing station ids stay stable.
 	const injectionStationId = stableId("station-injection-01");
@@ -607,17 +611,36 @@ async function seedProfile(tx) {
 			isSystemSeed: true,
 		},
 	});
+	await tx.workflowGroup.upsert({
+		where: { id: warehouseWorkflowId },
+		update: {
+			name: "Warehouse",
+			linkageMode: "STANDALONE",
+			displayOrder: 2,
+			lifecycleStatus: "PUBLISHED",
+			isSystemSeed: true,
+		},
+		create: {
+			id: warehouseWorkflowId,
+			projectId: null,
+			name: "Warehouse",
+			linkageMode: "STANDALONE",
+			displayOrder: 2,
+			lifecycleStatus: "PUBLISHED",
+			isSystemSeed: true,
+		},
+	});
 
-	for (const [id, name, displayOrder] of [
-		[injectionStageId, "Injection", 1],
-		[decorationStageId, "Decoration", 2],
-		[assemblyStageId, "Assembly", 3],
-		[warehouseStageId, "Warehouse", 4],
+	for (const [id, name, displayOrder, groupId] of [
+		[injectionStageId, "Injection", 1, workflowId],
+		[decorationStageId, "Decoration", 2, workflowId],
+		[assemblyStageId, "Assembly", 3, workflowId],
+		[warehouseStageId, "Warehouse", 1, warehouseWorkflowId],
 	]) {
 		await tx.stage.upsert({
 			where: { id },
-			update: { workflowGroupId: workflowId, name, displayOrder, isSystemSeed: true },
-			create: { id, workflowGroupId: workflowId, name, displayOrder, isSystemSeed: true },
+			update: { workflowGroupId: groupId, name, displayOrder, isSystemSeed: true },
+			create: { id, workflowGroupId: groupId, name, displayOrder, isSystemSeed: true },
 		});
 	}
 
@@ -656,8 +679,11 @@ async function seedProfile(tx) {
 		[subMaskSprayId, "Mask Spray", 2, { isConfigurable: true }],
 		[subTampoId, "Tampo", 3, { isConfigurable: true }],
 		[subSubAssemblyId, "Sub-Assembly", 1, { isConfigurable: true }],
+		[subCapsulationId, "Capsulation", 2, { isConfigurable: true }],
 		[subAssortmentId, "Assortment", 3, { isConfigurable: true }],
-		[subMainPackingId, "Main Packing", 1, { isConfigurable: true }],
+		[subSealingId, "Sealing", 1, { isConfigurable: true }],
+		[subMainPackingId, "Main Packing", 5, { isConfigurable: true }],
+		[subPalletizingId, "Palletizing", 6, { isConfigurable: false, isMandatoryCheckpoint: true }],
 	]) {
 		await tx.subStage.upsert({
 			where: { id },
@@ -686,8 +712,13 @@ async function seedProfile(tx) {
 		[decorationStageId, subMaskSprayId],
 		[decorationStageId, subTampoId],
 		[assemblyStageId, subSubAssemblyId],
+		[assemblyStageId, subCapsulationId],
 		[assemblyStageId, subAssortmentId],
+		[warehouseStageId, subCapsulationId],
+		[warehouseStageId, subAssortmentId],
+		[warehouseStageId, subSealingId],
 		[warehouseStageId, subMainPackingId],
+		[warehouseStageId, subPalletizingId],
 	]) {
 		await tx.subStageEligibility.upsert({
 			where: { stageId_subStageId: { stageId, subStageId } },
@@ -728,14 +759,14 @@ async function seedProfile(tx) {
 		});
 	}
 
-	for (const [id, name, stationCode, stageId, displayOrder] of [
-		[injectionStationId, "Injection · Molding", "ST-INJ-01", injectionStageId, 1],
-		[decorationStationId, "Decoration · Full Spray", "ST-DEC-FS", decorationStageId, 2],
-		[decorationMaskStationId, "Decoration · Mask Spray", "ST-DEC-MS", decorationStageId, 3],
-		[decorationTampoStationId, "Decoration · Tampo", "ST-DEC-TP", decorationStageId, 4],
-		[assemblySubAssemblyStationId, "Assembly · Sub-Assembly", "ST-ASM-SUB", assemblyStageId, 5],
-		[assemblyAssortmentStationId, "Assembly · Assortment", "ST-ASM-AST", assemblyStageId, 7],
-		[warehouseStationId, "Warehouse · Main Packing", "ST-WH-PK", warehouseStageId, 8],
+	for (const [id, name, stationCode, stageId, displayOrder, enabled] of [
+		[injectionStationId, "Injection · Molding", "ST-INJ-01", injectionStageId, 1, true],
+		[decorationStationId, "Decoration · Full Spray", "ST-DEC-FS", decorationStageId, 2, true],
+		[decorationMaskStationId, "Decoration · Mask Spray", "ST-DEC-MS", decorationStageId, 3, true],
+		[decorationTampoStationId, "Decoration · Tampo", "ST-DEC-TP", decorationStageId, 4, true],
+		[assemblySubAssemblyStationId, "Assembly · Sub-Assembly", "ST-ASM-SUB", assemblyStageId, 5, true],
+		[assemblyAssortmentStationId, "Assembly · Assortment", "ST-ASM-AST", assemblyStageId, 7, true],
+		[warehouseStationId, "Warehouse · Main Packing", "ST-WH-PK", warehouseStageId, 8, false],
 	]) {
 		await tx.station.upsert({
 			where: { id },
@@ -746,7 +777,7 @@ async function seedProfile(tx) {
 				operationalContextKey: "PATS",
 				stageId,
 				displayOrder,
-				isEnabled: true,
+				isEnabled: enabled,
 			},
 			create: {
 				id,
@@ -756,7 +787,7 @@ async function seedProfile(tx) {
 				operationalContextKey: "PATS",
 				stageId,
 				displayOrder,
-				isEnabled: true,
+				isEnabled: enabled,
 			},
 		});
 	}
@@ -778,18 +809,29 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// Work processes under sub-stages (catalog leaf; not stations). Bridge names match current SubStages
-	// until Option A reshape (intermediate SubStage + finer processes).
-	const processFullSprayId = stableId("work-process-full-spray");
-	const processMaskSprayId = stableId("work-process-mask-spray");
-	const processTampoId = stableId("work-process-tampo");
-	const processMainPackingId = stableId("work-process-main-packing");
+	// Work processes = catalog leaves under SubStages (not Station PCs, not SubStage clones).
+	// Freeze: .wwg/reports/2026-08-20-audit-tickets-implementation/00-pass-0-chain-contract.md
+	// Legacy ids renamed in place so monitoring/booth FKs do not orphan.
+	const processFullSprayId = stableId("work-process-full-spray"); // Full Spray · Body · Red
+	const processFsHeadRedId = stableId("work-process-fs-head-red");
+	const processFsLeafGreenId = stableId("work-process-fs-leaf-green");
+	const processFsBodyWhiteId = stableId("work-process-fs-body-white");
+	const processMaskSprayId = stableId("work-process-mask-spray"); // Mask Spray · Side Body
+	const processMsFaceClearId = stableId("work-process-ms-face-clear");
+	const processTampoId = stableId("work-process-tampo"); // Tampo · Face · White
+	const processTampoEyeId = stableId("work-process-tampo-eye");
+	const processMainPackingId = stableId("work-process-main-packing"); // Main Packing · Capsule
 
 	for (const [id, subStageId, name, displayOrder, labelledCycleTimeSec] of [
-		[processFullSprayId, subFullSprayId, "Full Spray", 1, 12],
-		[processMaskSprayId, subMaskSprayId, "Mask Spray", 2, 10],
-		[processTampoId, subTampoId, "Tampo", 3, 6],
-		[processMainPackingId, subMainPackingId, "Main Packing", 1, null],
+		[processFullSprayId, subFullSprayId, "Full Spray · Body · Red", 1, 1],
+		[processFsHeadRedId, subFullSprayId, "Full Spray · Head · Red", 2, 1],
+		[processFsLeafGreenId, subFullSprayId, "Full Spray · Leaf · Green", 3, 1],
+		[processFsBodyWhiteId, subFullSprayId, "Full Spray · Body · White", 4, 1],
+		[processMaskSprayId, subMaskSprayId, "Mask Spray · Side Body", 1, 10],
+		[processMsFaceClearId, subMaskSprayId, "Mask Spray · Face · Clear", 2, 10],
+		[processTampoId, subTampoId, "Tampo · Face · White", 1, 6],
+		[processTampoEyeId, subTampoId, "Tampo · Eye", 2, 6],
+		[processMainPackingId, subMainPackingId, "Main Packing · Capsule", 1, null],
 	]) {
 		await tx.workProcess.upsert({
 			where: { id },
@@ -809,6 +851,32 @@ async function seedProfile(tx) {
 				isEnabled: true,
 				isSystemSeed: true,
 				labelledCycleTimeSec,
+			},
+		});
+	}
+
+	for (const [key, stageId, subStageId] of [
+		["lla-lineleader-deco-fs", decorationStageId, subFullSprayId],
+		["lla-lineleader-deco-ms", decorationStageId, subMaskSprayId],
+	]) {
+		await tx.lineLeaderAssignment.upsert({
+			where: { id: stableId(key) },
+			update: {
+				subjectId: lineLeader.id,
+				workspaceId: qualityWorkspaceId,
+				stageId,
+				subStageId,
+				workProcessId: null,
+				status: "ACTIVE",
+			},
+			create: {
+				id: stableId(key),
+				subjectId: lineLeader.id,
+				workspaceId: qualityWorkspaceId,
+				stageId,
+				subStageId,
+				workProcessId: null,
+				status: "ACTIVE",
 			},
 		});
 	}
@@ -852,6 +920,13 @@ async function seedProfile(tx) {
 	});
 	await tx.station.updateMany({
 		where: { id: retiredQualityCheckStationId },
+		data: { isEnabled: false },
+	});
+	// Additive leftover: older seeds created "Warehouse Station 01" as a barcode desk.
+	await tx.station.updateMany({
+		where: {
+			OR: [{ id: warehouseStationId }, { name: { contains: "Warehouse", mode: "insensitive" } }],
+		},
 		data: { isEnabled: false },
 	});
 
@@ -1470,9 +1545,9 @@ async function seedProfile(tx) {
 	// Inventory transactions with real part codes
 	const invDefs = [
 		["inv-1", "ISSUANCE", "batch-av-dec", "B251-01-01", injectionStageId, decorationStageId, tray, tray - 2, 0, 4],
-		["inv-2", "RECEIVING", "batch-av-inj", "B251-01-01", null, injectionStageId, tray, tray, 0, 1],
+		["inv-2", "ISSUANCE", "batch-av-inj", "B251-01-01", null, injectionStageId, tray, tray, 0, 1],
 		["inv-3", "ISSUANCE", "batch-hd-dec", "B251-01-10", injectionStageId, decorationStageId, tray, tray - 2, 1, 2],
-		["inv-4", "RECEIVING", "batch-tc-inj", "B251-01-11", null, injectionStageId, tray, tray - 2, 1, 3],
+		["inv-4", "ISSUANCE", "batch-tc-inj", "B251-01-11", null, injectionStageId, tray, tray - 2, 1, 3],
 		["inv-5", "ISSUANCE", "batch-av-wh", "B251-01-01", assemblyStageId, warehouseStageId, tray, tray, 2, 3],
 	];
 	for (const [key, type, batchKey, partCode, fromStageId, toStageId, expected, actual, day, hour] of invDefs) {
@@ -2224,7 +2299,7 @@ async function seedProfile(tx) {
 		lineId: "line-main",
 		lineLabel: "Main line",
 		processId: processFullSprayId,
-		processName: "Full Spray",
+		processName: "Full Spray · Body · Red",
 		lineLeaderName: "DEMO Line Leader",
 		productId: productB251Id,
 		productName: CLIENT_B251.productName,
@@ -2251,7 +2326,7 @@ async function seedProfile(tx) {
 		lineId: "line-main",
 		lineLabel: "Main line",
 		processId: processMaskSprayId,
-		processName: "Mask Spray",
+		processName: "Mask Spray · Side Body",
 		lineLeaderName: "DEMO Line Leader",
 		productId: productB251Id,
 		productName: CLIENT_B251.productName,
@@ -2336,8 +2411,8 @@ async function seedProfile(tx) {
 		modelId: "01",
 		modelName: "Avocado Burger",
 		processId: processFullSprayId,
-		processName: "Full Spray",
-		labelledCycleTimeSec: 12,
+		processName: "Full Spray · Body · Red",
+		labelledCycleTimeSec: 1,
 		targetPerHour: 300,
 		targetPerDay: 2250,
 		slots: boardSlots,
@@ -2433,7 +2508,7 @@ async function seedProfile(tx) {
 
 	return {
 		profile,
-		subjects: 4,
+		subjects: 5,
 		primaryProduct: CLIENT_B251.productCode,
 		secondaryProduct: CLIENT_B308.productCode,
 		productName: CLIENT_B251.productName,
@@ -2449,7 +2524,7 @@ async function seedProfile(tx) {
 		lots: lotDefs.length + b308LotDefs.length,
 		batches: batchDefs.length + b308BatchDefs.length,
 		stations: 8,
-		workProcesses: 5,
+		workProcesses: 9,
 		booths: 2,
 		monitoringDailySheets: 2,
 		monitoringStationBoards: 2,

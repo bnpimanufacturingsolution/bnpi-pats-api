@@ -214,6 +214,7 @@ describe("canonical PATS command contract", () => {
 			partsList: {
 				findUnique: async () => ({ steps: [{ id: "step-1", partId: "part-1", stageId: "stage-1", subStageId: null, stepOrder: 1 }] }),
 			},
+			stage: { findUnique: async () => ({ name: "Decoration" }) },
 			stageEvent: {
 				create: async () => ({ id: "event-1", batchId: "batch-1", status: "ACCEPTED" }),
 			},

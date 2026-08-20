@@ -16,6 +16,7 @@ import {
 	actorId,
 	commandError,
 	executeCommand,
+	isInjectionOriginStage,
 	parseCommandBody,
 	recordCommandSuccess,
 	requireIfMatch,
@@ -156,11 +157,17 @@ const qualityInspectionCreateSchema = z.object({
 	evidence: z.record(z.string(), z.unknown()).nullable().optional(),
 }).strict();
 
-const qualityDecisionSchema = z.object({
-	decision: z.enum(["PASSED", "FAILED", "HOLD"]),
-	reasonCode: z.string().trim().max(80).nullable().optional(),
-	reasonNote: z.string().trim().max(500).nullable().optional(),
-}).strict();
+const qualityDecisionSchema = z
+	.object({
+		decision: z.enum(["PASSED", "FAILED", "HOLD"]),
+		reasonCode: z.string().trim().max(80).nullable().optional(),
+		reasonNote: z.string().trim().max(500).nullable().optional(),
+	})
+	.strict()
+	.refine((body) => body.decision !== "FAILED" || Boolean(body.reasonCode && body.reasonCode.length > 0), {
+		message: "A fail reason is required when the decision is FAILED.",
+		path: ["reasonCode"],
+	});
 
 const routingViolationResolutionSchema = z.object({
 	resolutionNote: z.string().trim().min(1).max(500),
@@ -241,6 +248,35 @@ function notFound(detail: string): never {
 
 function conflict(detail: string): never {
 	throw new CommandProblem(409, "urn:bandai:pats:problem:conflict", "Conflict", detail);
+}
+
+async function assertLineLeaderSheetCoverage(
+	transaction: CommandTransaction,
+	subjectId: string,
+	workspaceId: string,
+	sheet: { stageId: string | null; subStageId: string | null; workProcessId: string | null },
+): Promise<void> {
+	const assignments = await transaction.lineLeaderAssignment.findMany({
+		where: { subjectId, workspaceId, status: "ACTIVE" },
+	});
+	if (assignments.length === 0) return;
+	if (!sheet.stageId) {
+		conflict("Line Leader encode requires a stage on the day sheet.");
+	}
+	const covered = assignments.some(
+		(assignment) =>
+			assignment.stageId === sheet.stageId &&
+			(assignment.subStageId === null || assignment.subStageId === sheet.subStageId) &&
+			(assignment.workProcessId === null || assignment.workProcessId === sheet.workProcessId),
+	);
+	if (!covered) {
+		throw new CommandProblem(
+			403,
+			"urn:bandai:pats:problem:not-allowed-stage",
+			"Not Allowed",
+			"This Line Leader assignment does not cover this day sheet.",
+		);
+	}
 }
 
 function staleVersion(): never {
@@ -603,6 +639,15 @@ export function commandRouter(
 		try {
 			const body = parseCommandBody(req, stageEventCreateSchema);
 			const response = await executeCommand(database, req, "stageEventRecord", body, async (transaction) => {
+				if (body.eventType === "STAGE_SCAN_RECORDED") {
+					const attemptedStage = await transaction.stage.findUnique({
+						where: { id: body.stageId },
+						select: { name: true },
+					});
+					if (isInjectionOriginStage(attemptedStage)) {
+						conflict("Injection is origin: Receiving Scanning (In) is not recorded here. Quantity is created on Issuance / print.");
+					}
+				}
 				const context = await batchRouteContext(transaction, body.batchId);
 				const attemptedSubStageId = body.subStageId ?? null;
 				const accepted = context.expected.stageId === body.stageId && context.expected.subStageId === attemptedSubStageId;
@@ -760,6 +805,15 @@ export function commandRouter(
 				if (body.materialRequirementId) {
 					const requirement = await transaction.materialRequirement.findFirst({ where: { id: body.materialRequirementId, projectId: batch.lot.projectId }, select: { id: true } });
 					if (!requirement) notFound("The requested material requirement was not found.");
+				}
+				if (body.transactionType === "RECEIVING") {
+					const toStage = await transaction.stage.findUnique({
+						where: { id: body.toStageId },
+						select: { name: true },
+					});
+					if (isInjectionOriginStage(toStage)) {
+						conflict("Injection is origin: Receiving is not recorded here. First quantity is Issuance / print.");
+					}
 				}
 				const transactionRecord = await transaction.inventoryTransaction.create({
 					data: {
@@ -956,11 +1010,35 @@ export function commandRouter(
 				const productionDate = String(payload.date ?? "");
 				const processName = String(payload.processName ?? "");
 				const slotsJson = payload.slots ?? [];
+				const workProcessId =
+					typeof payload.processId === "string" && payload.processId.length > 0 ? payload.processId : null;
+				let stageId = typeof payload.stageId === "string" && payload.stageId.length > 0 ? payload.stageId : null;
+				let subStageId =
+					typeof payload.subStageId === "string" && payload.subStageId.length > 0 ? payload.subStageId : null;
+				if (workProcessId && (!stageId || !subStageId)) {
+					const process = await transaction.workProcess.findUnique({
+						where: { id: workProcessId },
+						select: { subStageId: true, subStage: { select: { eligibleStages: { select: { stageId: true } } } } },
+					});
+					if (process) {
+						subStageId = subStageId ?? process.subStageId;
+						stageId = stageId ?? process.subStage.eligibleStages[0]?.stageId ?? null;
+					}
+				}
+				const workspaceId = process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS";
+				await assertLineLeaderSheetCoverage(transaction, actorId(req), workspaceId, {
+					stageId,
+					subStageId,
+					workProcessId,
+				});
 				const data = {
-					workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS",
+					workspaceId,
 					productionDate,
 					lineLabel: String(payload.lineLabel ?? ""),
-					workProcessId: typeof payload.processId === "string" && payload.processId.length > 0 ? payload.processId : null,
+					stageId,
+					subStageId,
+					workProcessId,
+					encodedBySubjectId: actorId(req),
 					processName,
 					lineLeaderName: String(payload.lineLeaderName ?? ""),
 					productName: String(payload.productName ?? ""),
@@ -995,7 +1073,7 @@ export function commandRouter(
 				});
 				return {
 					status: existing ? 200 : 201,
-					body: sheet.payloadJson,
+					body: sheet.payloadJson ?? { id: sheet.id },
 					headers: {
 						Location: `/api/v1/monitoring/daily-sheets/${sheet.id}`,
 						ETag: `"${sheet.rowVersion}"`,
