@@ -5,7 +5,7 @@
 	"scripts": {
 		"prepare": "husky",
 		"dev": "node scripts/dev.mjs",
-		"dev:api": "dotenv tsx watch index.ts",
+		"dev:api": "dotenv node scripts/pats-prisma-migrate-deploy.mjs && dotenv tsx watch index.ts",
 		"dev:infra": "node scripts/ensure-docker-infra.mjs",
 		"start": "dotenv tsx index.ts",
 		"lint": "eslint app/**/*.ts index.ts",

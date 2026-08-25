@@ -50,6 +50,13 @@ function problem(req: Request, res: Response, status: number, type: string, titl
 	res.type("application/problem+json").status(status).json({ type, title, status, detail, instance: instance(req) });
 }
 
+// Dependency failures must be diagnosable: log the underlying cause server-side
+// (schema drift, connectivity) while the client keeps the generic 503 problem.
+function dependencyProblem(req: Request, res: Response, detail: string, error: unknown): void {
+	console.error(`[pats-domain-read] ${detail}`, error);
+	problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", detail);
+}
+
 function query(req: Request): Record<string, string | string[] | undefined> {
 	return req.query as Record<string, string | string[] | undefined>;
 }
@@ -301,8 +308,8 @@ export function domainReadRouter(
 				releasedAt: date(plan.releasedAt),
 			}));
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(data, page, totalItems));
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production plan data is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS production plan data is unavailable.", error);
 		}
 	});
 
@@ -414,8 +421,8 @@ export function domainReadRouter(
 					})),
 				})),
 			});
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production plan data is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS production plan data is unavailable.", error);
 		}
 	});
 
@@ -423,8 +430,8 @@ export function domainReadRouter(
 		try {
 			const groups = await database.workflowGroup.findMany({ orderBy: [{ displayOrder: "asc" }, { id: "asc" }], include: { stages: { orderBy: [{ displayOrder: "asc" }, { id: "asc" }], include: { subStageLinks: { include: { subStage: true } } } } } });
 			res.setHeader("Cache-Control", "no-store").json({ data: groups });
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS workflow configuration is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS workflow configuration is unavailable.", error);
 		}
 	});
 
@@ -435,8 +442,8 @@ export function domainReadRouter(
 				include: { workflowGroup: { select: { id: true, name: true } }, subStageLinks: { include: { subStage: true } } },
 			});
 			res.setHeader("Cache-Control", "no-store").json({ data: stages });
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS stage configuration is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS stage configuration is unavailable.", error);
 		}
 	});
 
@@ -447,8 +454,8 @@ export function domainReadRouter(
 				include: { eligibleStages: { include: { stage: { select: { id: true, name: true } } } } },
 			});
 			res.setHeader("Cache-Control", "no-store").json({ data: subStages });
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS sub-stage configuration is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS sub-stage configuration is unavailable.", error);
 		}
 	});
 
@@ -458,8 +465,8 @@ export function domainReadRouter(
 				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
 			});
 			res.setHeader("Cache-Control", "no-store").json({ data: lines });
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production-line configuration is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS production-line configuration is unavailable.", error);
 		}
 	});
 
@@ -490,8 +497,8 @@ export function domainReadRouter(
 				},
 			});
 			res.setHeader("Cache-Control", "no-store").json({ data: stations });
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station configuration is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS station configuration is unavailable.", error);
 		}
 	});
 
@@ -574,8 +581,8 @@ export function domainReadRouter(
 					resolved: violation.resolved,
 				})),
 			});
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station history data is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS station history data is unavailable.", error);
 		}
 	});
 
@@ -791,7 +798,7 @@ export function domainReadRouter(
 			});
 		} catch (error) {
 			console.error("station support unavailable", error);
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station support data is unavailable.");
+			dependencyProblem(req, res, "PATS station support data is unavailable.", error);
 		}
 	});
 
@@ -806,8 +813,8 @@ export function domainReadRouter(
 				},
 			});
 			res.setHeader("Cache-Control", "no-store").json({ data: stationSteps });
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station-step configuration is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS station-step configuration is unavailable.", error);
 		}
 	});
 
@@ -845,8 +852,8 @@ export function domainReadRouter(
 					isEnabled: process.isEnabled,
 				})),
 			});
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS work-process catalog is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS work-process catalog is unavailable.", error);
 		}
 	});
 
@@ -881,8 +888,8 @@ export function domainReadRouter(
 					isEnabled: booth.isEnabled,
 				})),
 			});
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS booth catalog is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS booth catalog is unavailable.", error);
 		}
 	});
 
@@ -894,8 +901,8 @@ export function domainReadRouter(
 			res.setHeader("Cache-Control", "no-store").json({
 				data: sheets.map((sheet) => sheet.payloadJson),
 			});
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS monitoring daily sheets are unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS monitoring daily sheets are unavailable.", error);
 		}
 	});
 
@@ -909,8 +916,8 @@ export function domainReadRouter(
 			res.setHeader("Cache-Control", "no-store")
 				.setHeader("ETag", `"${sheet.rowVersion}"`)
 				.json(sheet.payloadJson);
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS monitoring daily sheets are unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS monitoring daily sheets are unavailable.", error);
 		}
 	});
 
@@ -922,8 +929,8 @@ export function domainReadRouter(
 			res.setHeader("Cache-Control", "no-store").json({
 				data: boards.map((board) => board.payloadJson),
 			});
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS monitoring station boards are unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS monitoring station boards are unavailable.", error);
 		}
 	});
 
@@ -937,8 +944,8 @@ export function domainReadRouter(
 			res.setHeader("Cache-Control", "no-store")
 				.setHeader("ETag", `"${board.rowVersion}"`)
 				.json(board.payloadJson);
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS monitoring station boards are unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS monitoring station boards are unavailable.", error);
 		}
 	});
 
@@ -946,8 +953,8 @@ export function domainReadRouter(
 		try {
 			const instructions = await database.workInstruction.findMany({ orderBy: [{ stageId: "asc" }, { subStageId: "asc" }, { version: "desc" }, { id: "asc" }] });
 			res.setHeader("Cache-Control", "no-store").json({ data: instructions });
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS work-instruction configuration is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS work-instruction configuration is unavailable.", error);
 		}
 	});
 
@@ -962,8 +969,8 @@ export function domainReadRouter(
 				database.batch.findMany({ where, skip: (page.page - 1) * page.limit, take: page.limit, orderBy: [{ createdAt: "desc" }, { id: "asc" }], include: { lot: { select: { id: true, lotCode: true, projectId: true } }, positionProjection: true, parts: true } }),
 			]);
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(batches, page, totalItems));
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS batch data is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS batch data is unavailable.", error);
 		}
 	});
 
@@ -982,7 +989,7 @@ export function domainReadRouter(
 				sendCommandProblem(req, res, error);
 				return;
 			}
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS batch resolve is unavailable.");
+			dependencyProblem(req, res, "PATS batch resolve is unavailable.", error);
 		}
 	});
 
@@ -1001,8 +1008,8 @@ export function domainReadRouter(
 					occurredAt: job.occurredAt.toISOString(),
 				})),
 			});
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS print jobs are unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS print jobs are unavailable.", error);
 		}
 	});
 
@@ -1086,8 +1093,8 @@ export function domainReadRouter(
 					})),
 				})),
 			});
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS batch position data is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS batch position data is unavailable.", error);
 		}
 	});
 
@@ -1102,8 +1109,8 @@ export function domainReadRouter(
 				database.stageEvent.findMany({ where, skip: (page.page - 1) * page.limit, take: page.limit, orderBy: [{ occurredAt: "desc" }, { id: "desc" }], include: { actorSubject: { select: { id: true, displayNameSnapshot: true } } } }),
 			]);
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(events.map((event) => ({ ...event, quantityMagnitude: decimal(event.quantityMagnitude), occurredAt: event.occurredAt.toISOString() })), page, totalItems));
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS stage event data is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS stage event data is unavailable.", error);
 		}
 	});
 
@@ -1118,8 +1125,8 @@ export function domainReadRouter(
 				database.inventoryTransaction.findMany({ where, skip: (page.page - 1) * page.limit, take: page.limit, orderBy: [{ recordedAt: "desc" }, { id: "desc" }], include: { recordedBySubject: { select: { id: true, displayNameSnapshot: true } } } }),
 			]);
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(transactions.map((transaction) => ({ ...transaction, expectedQuantityMagnitude: decimal(transaction.expectedQuantityMagnitude), actualQuantityMagnitude: decimal(transaction.actualQuantityMagnitude), recordedAt: transaction.recordedAt.toISOString() })), page, totalItems));
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS inventory transaction data is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS inventory transaction data is unavailable.", error);
 		}
 	});
 
@@ -1127,7 +1134,7 @@ export function domainReadRouter(
 		try {
 			const violations = await database.routingViolation.findMany({ orderBy: [{ detectedAt: "desc" }, { id: "desc" }] });
 			res.setHeader("Cache-Control", "no-store").json({ data: violations });
-		} catch {
+		} catch (error) {
 			problem(_req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS routing violation data is unavailable.");
 		}
 	});
@@ -1147,7 +1154,7 @@ export function domainReadRouter(
 				sendCommandProblem(req, res, error);
 				return;
 			}
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS quality resolve is unavailable.");
+			dependencyProblem(req, res, "PATS quality resolve is unavailable.", error);
 		}
 	});
 
@@ -1185,8 +1192,8 @@ export function domainReadRouter(
 				include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] }, batch: { select: { id: true, batchCode: true, lotId: true, plannedQuantity: true, parts: { orderBy: [{ partId: "asc" }], take: 1, select: { partId: true, quantity: true, quantityMagnitude: true, quantityUom: true, part: { select: { id: true, partCode: true, partName: true } } } } } } },
 			});
 			res.setHeader("Cache-Control", "no-store").json({ data: inspections.map((inspection) => ({ ...inspection, inspectedQuantity: decimal(inspection.inspectedQuantity), startedAt: inspection.startedAt.toISOString(), completedAt: date(inspection.completedAt) })) });
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS quality inspection data is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS quality inspection data is unavailable.", error);
 		}
 	});
 
@@ -1228,8 +1235,8 @@ export function domainReadRouter(
 				inventoryTransactions,
 				productionProgress: dashboardProgress(activeBatchRows, stageRows, openViolationRows),
 			});
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS dashboard data is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS dashboard data is unavailable.", error);
 		}
 	});
 
@@ -1296,7 +1303,7 @@ export function domainReadRouter(
 					0,
 				);
 				if (planPaceTotal > 0) dailyExpected = Math.max(1, Math.round(planPaceTotal / 7));
-			} catch {
+			} catch (error) {
 				dailyExpected = null;
 			}
 			const dailyThroughput = reportDateBuckets(reportNow).map((date) => ({
@@ -1357,8 +1364,8 @@ export function domainReadRouter(
 				};
 			});
 			res.setHeader("Cache-Control", "no-store").json({ generatedAt: new Date().toISOString(), production: { plans, batches, acceptedStageEvents: events }, exceptions: { routingViolations: violations }, quality: { decisions: qualityDecisions }, traceability: { inventoryTransactions: transactions }, dailyThroughput, activity, closedLots, routingViolations, inventoryTransactions });
-		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS line report data is unavailable.");
+		} catch (error) {
+			dependencyProblem(req, res, "PATS line report data is unavailable.", error);
 		}
 	});
 
