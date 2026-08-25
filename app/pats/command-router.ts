@@ -26,6 +26,8 @@ import type { CommandTransaction } from "./command-support";
 import { assertQualityStageAllowed } from "./quality-stage-scope";
 import { recordPrintJob } from "./print-job";
 import { allowUnauthenticatedDeskPrint, deliverDeskLabel } from "./print-desk";
+import { hasAnyCapability } from "../identity/policy";
+import type { SubjectAssignmentRecord } from "../identity/types";
 
 const decimalString = z.string().trim().regex(/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/, "Must be a non-negative decimal with up to 6 places.");
 
@@ -98,6 +100,8 @@ const stageEventCreateSchema = z.object({
 	batchId: z.string().trim().min(1).max(100),
 	stageId: z.string().trim().min(1).max(100),
 	subStageId: z.string().trim().min(1).max(100).nullable().optional(),
+	stationId: z.string().trim().min(1).max(100).nullable().optional(),
+	processId: z.string().trim().min(1).max(100).nullable().optional(),
 	partId: z.string().trim().min(1).max(100).nullable().optional(),
 	eventType: z.enum(["STAGE_SCAN_RECORDED", "ROUTE_VALIDATED", "STAGE_COMPLETED", "VARIANCE_FLAG_RAISED"]),
 	quantity: z.number().int().positive().nullable().optional(),
@@ -190,12 +194,35 @@ const subStageCreateSchema = z.object({
 
 const stationCreateSchema = z.object({
 	name: z.string().trim().min(1).max(160),
-	stationCode: z.string().trim().min(1).max(80),
-	stageId: z.string().trim().min(1).max(100),
+	stationCode: z.string().trim().min(1).max(80).optional(),
+	stageId: z.string().trim().min(1).max(100).optional(),
+	productionLineId: z.string().trim().min(1).max(100).nullable().optional(),
 	screenType: z.enum(["COMPUTER", "TABLET"]).optional(),
 	scannerAttached: z.boolean().optional(),
 	printerAttached: z.boolean().optional(),
-	displayOrder: z.number().int().nonnegative(),
+	displayOrder: z.number().int().nonnegative().optional(),
+}).strict();
+
+const stationProcessReplaceSchema = z.object({
+	processIds: z.array(z.string().trim().min(1).max(100)).max(200),
+}).strict();
+
+const stationOrderReplaceSchema = z.object({
+	stationIds: z.array(z.string().trim().min(1).max(100)).min(1).max(200),
+}).strict();
+
+const workProcessCreateSchema = z.object({
+	name: z.string().trim().min(1).max(160),
+	labelledCycleTimeSec: z.number().int().nonnegative().nullable().optional(),
+	stationId: z.string().trim().min(1).max(100).optional(),
+}).strict();
+
+const partRouteReplaceSchema = z.object({
+	steps: z.array(z.object({
+		stationId: z.string().trim().min(1).max(100),
+		processId: z.string().trim().min(1).max(100).nullable().optional(),
+		stepOrder: z.number().int().positive().optional(),
+	}).strict()).max(80),
 }).strict();
 
 const stationStepCreateSchema = z.object({
@@ -306,6 +333,17 @@ function catalogRoutingSteps(value: unknown): Array<{ stageId: string; subStageI
 
 function requireCapability(capability: string, gate: (capability: string) => RequestHandler): RequestHandler {
 	return gate(capability);
+}
+
+function requireSetupManage(gate: (capability: string) => RequestHandler): RequestHandler {
+	return (req, res, next) => {
+		const assignments = ((req as Request & { canonicalAssignments?: SubjectAssignmentRecord[] }).canonicalAssignments ?? []);
+		if (hasAnyCapability(assignments, ["operations.manage", "catalog.manage", "planning.manage"])) {
+			next();
+			return;
+		}
+		gate("operations.manage")(req, res, next);
+	};
 }
 
 async function batchRouteContext(transaction: CommandTransaction, batchId: string) {
@@ -650,7 +688,14 @@ export function commandRouter(
 				}
 				const context = await batchRouteContext(transaction, body.batchId);
 				const attemptedSubStageId = body.subStageId ?? null;
-				const accepted = context.expected.stageId === body.stageId && context.expected.subStageId === attemptedSubStageId;
+				const expected = context.expected as typeof context.expected & {
+					stationId?: string | null;
+					processId?: string | null;
+				};
+				const accepted = expected.stationId && body.stationId
+					? expected.stationId === body.stationId &&
+						(expected.processId == null || body.processId == null || expected.processId === body.processId)
+					: expected.stageId === body.stageId && expected.subStageId === attemptedSubStageId;
 				const partId = body.partId ?? context.defaultPartId;
 				if (!partId) conflict("A stage event requires a batch part so route evidence remains traceable.");
 				const event = await transaction.stageEvent.create({
@@ -955,15 +1000,215 @@ export function commandRouter(
 		} catch (error) { commandError(error, req, res, next); }
 	});
 
-	router.post("/stations", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post("/stations", requireSetupManage(requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, stationCreateSchema);
 			const response = await executeCommand(database, req, "stationCreate", body, async (transaction) => {
-				const stage = await transaction.stage.findUnique({ where: { id: body.stageId }, select: { id: true } });
-				if (!stage) notFound("The requested station stage was not found.");
-				const station = await transaction.station.create({ data: { ...body, workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS", screenType: body.screenType ?? "COMPUTER", scannerAttached: body.scannerAttached ?? true, printerAttached: body.printerAttached ?? true } });
+				let productionLineId = body.productionLineId ?? null;
+				if (!productionLineId) {
+					const line = await transaction.productionLine.findFirst({
+						where: { kind: "MANUFACTURING" },
+						orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+						select: { id: true },
+					});
+					productionLineId = line?.id ?? null;
+				} else {
+					const line = await transaction.productionLine.findUnique({ where: { id: productionLineId }, select: { id: true } });
+					if (!line) notFound("The requested production line was not found.");
+				}
+				let stageId = body.stageId;
+				if (!stageId) {
+					const stage = await transaction.stage.findFirst({
+						where: {
+							AND: [
+								{ name: { not: { contains: "Warehouse", mode: "insensitive" } } },
+								{ name: { not: { contains: "Planning", mode: "insensitive" } } },
+							],
+						},
+						orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+						select: { id: true },
+					});
+					stageId = stage?.id;
+				} else {
+					const stage = await transaction.stage.findUnique({ where: { id: stageId }, select: { id: true } });
+					if (!stage) notFound("The requested station stage was not found.");
+				}
+				if (!stageId) notFound("The requested station stage was not found.");
+				let displayOrder = body.displayOrder;
+				if (displayOrder === undefined) {
+					const last = await transaction.station.findFirst({ orderBy: { displayOrder: "desc" }, select: { displayOrder: true } });
+					displayOrder = (last?.displayOrder ?? 0) + 1;
+				}
+				const slug = body.name.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || "STATION";
+				const stationCode = body.stationCode ?? `ST-${slug}-${String(displayOrder).padStart(2, "0")}`;
+				const station = await transaction.station.create({
+					data: {
+						name: body.name,
+						stationCode,
+						stageId,
+						productionLineId,
+						displayOrder,
+						workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS",
+						screenType: body.screenType ?? "COMPUTER",
+						scannerAttached: body.scannerAttached ?? true,
+						printerAttached: body.printerAttached ?? true,
+					},
+				});
 				await recordCommandSuccess(transaction, req, "STATION_CREATED", "Station", station.id, { stationCode: station.stationCode });
 				return { status: 201, body: { stationId: station.id, stationCode: station.stationCode, name: station.name }, headers: { Location: `/api/v1/stations/${station.id}` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.put("/stations/order", requireSetupManage(requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, stationOrderReplaceSchema);
+			const stationIds = [...new Set(body.stationIds)];
+			const response = await executeCommand(database, req, "stationOrderReplace", { stationIds }, async (transaction) => {
+				const found = await transaction.station.findMany({ where: { id: { in: stationIds } }, select: { id: true } });
+				if (found.length !== stationIds.length) notFound("The requested station was not found.");
+				for (let index = 0; index < stationIds.length; index += 1) {
+					const stationId = stationIds[index];
+					if (!stationId) continue;
+					await transaction.station.update({ where: { id: stationId }, data: { displayOrder: index + 1 } });
+				}
+				const remainder = await transaction.station.findMany({
+					where: {
+						id: { notIn: stationIds },
+						isEnabled: true,
+						productionLine: { kind: "MANUFACTURING" },
+					},
+					orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+					select: { id: true },
+				});
+				for (let index = 0; index < remainder.length; index += 1) {
+					const stationId = remainder[index]?.id;
+					if (!stationId) continue;
+					await transaction.station.update({
+						where: { id: stationId },
+						data: { displayOrder: stationIds.length + index + 1 },
+					});
+				}
+				await recordCommandSuccess(transaction, req, "STATION_ORDER_REPLACED", "Station", stationIds[0] ?? "order", { stationCount: stationIds.length });
+				return { status: 200, body: { stationIds }, headers: { Location: "/api/v1/stations/order" } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.put("/stations/:stationId/processes", requireSetupManage(requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, stationProcessReplaceSchema);
+			const stationId = req.params.stationId;
+			const processIds = [...new Set(body.processIds)];
+			const response = await executeCommand(database, req, "stationProcessReplace", { stationId, processIds }, async (transaction) => {
+				const station = await transaction.station.findUnique({ where: { id: stationId }, select: { id: true } });
+				if (!station) notFound("The requested station was not found.");
+				if (processIds.length > 0) {
+					const found = await transaction.workProcess.findMany({ where: { id: { in: processIds } }, select: { id: true } });
+					if (found.length !== processIds.length) notFound("The requested process was not found.");
+				}
+				await transaction.stationProcess.deleteMany({ where: { stationId } });
+				for (const processId of processIds) {
+					await transaction.stationProcess.create({ data: { stationId, processId } });
+				}
+				await recordCommandSuccess(transaction, req, "STATION_PROCESSES_REPLACED", "Station", stationId, { processCount: processIds.length });
+				return { status: 200, body: { stationId, processIds }, headers: { Location: `/api/v1/stations/${stationId}/processes` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.post("/work-processes", requireSetupManage(requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, workProcessCreateSchema);
+			const response = await executeCommand(database, req, "workProcessCreate", body, async (transaction) => {
+				if (body.stationId) {
+					const station = await transaction.station.findUnique({ where: { id: body.stationId }, select: { id: true } });
+					if (!station) notFound("The requested station was not found.");
+				}
+				const last = await transaction.workProcess.findFirst({ orderBy: { displayOrder: "desc" }, select: { displayOrder: true } });
+				const process = await transaction.workProcess.create({
+					data: {
+						name: body.name,
+						labelledCycleTimeSec: body.labelledCycleTimeSec ?? null,
+						displayOrder: (last?.displayOrder ?? 0) + 1,
+						isEnabled: true,
+						isSystemSeed: false,
+						subStageId: null,
+					},
+				});
+				if (body.stationId) {
+					await transaction.stationProcess.create({ data: { stationId: body.stationId, processId: process.id } });
+				}
+				await recordCommandSuccess(transaction, req, "WORK_PROCESS_CREATED", "WorkProcess", process.id, { name: process.name, stationId: body.stationId ?? null });
+				return {
+					status: 201,
+					body: {
+						processId: process.id,
+						name: process.name,
+						labelledCycleTimeSec: process.labelledCycleTimeSec,
+						stationId: body.stationId ?? null,
+					},
+					headers: { Location: `/api/v1/work-processes/${process.id}` },
+				};
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.put("/parts-lists/:partsListId/parts/:partId/route", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, partRouteReplaceSchema);
+			const partsListId = req.params.partsListId;
+			const partId = req.params.partId;
+			const response = await executeCommand(database, req, "partRouteReplace", { partsListId, partId, steps: body.steps }, async (transaction) => {
+				const partsList = await transaction.partsList.findUnique({ where: { id: partsListId }, select: { id: true } });
+				const part = await transaction.part.findUnique({ where: { id: partId }, select: { id: true } });
+				if (!partsList || !part) notFound("The requested parts list or part was not found.");
+				const stationIds = [...new Set(body.steps.map((step) => step.stationId))];
+				const stations = stationIds.length
+					? await transaction.station.findMany({
+						where: { id: { in: stationIds } },
+						select: { id: true, stageId: true, boundSteps: { select: { subStageId: true }, take: 1 } },
+					})
+					: [];
+				if (stations.length !== stationIds.length) notFound("The requested station was not found.");
+				const processIds = [...new Set(body.steps.map((step) => step.processId).filter((id): id is string => Boolean(id)))];
+				if (processIds.length > 0) {
+					const found = await transaction.workProcess.findMany({ where: { id: { in: processIds } }, select: { id: true } });
+					if (found.length !== processIds.length) notFound("The requested process was not found.");
+				}
+				await transaction.routingStep.deleteMany({ where: { partsListId, partId } });
+				const created: Array<{ routeStepId: string; stationId: string | null; processId: string | null; stepOrder: number }> = [];
+				for (const [index, step] of body.steps.entries()) {
+					const station = stations.find((row) => row.id === step.stationId);
+					if (!station) notFound("The requested station was not found.");
+					const row = await transaction.routingStep.create({
+						data: {
+							partsListId,
+							partId,
+							stationId: step.stationId,
+							processId: step.processId ?? null,
+							stageId: station.stageId,
+							subStageId: station.boundSteps[0]?.subStageId ?? null,
+							stepOrder: step.stepOrder ?? index + 1,
+						},
+					});
+					created.push({
+						routeStepId: row.id,
+						stationId: row.stationId,
+						processId: row.processId,
+						stepOrder: row.stepOrder,
+					});
+				}
+				await recordCommandSuccess(transaction, req, "PART_ROUTE_REPLACED", "Part", partId, { partsListId, stepCount: created.length });
+				return {
+					status: 200,
+					body: { partsListId, partId, steps: created },
+					headers: { Location: `/api/v1/parts-lists/${partsListId}/parts/${partId}/route` },
+				};
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }

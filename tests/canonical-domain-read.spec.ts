@@ -584,7 +584,13 @@ describe("canonical PATS domain read contract", () => {
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
-		expect(receivedWhere).to.deep.equal({ isEnabled: true });
+		expect(receivedWhere).to.deep.equal({
+			isEnabled: true,
+			OR: [
+				{ productionLineId: null },
+				{ productionLine: { kind: "MANUFACTURING" } },
+			],
+		});
 		expect(response.body).to.deep.equal({ data: [] });
 	});
 

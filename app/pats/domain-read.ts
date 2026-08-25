@@ -14,6 +14,8 @@ type DomainReadDatabase = Pick<
 	| "subStage"
 	| "station"
 	| "stationStep"
+	| "stationProcess"
+	| "productionLine"
 	| "workInstruction"
 	| "workProcess"
 	| "booth"
@@ -82,6 +84,8 @@ function routeResource(route: {
 	part: { partCode: string; partName: string };
 	stageId: string;
 	subStageId: string | null;
+	stationId?: string | null;
+	processId?: string | null;
 	stepOrder: number;
 }) {
 	return {
@@ -92,6 +96,8 @@ function routeResource(route: {
 		stageId: route.stageId,
 		subStageId: route.subStageId,
 		stepOrder: route.stepOrder,
+		...(route.stationId ? { stationId: route.stationId } : {}),
+		...(route.processId ? { processId: route.processId } : {}),
 	};
 }
 
@@ -446,12 +452,42 @@ export function domainReadRouter(
 		}
 	});
 
+	router.get("/production-lines", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const lines = await database.productionLine.findMany({
+				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+			});
+			res.setHeader("Cache-Control", "no-store").json({ data: lines });
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production-line configuration is unavailable.");
+		}
+	});
+
 	router.get("/stations", requireCapability("execution.read"), async (req, res) => {
 		try {
+			const requestQuery = query(req);
+			const allowedKeys = new Set(["kind"]);
+			if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The station query is invalid.");
+				return;
+			}
+			const kindRaw = Array.isArray(requestQuery.kind) ? requestQuery.kind[0] : requestQuery.kind;
+			if (kindRaw && kindRaw !== "MANUFACTURING" && kindRaw !== "WAREHOUSE") {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The station query is invalid.");
+				return;
+			}
+			const kind = kindRaw === "WAREHOUSE" ? "WAREHOUSE" : "MANUFACTURING";
 			const stations = await database.station.findMany({
-				where: { isEnabled: true },
+				where: {
+					isEnabled: true,
+					OR: [{ productionLineId: null }, { productionLine: { kind } }],
+				},
 				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
-				include: { boundSteps: true },
+				include: {
+					boundSteps: true,
+					productionLine: { select: { id: true, name: true, kind: true } },
+					processes: { include: { process: { select: { id: true, name: true } } } },
+				},
 			});
 			res.setHeader("Cache-Control", "no-store").json({ data: stations });
 		} catch {
@@ -778,7 +814,7 @@ export function domainReadRouter(
 	router.get("/work-processes", requireCapability("execution.read"), async (req, res) => {
 		try {
 			const requestQuery = query(req);
-			const allowedKeys = new Set(["subStageId"]);
+			const allowedKeys = new Set(["subStageId", "stationId"]);
 			if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
 				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The work-process query is invalid.");
 				return;
@@ -786,10 +822,14 @@ export function domainReadRouter(
 			const subStageId = Array.isArray(requestQuery.subStageId)
 				? requestQuery.subStageId[0]
 				: requestQuery.subStageId;
+			const stationId = Array.isArray(requestQuery.stationId)
+				? requestQuery.stationId[0]
+				: requestQuery.stationId;
 			const processes = await database.workProcess.findMany({
 				where: {
 					isEnabled: true,
 					...(subStageId ? { subStageId } : {}),
+					...(stationId ? { stationAssignments: { some: { stationId } } } : {}),
 				},
 				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
 				include: { subStage: { select: { id: true, name: true } } },
@@ -798,7 +838,7 @@ export function domainReadRouter(
 				data: processes.map((process) => ({
 					id: process.id,
 					subStageId: process.subStageId,
-					subStageName: process.subStage.name,
+					subStageName: process.subStage?.name ?? null,
 					name: process.name,
 					displayOrder: process.displayOrder,
 					labelledCycleTimeSec: process.labelledCycleTimeSec,
@@ -1041,6 +1081,8 @@ export function domainReadRouter(
 						stageId: step.stageId,
 						subStageId: step.subStageId,
 						stepOrder: step.stepOrder,
+						...(step.stationId ? { stationId: step.stationId } : {}),
+						...(step.processId ? { processId: step.processId } : {}),
 					})),
 				})),
 			});

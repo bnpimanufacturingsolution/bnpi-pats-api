@@ -743,6 +743,7 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			((_req: Request, res: Response) => identityUnavailable(_req, res));
 		const domainReadPrefixes = [
 			"/production-plans",
+			"/production-lines",
 			"/workflow-groups",
 			"/stages",
 			"/sub-stages",
@@ -781,6 +782,7 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			"/sub-stages",
 			"/stations",
 			"/station-steps",
+			"/parts-lists",
 			"/work-instructions",
 			"/work-processes",
 			"/booths",

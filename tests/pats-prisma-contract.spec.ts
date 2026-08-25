@@ -41,6 +41,8 @@ describe("PATS Prisma boundary", () => {
       "model Batch {",
       "model BatchPartLine {",
       "model Station {",
+      "model ProductionLine {",
+      "model StationProcess {",
       "model StationStep {",
       "model SourceRun {",
       "model SourceArtifact {",
@@ -61,6 +63,8 @@ describe("PATS Prisma boundary", () => {
     expect(schema).to.match(/enum SourceRunStatus[\s\S]*?\bPARTIAL\b/);
     expect(schema).to.match(/enum SourceArtifactType[\s\S]*?\bPDF\b/);
     expect(schema).to.match(/enum SourceExtractionStatus[\s\S]*?\bFAILED\b/);
+    expect(schema).to.match(/model RoutingStep \{[\s\S]*?stationId\s+String\?/);
+    expect(schema).to.match(/model RoutingStep \{[\s\S]*?processId\s+String\?/);
   });
 
   it("keeps ProductSpecification distinct from catalog Product", () => {

@@ -194,16 +194,20 @@ enum BomRelationshipKind {
 }
 
 model Product {
-  id              String                  @id @default(uuid())
-  productCode     String                  @unique
-  productName     String
-  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
-  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
-  rowVersion      Int                     @default(1)
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  models          Model[]
-  projects        Project[]
+  id               String                   @id @default(uuid())
+  productCode      String                   @unique
+  productName      String
+  productionLineId String?
+  productionLine   ProductionLine?          @relation(fields: [productionLineId], references: [id])
+  lifecycleStatus  CatalogLifecycleStatus   @default(DRAFT)
+  evidenceStatus   CanonicalEvidenceStatus  @default(NEEDS_CONFIRMATION)
+  rowVersion       Int                      @default(1)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  models           Model[]
+  projects         Project[]
+
+  @@index([productionLineId])
 }
 
 model Model {
@@ -510,11 +514,17 @@ model RoutingStep {
   part        Part         @relation(fields: [partId], references: [id])
   stageId     String
   subStageId  String?
+  stationId   String?
+  station     Station?     @relation(fields: [stationId], references: [id])
+  processId   String?
+  process     WorkProcess? @relation(fields: [processId], references: [id])
   stepOrder   Int
   stageEvents StageEvent[]
 
   @@unique([partsListId, partId, stepOrder])
   @@index([partId])
+  @@index([stationId])
+  @@index([processId])
 }
 
 model Part {
@@ -755,6 +765,24 @@ enum ScreenType {
   TABLET
 }
 
+enum ProductionLineKind {
+  MANUFACTURING
+  WAREHOUSE
+}
+
+/// Plant layout. Station order on a line is the floor sequence, not a part's route.
+model ProductionLine {
+  id          String              @id @default(uuid())
+  workspaceId String
+  name        String
+  kind        ProductionLineKind  @default(MANUFACTURING)
+  displayOrder Int                @default(1)
+  stations    Station[]
+  products    Product[]
+
+  @@index([workspaceId, kind])
+}
+
 model Station {
   id                    String        @id @default(uuid())
   workspaceId           String
@@ -762,6 +790,8 @@ model Station {
   // Nullable during the compatibility bridge; all new API-created stations require a code.
   stationCode           String?       @unique
   operationalContextKey String        @default("PATS")
+  productionLineId      String?
+  productionLine        ProductionLine? @relation(fields: [productionLineId], references: [id])
   stageId               String
   screenType            ScreenType    @default(COMPUTER)
   scannerAttached       Boolean       @default(true)
@@ -777,10 +807,24 @@ model Station {
   labelHeightMm         Int?
   printerAgent          String?
   boundSteps            StationStep[]
+  processes             StationProcess[]
+  routingSteps          RoutingStep[]
   booths                Booth[]
   printJobs             PrintJob[]
 
   @@index([workspaceId])
+  @@index([productionLineId])
+}
+
+/// This station runs this shared process. Unique pair — not a nested Process copy.
+model StationProcess {
+  stationId String
+  station   Station     @relation(fields: [stationId], references: [id])
+  processId String
+  process   WorkProcess @relation(fields: [processId], references: [id])
+
+  @@id([stationId, processId])
+  @@index([processId])
 }
 
 enum PrintJobStatus {
@@ -815,16 +859,18 @@ model PrintJob {
   @@index([stationId, occurredAt])
 }
 
-/// Catalog work process under a SubStage (routing/CT/filter grain). Not a device mount.
+/// Shared work leaf. Station assigns via StationProcess. subStageId is a compatibility leftover.
 model WorkProcess {
   id             String   @id @default(uuid())
-  subStageId     String
-  subStage       SubStage @relation(fields: [subStageId], references: [id])
+  subStageId     String?
+  subStage       SubStage? @relation(fields: [subStageId], references: [id])
   name           String
   displayOrder   Int
   isEnabled      Boolean  @default(true)
   isSystemSeed   Boolean  @default(false)
   labelledCycleTimeSec Int?
+  stationAssignments    StationProcess[]
+  routingSteps   RoutingStep[]
   booths         Booth[]
   dailySheets    MonitoringDailySheet[]
   stationBoards  MonitoringStationBoard[]

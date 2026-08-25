@@ -7,6 +7,8 @@ export type RouteStepRef = {
 	routeStepId: string;
 	stageId: string;
 	subStageId: string | null;
+	stationId?: string | null;
+	processId?: string | null;
 	stepOrder: number;
 };
 
@@ -64,7 +66,7 @@ export type BatchResolveStore = {
 		findMany: (args: {
 			where: { partsListId: string; partId?: { in: string[] } };
 			orderBy: Array<{ stepOrder: "asc" } | { id: "asc" }>;
-			select: { id: true; stageId: true; subStageId: true; stepOrder: true; partId: true };
+			select: { id: true; stageId: true; subStageId: true; stationId: true; processId: true; stepOrder: true; partId: true };
 		}) => Promise<Array<BatchResolveRouteStep>>;
 	};
 };
@@ -102,6 +104,8 @@ export type BatchResolveRouteStep = {
 	id: string;
 	stageId: string;
 	subStageId: string | null;
+	stationId?: string | null;
+	processId?: string | null;
 	stepOrder: number;
 	partId: string;
 };
@@ -130,6 +134,8 @@ export function nextExpectedRouteStep(
 		stageId: expected.stageId,
 		subStageId: expected.subStageId,
 		stepOrder: expected.stepOrder,
+		...(expected.stationId ? { stationId: expected.stationId } : {}),
+		...(expected.processId ? { processId: expected.processId } : {}),
 	};
 }
 
@@ -187,7 +193,7 @@ export async function resolveBatchByCode(
 			...(partIds.length > 0 ? { partId: { in: partIds } } : {}),
 		},
 		orderBy: [{ stepOrder: "asc" }, { id: "asc" }],
-		select: { id: true, stageId: true, subStageId: true, stepOrder: true, partId: true },
+		select: { id: true, stageId: true, subStageId: true, stationId: true, processId: true, stepOrder: true, partId: true },
 	});
 
 	const currentStageId = batch.positionProjection?.stageId ?? batch.currentStageId;

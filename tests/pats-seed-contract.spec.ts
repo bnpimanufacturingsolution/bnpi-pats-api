@@ -146,6 +146,15 @@ describe("PATS seed contract", () => {
     expect(script).to.not.match(/TRUNCATE|DROP TABLE|deleteMany/i);
   });
 
+  it("seeds ProductionLine Line 01 and Warehouse, and StationProcess assignments", () => {
+    const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+    expect(script).to.contain("productionLine.upsert");
+    expect(script).to.contain('kind: "MANUFACTURING"');
+    expect(script).to.contain('kind: "WAREHOUSE"');
+    expect(script).to.contain("stationProcess.upsert");
+    expect(script).to.contain("productionLineId");
+  });
+
   it("seeds Line Leader assignments (not a fourth role) for Full Spray and Mask Spray", () => {
     const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
     expect(script).to.contain("lineLeaderAssignment.upsert");

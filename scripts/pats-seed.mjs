@@ -591,6 +591,23 @@ async function seedProfile(tx) {
 	const assemblySubAssemblyStationId = stableId("station-assembly-sub-assembly");
 	const assemblyAssortmentStationId = stableId("station-assembly-assortment");
 	const warehouseStationId = stableId("station-warehouse-main-packing");
+	const manufacturingLineId = stableId("production-line-01");
+	const warehouseLineId = stableId("production-line-warehouse");
+
+	await tx.productionLine.upsert({
+		where: { id: manufacturingLineId },
+		update: { workspaceId: "PATS", name: "Line 01", kind: "MANUFACTURING", displayOrder: 1 },
+		create: { id: manufacturingLineId, workspaceId: "PATS", name: "Line 01", kind: "MANUFACTURING", displayOrder: 1 },
+	});
+	await tx.productionLine.upsert({
+		where: { id: warehouseLineId },
+		update: { workspaceId: "PATS", name: "Warehouse", kind: "WAREHOUSE", displayOrder: 2 },
+		create: { id: warehouseLineId, workspaceId: "PATS", name: "Warehouse", kind: "WAREHOUSE", displayOrder: 2 },
+	});
+	await tx.product.update({
+		where: { id: productB251Id },
+		data: { productionLineId: manufacturingLineId },
+	});
 
 	await tx.workflowGroup.upsert({
 		where: { id: workflowId },
@@ -768,6 +785,7 @@ async function seedProfile(tx) {
 		[assemblyAssortmentStationId, "Assembly · Assortment", "ST-ASM-AST", assemblyStageId, 7, true],
 		[warehouseStationId, "Warehouse · Main Packing", "ST-WH-PK", warehouseStageId, 8, false],
 	]) {
+		const productionLineId = id === warehouseStationId ? warehouseLineId : manufacturingLineId;
 		await tx.station.upsert({
 			where: { id },
 			update: {
@@ -775,6 +793,7 @@ async function seedProfile(tx) {
 				name,
 				stationCode: code(stationCode),
 				operationalContextKey: "PATS",
+				productionLineId,
 				stageId,
 				displayOrder,
 				isEnabled: enabled,
@@ -785,12 +804,22 @@ async function seedProfile(tx) {
 				name,
 				stationCode: code(stationCode),
 				operationalContextKey: "PATS",
+				productionLineId,
 				stageId,
 				displayOrder,
 				isEnabled: enabled,
 			},
 		});
 	}
+
+	await tx.station.updateMany({
+		where: { productionLineId: null, NOT: { name: { contains: "Warehouse", mode: "insensitive" } } },
+		data: { productionLineId: manufacturingLineId },
+	});
+	await tx.station.updateMany({
+		where: { name: { contains: "Warehouse", mode: "insensitive" } },
+		data: { productionLineId: warehouseLineId, isEnabled: false },
+	});
 
 	for (const [id, stationId, stageId, subStageId] of [
 		// Injection has no floor sub-stages in seed → stage-wide bound step
@@ -852,6 +881,24 @@ async function seedProfile(tx) {
 				isSystemSeed: true,
 				labelledCycleTimeSec,
 			},
+		});
+	}
+
+	for (const [stationId, processId] of [
+		[decorationStationId, processFullSprayId],
+		[decorationStationId, processFsHeadRedId],
+		[decorationStationId, processFsLeafGreenId],
+		[decorationStationId, processFsBodyWhiteId],
+		[decorationMaskStationId, processMaskSprayId],
+		[decorationMaskStationId, processMsFaceClearId],
+		[decorationTampoStationId, processTampoId],
+		[decorationTampoStationId, processTampoEyeId],
+		[warehouseStationId, processMainPackingId],
+	]) {
+		await tx.stationProcess.upsert({
+			where: { stationId_processId: { stationId, processId } },
+			update: {},
+			create: { stationId, processId },
 		});
 	}
 
@@ -927,6 +974,10 @@ async function seedProfile(tx) {
 		where: {
 			OR: [{ id: warehouseStationId }, { name: { contains: "Warehouse", mode: "insensitive" } }],
 		},
+		data: { isEnabled: false },
+	});
+	await tx.station.updateMany({
+		where: { name: { contains: "Station 01", mode: "insensitive" } },
 		data: { isEnabled: false },
 	});
 
@@ -1771,6 +1822,7 @@ async function seedProfile(tx) {
 			productName: CLIENT_B308.productName,
 			lifecycleStatus: "PUBLISHED",
 			evidenceStatus: "PROVISIONAL",
+			productionLineId: manufacturingLineId,
 		},
 		create: {
 			id: productB308Id,
@@ -1778,6 +1830,7 @@ async function seedProfile(tx) {
 			productName: CLIENT_B308.productName,
 			lifecycleStatus: "PUBLISHED",
 			evidenceStatus: "PROVISIONAL",
+			productionLineId: manufacturingLineId,
 		},
 	});
 	for (const model of CLIENT_B308.models) {
