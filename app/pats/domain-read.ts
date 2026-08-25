@@ -1163,11 +1163,14 @@ export function domainReadRouter(
 				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The collection query is invalid.");
 				return;
 			}
-			const allowedStatuses = new Set(["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
-			if (statusFilter && !allowedStatuses.has(statusFilter)) {
+			const allowedStatuses = new Set<string>(["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
+			const isQualityInspectionStatus = (value: string): value is "OPEN" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" =>
+				allowedStatuses.has(value);
+			if (statusFilter && !isQualityInspectionStatus(statusFilter)) {
 				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The collection query is invalid.");
 				return;
 			}
+			const statusValue = statusFilter && isQualityInspectionStatus(statusFilter) ? statusFilter : undefined;
 			const allowedStageIds = await listAllowedQualityStageIds(database, actorId(req));
 			if (allowedStageIds.length === 0) {
 				res.setHeader("Cache-Control", "no-store").json({ data: [] });
@@ -1176,7 +1179,7 @@ export function domainReadRouter(
 			const inspections = await database.qualityInspection.findMany({
 				where: {
 					stageId: { in: allowedStageIds },
-					...(statusFilter ? { status: statusFilter } : {}),
+					...(statusValue ? { status: statusValue } : {}),
 				},
 				orderBy: [{ createdAt: "desc" }, { id: "desc" }],
 				include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] }, batch: { select: { id: true, batchCode: true, lotId: true, plannedQuantity: true, parts: { orderBy: [{ partId: "asc" }], take: 1, select: { partId: true, quantity: true, quantityMagnitude: true, quantityUom: true, part: { select: { id: true, partCode: true, partName: true } } } } } } },

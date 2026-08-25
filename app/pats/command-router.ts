@@ -1016,13 +1016,13 @@ export function commandRouter(
 					const line = await transaction.productionLine.findUnique({ where: { id: productionLineId }, select: { id: true } });
 					if (!line) notFound("The requested production line was not found.");
 				}
-				let stageId = body.stageId;
-				if (!stageId) {
+			let stageId = body.stageId;
+			if (!stageId) {
 					const stage = await transaction.stage.findFirst({
 						where: {
-							AND: [
-								{ name: { not: { contains: "Warehouse", mode: "insensitive" } } },
-								{ name: { not: { contains: "Planning", mode: "insensitive" } } },
+							NOT: [
+								{ name: { contains: "Warehouse", mode: "insensitive" } },
+								{ name: { contains: "Planning", mode: "insensitive" } },
 							],
 						},
 						orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
@@ -1267,7 +1267,7 @@ export function commandRouter(
 					});
 					if (process) {
 						subStageId = subStageId ?? process.subStageId;
-						stageId = stageId ?? process.subStage.eligibleStages[0]?.stageId ?? null;
+						stageId = stageId ?? process.subStage?.eligibleStages[0]?.stageId ?? null;
 					}
 				}
 				const workspaceId = process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS";
