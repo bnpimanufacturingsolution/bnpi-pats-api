@@ -232,12 +232,13 @@ export function catalogController(
 			});
 		} catch (error) {
 			if (error instanceof PatsCatalogStorageUnavailableError) {
+				console.error("PATS catalog storage unavailable:", error);
 				if (options.canonical) {
 					res.type("application/problem+json").status(503).json({
 						type: "urn:bandai:pats:problem:dependency-unavailable",
 						title: "Dependency Unavailable",
 						status: 503,
-						detail: error.message,
+						detail: "The catalog service is temporarily unavailable. Please try again later.",
 						instance: req.originalUrl.split("?", 1)[0],
 					});
 					return;
@@ -245,7 +246,7 @@ export function catalogController(
 
 				res.status(503).json({
 					success: false,
-					message: error.message,
+					message: "The catalog service is temporarily unavailable. Please try again later.",
 					code: 503,
 					errorCode: error.code,
 				});

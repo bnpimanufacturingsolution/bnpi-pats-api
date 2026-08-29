@@ -215,8 +215,8 @@ describe("canonical BOM definition reads", () => {
 	});
 
 	it("fails closed without catalog.read", async () => {
-		const { app } = appFor({}, [
-			{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" },
+		const { app } = 		appFor({}, [
+			{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" },
 		]);
 
 		const response = await request(app)
@@ -236,5 +236,7 @@ describe("canonical BOM definition reads", () => {
 
 		expect(response.status).to.equal(503);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:dependency-unavailable");
+		expect(response.body.detail).to.equal("PATS BOM definition data is unavailable.");
+		expect(JSON.stringify(response.body)).to.not.contain("database unavailable");
 	});
 });

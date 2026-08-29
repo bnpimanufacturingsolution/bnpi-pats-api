@@ -224,6 +224,10 @@ describe("PATS catalog read contract", () => {
 			code: 503,
 			errorCode: "PATS_IMAGE_STORAGE_UNAVAILABLE",
 		});
+		expect(response.body.message).to.equal(
+			"The catalog service is temporarily unavailable. Please try again later.",
+		);
+		expect(JSON.stringify(response.body)).to.not.contain("MinIO unavailable");
 	});
 
 	it("returns explicit not-found and workspace-validation responses", async () => {

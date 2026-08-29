@@ -266,7 +266,6 @@ export function createApp(options: AppOptions = {}): Application {
 
 	// Global error handler for Express
 	app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-		const isDev = process.env.NODE_ENV !== "production";
 
 		if (err instanceof AppError && err.isOperational) {
 			res.status(err.statusCode).json({
@@ -282,10 +281,9 @@ export function createApp(options: AppOptions = {}): Application {
 		if (err.constructor?.name === "PrismaClientKnownRequestError") {
 			const prismaErr = err as Error & { code: string; meta?: Record<string, unknown> };
 			if (prismaErr.code === "P2002") {
-				const target = (prismaErr.meta?.target as string[])?.join(", ") || "field";
 				res.status(409).json({
 					status: "error",
-					message: `Duplicate value for: ${target}`,
+					message: "A record with these details already exists.",
 					code: 409,
 					timestamp: new Date().toISOString(),
 				});
@@ -305,9 +303,8 @@ export function createApp(options: AppOptions = {}): Application {
 		console.error("Express error:", err.stack || err);
 		res.status(500).json({
 			status: "error",
-			message: isDev ? err.message : "Internal server error",
+			message: "Internal server error",
 			code: 500,
-			...(isDev && { stack: err.stack }),
 			timestamp: new Date().toISOString(),
 		});
 	});

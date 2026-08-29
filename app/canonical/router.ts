@@ -158,11 +158,12 @@ function requireCanonicalIdentity(
 				next();
 			} catch (error) {
 				if (error instanceof IdentityProviderUnavailableError) {
+					console.error("Canonical identity provider unavailable:", error);
 					sendProblem(res, {
 						type: PROBLEM_TYPES.dependencyUnavailable,
 						title: "Dependency Unavailable",
 						status: 503,
-						detail: error.message,
+						detail: "The canonical identity service is unavailable. Please try again later.",
 						instance: requestInstance(req),
 					});
 					return;
@@ -172,7 +173,7 @@ function requireCanonicalIdentity(
 					type: PROBLEM_TYPES.dependencyUnavailable,
 					title: "Dependency Unavailable",
 					status: 503,
-					detail: "The canonical identity service is unavailable.",
+					detail: "The canonical identity service is unavailable. Please try again later.",
 					instance: requestInstance(req),
 				});
 			}

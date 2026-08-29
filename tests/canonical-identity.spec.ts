@@ -77,6 +77,7 @@ describe("canonical identity boundary", () => {
 
 		assert.deepStrictEqual(response.body, {
 			capabilities: [
+				"catalog.read",
 				"execution.read",
 				"material-requirement.manage",
 				"monitoring.read",
@@ -84,6 +85,50 @@ describe("canonical identity boundary", () => {
 				"planning.read",
 			],
 		});
+		assert.strictEqual(response.body.capabilities.includes("quality.read"), false);
+		assert.strictEqual(response.body.capabilities.includes("quality.resolve"), false);
+	});
+
+	it("exposes quality.read and quality.resolve for qi and admin, not planner", async () => {
+		const quality = await request(
+			createTestApp(
+				createIdentity(verified, activeSubject, [{ kind: "ROLE_BUNDLE", key: "qi", status: "ACTIVE" }]),
+			),
+		)
+			.get("/api/v1/users/me/capabilities")
+			.expect(200);
+		assert.deepStrictEqual(quality.body.capabilities, [
+			"monitoring.read",
+			"quality.read",
+			"quality.resolve",
+			"reconciliation.resolve",
+		]);
+
+		const admin = await request(
+			createTestApp(
+				createIdentity(verified, activeSubject, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]),
+			),
+		)
+			.get("/api/v1/users/me/capabilities")
+			.expect(200);
+		assert.ok(admin.body.capabilities.includes("quality.read"));
+		assert.ok(admin.body.capabilities.includes("quality.resolve"));
+		assert.ok(admin.body.capabilities.includes("operations.manage"));
+
+		const planner = await request(
+			createTestApp(
+				createIdentity(verified, activeSubject, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]),
+			),
+		)
+			.get("/api/v1/users/me/capabilities")
+			.expect(200);
+		assert.deepStrictEqual(planner.body.capabilities, [
+			"catalog.read",
+			"material-requirement.manage",
+			"monitoring.read",
+			"planning.manage",
+			"planning.read",
+		]);
 	});
 
 	it("fails closed when authentication is absent", async () => {
@@ -119,6 +164,11 @@ describe("canonical identity boundary", () => {
 		const response = await request(createTestApp()).get("/api/v1/users/me").expect(503);
 
 		assert.strictEqual(response.body.type, "urn:bandai:pats:problem:dependency-unavailable");
+		assert.strictEqual(
+			response.body.detail,
+			"The canonical identity adapter is not configured for this deployment.",
+		);
+		assert.doesNotMatch(JSON.stringify(response.body), /Cannot read|undefined|stack/i);
 	});
 
 	it("keeps the identity OpenAPI source contract aligned with the canonical routes", () => {
