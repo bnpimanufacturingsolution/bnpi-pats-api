@@ -54,7 +54,7 @@ describe("canonical deployment-scoped catalog", () => {
 		};
 		const app = express();
 		app.use("/api/v1", canonicalRouter({
-			identity: identity([{ kind: "ROLE_BUNDLE", key: "catalog-manager", status: "ACTIVE" }]),
+			identity: identity([{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]),
 			catalog: {
 				requiredCapability: "catalog.read",
 				handler: catalogController(
@@ -82,7 +82,7 @@ describe("canonical deployment-scoped catalog", () => {
 	it("denies catalog access without the read capability", async () => {
 		const app = express();
 		app.use("/api/v1", canonicalRouter({
-			identity: identity([{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]),
+			identity: identity([{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]),
 			catalog: { requiredCapability: "catalog.read", handler: (_req, res) => res.json({}) },
 		}));
 

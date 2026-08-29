@@ -7,7 +7,7 @@ import { domainReadRouter } from "../app/pats/domain-read";
 import type { IdentityDependencies, SubjectAssignmentRecord } from "../app/identity/types";
 
 const qualityAssignments: SubjectAssignmentRecord[] = [
-	{ kind: "ROLE_BUNDLE", key: "quality-reviewer", status: "ACTIVE" },
+	{ kind: "ROLE_BUNDLE", key: "qi", status: "ACTIVE" },
 ];
 
 function identity(assignments: SubjectAssignmentRecord[]): IdentityDependencies {
@@ -296,7 +296,7 @@ describe("Journey D quality stage allow-list", () => {
 	});
 
 	it("requires quality.resolve for scan resolve", async () => {
-		const app = readApp({}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		const app = readApp({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 		const response = await request(app)
 			.get("/api/v1/quality-inspections/resolve")
 			.query({ code: "B-1001-QR" })
@@ -339,5 +339,173 @@ describe("Journey D quality stage allow-list", () => {
 		expect(response.status).to.equal(200);
 		expect(response.body.data).to.deep.equal([]);
 		expect(listed).to.equal(0);
+	});
+
+	it("requires quality.read for the inspection list", async () => {
+		const app = readApp({}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+		const response = await request(app)
+			.get("/api/v1/quality-inspections")
+			.set("Authorization", "Bearer read-token");
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
+	it("requires quality.resolve for decide", async () => {
+		const app = commandApp({}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/quality-inspections/inspection-1/decisions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "qc-decide-planner")
+			.set("If-Match", '"1"')
+			.send({ decision: "PASSED" });
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
+	it("lets quality.read list but not resolve or decide", async () => {
+		const readOnly: SubjectAssignmentRecord[] = [{ kind: "CAPABILITY", key: "quality.read", status: "ACTIVE" }];
+		const listApp = readApp(
+			{
+				qualityStageAssignment: { findMany: async () => [{ stageId: "stage-decoration" }] },
+				qualityInspection: { findMany: async () => [] },
+			},
+			readOnly,
+		);
+		const list = await request(listApp)
+			.get("/api/v1/quality-inspections")
+			.set("Authorization", "Bearer read-token");
+		expect(list.status).to.equal(200);
+
+		const resolveApp = readApp({}, readOnly);
+		const resolve = await request(resolveApp)
+			.get("/api/v1/quality-inspections/resolve")
+			.query({ code: "B-1001-QR" })
+			.set("Authorization", "Bearer read-token");
+		expect(resolve.status).to.equal(403);
+
+		const decideApp = commandApp({}, readOnly);
+		const decide = await request(decideApp)
+			.post("/api/v1/quality-inspections/inspection-1/decisions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "qc-decide-read-only")
+			.set("If-Match", '"1"')
+			.send({ decision: "PASSED" });
+		expect(decide.status).to.equal(403);
+	});
+
+	it("lets admin list and decide inside assigned stages", async () => {
+		const adminAssignments: SubjectAssignmentRecord[] = [
+			{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" },
+		];
+		const listApp = readApp(
+			{
+				qualityStageAssignment: { findMany: async () => [{ stageId: "stage-decoration" }] },
+				qualityInspection: { findMany: async () => [] },
+			},
+			adminAssignments,
+		);
+		const list = await request(listApp)
+			.get("/api/v1/quality-inspections")
+			.set("Authorization", "Bearer read-token");
+		expect(list.status).to.equal(200);
+
+		let decided = 0;
+		const decideApp = commandApp(
+			idempotentDatabase({
+				qualityStageAssignment: { findMany: async () => [{ stageId: "stage-decoration" }] },
+				qualityInspection: {
+					findUnique: async () => ({
+						id: "inspection-1",
+						stageId: "stage-decoration",
+						status: "OPEN",
+						rowVersion: 1,
+					}),
+					update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
+				},
+				qualityDecision: {
+					create: async () => {
+						decided += 1;
+						return { id: "decision-1", decision: "PASSED" };
+					},
+				},
+				auditRecord: { create: async () => undefined },
+				outboxMessage: { create: async () => undefined },
+			}),
+			adminAssignments,
+		);
+		const decide = await request(decideApp)
+			.post("/api/v1/quality-inspections/inspection-1/decisions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "qc-decide-admin")
+			.set("If-Match", '"1"')
+			.send({ decision: "PASSED" });
+		expect(decide.status).to.equal(201);
+		expect(decided).to.equal(1);
+	});
+
+	it("fail-closes resolve when quality.resolve has no stage rows", async () => {
+		const app = readApp({
+			qualityStageAssignment: { findMany: async () => [] },
+			batch: {
+				findFirst: async () => ({
+					id: "batch-1",
+					batchCode: "B-1001",
+					barcodeValue: "B-1001-QR",
+					plannedQuantity: 50,
+					currentStageId: "stage-decoration",
+					positionProjection: { stageId: "stage-decoration", subStageId: null },
+					lot: {
+						id: "lot-1",
+						lotCode: "LOT-01",
+						partName: "Body",
+						project: { product: { productName: "Fruits" } },
+					},
+					projectModelAllocation: { model: { modelName: "M03", modelNumber: "M03" } },
+					parts: [{ partId: "part-1", quantity: 50, part: { partName: "Body", partCode: "P-BODY" } }],
+					qualityInspections: [],
+				}),
+			},
+			qualityInspection: { create: async () => ({ id: "should-not-create", status: "OPEN", rowVersion: 1 }) },
+		});
+		const response = await request(app)
+			.get("/api/v1/quality-inspections/resolve")
+			.query({ code: "B-1001-QR" })
+			.set("Authorization", "Bearer read-token");
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:not-allowed-stage");
+	});
+
+	it("fail-closes decide when quality.resolve has no stage rows", async () => {
+		let decided = 0;
+		const database = idempotentDatabase({
+			qualityStageAssignment: { findMany: async () => [] },
+			qualityInspection: {
+				findUnique: async () => ({
+					id: "inspection-1",
+					stageId: "stage-decoration",
+					status: "OPEN",
+					rowVersion: 1,
+				}),
+				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
+			},
+			qualityDecision: {
+				create: async () => {
+					decided += 1;
+					return { id: "decision-1", decision: "PASSED" };
+				},
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		});
+		const app = commandApp(database);
+		const response = await request(app)
+			.post("/api/v1/quality-inspections/inspection-1/decisions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "qc-decide-closed")
+			.set("If-Match", '"1"')
+			.send({ decision: "PASSED" });
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:not-allowed-stage");
+		expect(decided).to.equal(0);
 	});
 });

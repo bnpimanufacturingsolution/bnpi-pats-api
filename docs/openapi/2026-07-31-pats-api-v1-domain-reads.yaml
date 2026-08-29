@@ -151,6 +151,24 @@ paths:
       tags: [PATS Exceptions]
       x-required-capability: execution.read
       responses: { '200': { $ref: '#/components/responses/CollectionRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
+  /quality-inspections/resolve:
+    get:
+      operationId: qualityInspectionResolveGet
+      summary: Resolve a scanned batch code into an open quality inspection
+      description: Journey D scan-first resolve. Requires quality.resolve. Fail-closed when the gate stage is not in the subject's allowedStages.
+      tags: [PATS Quality]
+      x-required-capability: quality.resolve
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200': { $ref: '#/components/responses/ResourceRead' }
+        '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }
+        '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
+        '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
+        '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' }
   /quality-inspections:
     get:
       operationId: qualityInspectionCollectionGet

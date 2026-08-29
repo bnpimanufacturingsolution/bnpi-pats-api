@@ -1,5 +1,49 @@
 [
   {
+    "id": "qualityInspectionResolveGet",
+    "method": "GET",
+    "url": "/quality-inspections/resolve",
+    "summary": "Resolve a scanned batch code into an open quality inspection",
+    "tags": [
+      "PATS Quality"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "code",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
     "id": "qualityInspectionCollectionGet",
     "method": "GET",
     "url": "/quality-inspections",

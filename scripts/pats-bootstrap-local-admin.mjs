@@ -2,12 +2,10 @@ import argon2 from "argon2";
 import { PrismaClient } from "../generated/pats-client/index.js";
 
 const KNOWN_ROLE_BUNDLES = new Set([
-	"catalog-manager",
 	"planner",
-	"production-operator",
-	"inventory-controller",
-	"quality-reviewer",
-	"operations-admin",
+	"admin",
+	"qi",
+	"operator",
 ]);
 
 function required(name) {

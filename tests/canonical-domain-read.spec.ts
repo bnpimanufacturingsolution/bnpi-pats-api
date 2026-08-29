@@ -152,7 +152,7 @@ describe("canonical PATS domain read contract", () => {
 				findMany: async () => [],
 			},
 		};
-		const filteredApp = appFor(database, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		const filteredApp = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(filteredApp)
 			.get("/api/v1/batches")
@@ -169,7 +169,7 @@ describe("canonical PATS domain read contract", () => {
 				findMany: async () => [{ id: "stage-1", name: "Injection", workflowGroup: { id: "group-1", name: "Factory" }, subStageLinks: [] }],
 			},
 		};
-		const configuredApp = appFor(database, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		const configuredApp = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(configuredApp)
 			.get("/api/v1/stages")
@@ -221,7 +221,7 @@ describe("canonical PATS domain read contract", () => {
 					],
 				},
 			},
-			[{ kind: "ROLE_BUNDLE", key: "quality-reviewer", status: "ACTIVE" }],
+			[{ kind: "ROLE_BUNDLE", key: "qi", status: "ACTIVE" }],
 		);
 
 		const response = await request(app)
@@ -284,7 +284,7 @@ describe("canonical PATS domain read contract", () => {
 					part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
 				}],
 			},
-		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
 			.get("/api/v1/batch-positions")
@@ -388,7 +388,7 @@ describe("canonical PATS domain read contract", () => {
 			part: {
 				findMany: async () => [{ id: "part-1", partCode: "PART-001", partName: "Main part" }],
 			},
-		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
 			.get("/api/v1/stations/station-injection/history")
@@ -472,7 +472,7 @@ describe("canonical PATS domain read contract", () => {
 					];
 				},
 			},
-		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
 			.get("/api/v1/stations/station-deco-fs/support")
@@ -539,7 +539,7 @@ describe("canonical PATS domain read contract", () => {
 			batchPositionProjection: {
 				findMany: async () => [],
 			},
-		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
 			.get("/api/v1/stations/station-deco-fs/support")
@@ -558,7 +558,7 @@ describe("canonical PATS domain read contract", () => {
 	it("rejects invalid station support date query", async () => {
 		const app = appFor({
 			station: { findUnique: async () => null },
-		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
 			.get("/api/v1/stations/station-x/support")
@@ -582,7 +582,7 @@ describe("canonical PATS domain read contract", () => {
 			routingViolation: { findMany: async () => [{ batchId: "batch-2", attemptedStageId: "stage-2" }, { batchId: "batch-3", attemptedStageId: "stage-1" }] },
 			qualityDecision: { count: async () => 1 },
 			inventoryTransaction: { count: async () => 7 },
-		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
 			.get("/api/v1/dashboard-summaries")
@@ -664,7 +664,7 @@ describe("canonical PATS domain read contract", () => {
 				count: async () => 1,
 				findMany: async () => [{ id: "inventory-1", transactionType: "ISSUANCE", partId: "part-1", lotId: "lot-1", batchId: "batch-1", fromStageId: null, toStageId: "stage-1", expectedQuantity: 40, actualQuantity: 35, withdrawalFormRef: "WF-001", recordedAt: occurredAt, recordedBy: "Operator", recordedBySubject: { displayNameSnapshot: "Operator One" } }],
 			},
-		}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
 			.get("/api/v1/reports/line")
@@ -682,7 +682,7 @@ describe("canonical PATS domain read contract", () => {
 
 	it("fails planning reads closed when the subject lacks planning.read", async () => {
 		const app = appFor({ project: { count: async () => 0, findMany: async () => [] } }, [
-			{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" },
+			{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" },
 		]);
 
 		const response = await request(app)

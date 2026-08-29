@@ -6,7 +6,12 @@
  * Contour families: inj parts, deco part nos, paint nos (PN-*), shared capsule.
  * Values remain PROVISIONAL seed evidence, not Drive-approved publication.
  *
- * SEED_MODE=none|demo|uat
+ * SEED_MODE=none|demo|uat — additive + idempotent by default (+ PATS_SEED_FRESH=1
+ * for a gated reset+reseed; dev/test only, never default, refused in production).
+ * The demo subjects are the canonical RBAC fixture set for future Playwright
+ * ABAC/RBAC tests — positive + negative capability/deny paths. See the fixture
+ * table in seedProfile(). v1.0 fabricated B308 family is dropped.
+ *
  * Requires PATS_DATABASE_URL and PATS_SEED_PASSWORD (12-1024 chars) for writable modes.
  */
 import { createHash } from "node:crypto";
@@ -17,7 +22,6 @@ import {
 	decoPartDisplayName,
 	paintPartDisplayName,
 } from "./pats-seed-client-b251.mjs";
-import { CLIENT_B308 } from "./pats-seed-client-b308.mjs";
 
 const mode = (process.env.SEED_MODE ?? "none").trim().toLowerCase();
 
@@ -39,9 +43,29 @@ if (!password || password.length < 12 || password.length > 1024) {
 	throw new Error("PATS_SEED_PASSWORD must contain 12-1024 characters for demo/uat seeding.");
 }
 
+// ── Fresh-reset (guarded destructive wipe) ───────────────────────
+// PATS_SEED_FRESH=1 turns this run into reset+reseed: wipe the canonical PATS
+// tables (dependency-ordered deleteMany) then run the additive upsert below.
+// Gated on purpose: never on by default, refused for production ENVs, and the
+// wipe runs INSIDE the same $transaction as the seed so any failure rolls the
+// whole reset back instead of leaving a half-wiped database. The additive
+// upserts remain the default path.
+const freshReset = (process.env.PATS_SEED_FRESH ?? "").trim() === "1";
+if (freshReset) {
+	const seedEnv = (process.env.ENV ?? process.env.NODE_ENV ?? "").toLowerCase();
+	if (seedEnv === "production" || seedEnv === "prod") {
+		throw new Error(
+			"PATS_SEED_FRESH refuses to run in production. Use ENV=dev|test (or leave it unset for a local dev DB).",
+		);
+	}
+}
+
 const profile = mode;
 const prefix = mode.toUpperCase();
-const seedClock = new Date("2026-07-28T08:00:00.000Z");
+// Relative-to-now anchor so every fresh seed is "recent" and plans/batches/QC
+// line up with the monitoring sheets (which snap to today) instead of a stale
+// frozen date. All offsets below spread from this single instant per run.
+const seedClock = new Date(Date.now());
 const prisma = new PrismaClient();
 
 function stableId(key) {
@@ -132,6 +156,23 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
 		});
 	}
 
+	// Re-seed must slim leftover fat bundles (e.g. demo.planner no longer holds QC).
+	const desiredKeys = new Set([
+		...roleBundles.map((role) => `ROLE_BUNDLE:${role}`),
+		...extraAssignments.map((assignment) => `${assignment.kind}:${assignment.key}`),
+	]);
+	const existingAssignments = await tx.subjectAssignment.findMany({
+		where: { subjectId: subject.id, status: "ACTIVE" },
+	});
+	for (const assignment of existingAssignments) {
+		if (!desiredKeys.has(`${assignment.kind}:${assignment.key}`)) {
+			await tx.subjectAssignment.update({
+				where: { id: assignment.id },
+				data: { status: "REVOKED", revokedAt: seedClock },
+			});
+		}
+	}
+
 	await tx.userPreference.upsert({
 		where: { userId: subject.id },
 		update: { locale: "EN", completedTours: [] },
@@ -141,22 +182,97 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
 	return subject;
 }
 
+/**
+ * Dependency-ordered wipe of every canonical table the seed writes.
+ * ONLY invoked when freshReset is enabled (guarded by PATS_SEED_FRESH + the ENV
+ * check above). Runs inside the seed $transaction so a failed reset+reseed rolls
+ * back cleanly. Children are deleted before parents. Tables outside the seed's
+ * writable surface are intentionally left untouched.
+ */
+async function wipeSeededTables(tx) {
+	for (const model of [
+		"outboxMessage",
+		"auditRecord",
+		"qualityDecision",
+		"qualityInspection",
+		"monitoringStationBoard",
+		"monitoringDailySheet",
+		"routingViolation",
+		"stageEvent",
+		"inventoryTransaction",
+		"batchPositionProjection",
+		"batchPartLine",
+		"batch",
+		"lotPartAllocation",
+		"lot",
+		"materialRequirement",
+		"routingStep",
+		"pmrs",
+		"partsList",
+		"part",
+		"planDemandAllocation",
+		"projectModelAllocation",
+		"productSpecification",
+		"project",
+		"workInstruction",
+		"booth",
+		"workProcess",
+		"stationStep",
+		"station",
+		"subStageEligibility",
+		"subStage",
+		"processRouteStage",
+		"processRoute",
+		"bomLine",
+		"bomDefinition",
+		"modelPart",
+		"model",
+		"product",
+		"userPreference",
+		"qualityStageAssignment",
+		"subjectAssignment",
+		"subjectCredential",
+		"subject",
+	]) {
+		await tx[model].deleteMany({});
+	}
+}
+
 async function seedProfile(tx) {
 	const passwordHash = await argon2.hash(password);
+
+	if (freshReset) {
+		await wipeSeededTables(tx);
+	}
+
+	// ── RBAC fixture subjects (Playwright ABAC/RBAC ground) ────────────────
+	// Every subject is a deliberate capability-matrix row. All share the single
+	// PATS_SEED_PASSWORD. stableId(key) entries keep re-seeds idempotent.
+	//   positive  demo.admin           — admin bundle; every capability true.
+	//   positive  demo.planner         — pure planner (planning + read-only
+	//                                     monitoring + catalog read). No QC,
+	//                                     no floor ops, no day-sheet encode.
+	//   positive  demo.operator        — floor execution + inventory.issue +
+	//                                     station encode. DENIED: daily-sheet
+	//                                     encode, QC, ops-admin, catalog-manage.
+	//   positive  demo.lineleader      — operator + CAPABILITY daily-metrics.encode
+	//                                     (Journey B / day-sheet grant path).
+	//   positive  demo.quality         — qi bundle + quality-stage scope
+	//                                     Decoration + Injection (QC-primary).
+	//   negative  demo.quality_noscope — qi bundle with NO quality-stage rows:
+	//                                     Journey D must FAIL CLOSED (scope-
+	//                                     dependent deny fixture).
+	// The operator-only deny path needs no separate user — demo.operator already
+	// is the operator without daily-metrics.encode. demo.inventory/demo.guest were
+	// considered and dropped: they add no distinct capability assertion.
 
 	const planner = await upsertSubject(
 		tx,
 		"subject-planner",
 		`${profile}.planner`,
 		`${prefix} Planner`,
-		// Demo shell convenience: planner can walk planning + floor + QC without role switch.
-		[
-			"planner",
-			"catalog-manager",
-			"production-operator",
-			"inventory-controller",
-			"quality-reviewer",
-		],
+		// Pure planner: planning + read-only monitoring + catalog read. Not a QC account.
+		["planner"],
 		passwordHash,
 	);
 	const operator = await upsertSubject(
@@ -164,16 +280,16 @@ async function seedProfile(tx) {
 		"subject-operator",
 		`${profile}.operator`,
 		`${prefix} Operator`,
-		["production-operator", "inventory-controller"],
+		["operator"],
 		passwordHash,
 	);
-	// Line Leader = floor operator + daily-metrics.encode assignment (not a fourth business role).
+	// Line Leader = operator + daily-metrics.encode assignment (not a fourth business role).
 	await upsertSubject(
 		tx,
 		"subject-lineleader",
 		`${profile}.lineleader`,
 		`${prefix} Line Leader`,
-		["production-operator"],
+		["operator"],
 		passwordHash,
 		[{ kind: "CAPABILITY", key: "daily-metrics.encode" }],
 	);
@@ -182,22 +298,27 @@ async function seedProfile(tx) {
 		"subject-quality",
 		`${profile}.quality`,
 		`${prefix} Quality`,
-		["quality-reviewer"],
+		["qi"],
 		passwordHash,
 	);
-	await upsertSubject(
+	// Negative-path QC fixture: qi bundle but intentionally NO qualityStage rows.
+	// Seeded later in this profile the same way, but never added to
+	// qualityScopeBySubject — Journey D scope lookups for this subject must
+	// resolve to an empty set and fail closed.
+	const qualityNoScope = await upsertSubject(
+		tx,
+		"subject-quality-noscope",
+		`${profile}.quality_noscope`,
+		`${prefix} Quality NoScope`,
+		["qi"],
+		passwordHash,
+	);
+	const admin = await upsertSubject(
 		tx,
 		"subject-admin",
 		`${profile}.admin`,
 		`${prefix} Admin`,
-		[
-			"planner",
-			"catalog-manager",
-			"production-operator",
-			"inventory-controller",
-			"quality-reviewer",
-			"operations-admin",
-		],
+		["admin"],
 		passwordHash,
 	);
 
@@ -622,14 +743,18 @@ async function seedProfile(tx) {
 	}
 
 	// Journey D allowedStages (v1 stage grain). Fail closed without these rows.
-	// demo.quality = Story 2 (Decoration + Injection). planner/admin all stages = fat-shell convenience, not product RBAC.
+	// demo.quality = Decoration + Injection (QC-primary QI). demo.admin = all catalog stages
+	// so admin quality caps are not fail-closed on empty scope.
+	// demo.planner is a pure planner — no QC capabilities and no stage rows.
+	// demo.quality_noscope is the negative fixture — qi bundle but NO scope rows
+	// here on purpose; any leaked rows from an earlier seed get revoked below.
 	const qualityWorkspaceId = process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS";
 	const allCatalogStageIds = [injectionStageId, decorationStageId, assemblyStageId, warehouseStageId];
-	for (const [subjectId, stageIds] of [
+	const qualityScopeBySubject = [
 		[quality.id, [decorationStageId, injectionStageId]],
-		[planner.id, allCatalogStageIds],
 		[admin.id, allCatalogStageIds],
-	]) {
+	];
+	for (const [subjectId, stageIds] of qualityScopeBySubject) {
 		for (const stageId of stageIds) {
 			await tx.qualityStageAssignment.upsert({
 				where: {
@@ -647,6 +772,21 @@ async function seedProfile(tx) {
 					stageId,
 					status: "ACTIVE",
 				},
+			});
+		}
+	}
+	// Re-seed must slim leftover fat scope (additive-mode hardening):
+	// demo.planner never holds QC scope, and demo.quality_noscope must never
+	// gain scope, so any stalker rows are revoked to preserve the deny fixture.
+	const leftoverNoScopeSubjects = [planner.id, qualityNoScope.id];
+	for (const subjectId of leftoverNoScopeSubjects) {
+		const leftoverScope = await tx.qualityStageAssignment.findMany({
+			where: { subjectId, workspaceId: qualityWorkspaceId, status: "ACTIVE" },
+		});
+		for (const row of leftoverScope) {
+			await tx.qualityStageAssignment.update({
+				where: { id: row.id },
+				data: { status: "REVOKED" },
 			});
 		}
 	}
@@ -1686,469 +1826,6 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// ── Second product family (distinct from B251) for multi-SKU demos ───────
-	const productB308Id = stableId("product-b308");
-	const b308ModelIds = {};
-	const b308PartIds = {};
-	await tx.product.upsert({
-		where: { id: productB308Id },
-		update: {
-			productName: CLIENT_B308.productName,
-			lifecycleStatus: "PUBLISHED",
-			evidenceStatus: "PROVISIONAL",
-		},
-		create: {
-			id: productB308Id,
-			productCode: code(CLIENT_B308.productCode),
-			productName: CLIENT_B308.productName,
-			lifecycleStatus: "PUBLISHED",
-			evidenceStatus: "PROVISIONAL",
-		},
-	});
-	for (const model of CLIENT_B308.models) {
-		const modelId = stableId(`model-b308-${model.modelNumber}`);
-		b308ModelIds[model.modelNumber] = modelId;
-		await tx.model.upsert({
-			where: { id: modelId },
-			update: {
-				productId: productB308Id,
-				modelNumber: model.modelNumber,
-				modelName: model.modelName,
-				sourceStatus: model.sourceStatus,
-				lifecycleStatus: "PUBLISHED",
-				evidenceStatus: model.evidenceStatus,
-				sourceReference: {
-					seedProfile: profile,
-					origin: "seed-provisional-variety",
-					productCode: CLIENT_B308.productCode,
-					modelNumber: model.modelNumber,
-				},
-			},
-			create: {
-				id: modelId,
-				productId: productB308Id,
-				modelNumber: model.modelNumber,
-				modelName: model.modelName,
-				sourceStatus: model.sourceStatus,
-				lifecycleStatus: "PUBLISHED",
-				evidenceStatus: model.evidenceStatus,
-				sourceReference: {
-					seedProfile: profile,
-					origin: "seed-provisional-variety",
-					productCode: CLIENT_B308.productCode,
-					modelNumber: model.modelNumber,
-				},
-			},
-		});
-		for (const [partCode, partName] of model.parts) {
-			const partId = stableId(`model-part-${partCode}`);
-			await tx.modelPart.upsert({
-				where: { modelId_partCode: { modelId, partCode } },
-				update: {
-					partName,
-					lifecycleStatus: "PUBLISHED",
-					evidenceStatus: "PROVISIONAL",
-					routingSteps: [],
-				},
-				create: {
-					id: partId,
-					modelId,
-					partCode,
-					partName,
-					lifecycleStatus: "PUBLISHED",
-					evidenceStatus: "PROVISIONAL",
-					routingSteps: [],
-				},
-			});
-			const resolved = await tx.modelPart.findUnique({
-				where: { modelId_partCode: { modelId, partCode } },
-				select: { id: true },
-			});
-			if (resolved) b308PartIds[partCode] = resolved.id;
-		}
-	}
-	// Shared capsule on every B308 model
-	for (const model of CLIENT_B308.models) {
-		const modelId = b308ModelIds[model.modelNumber];
-		const partCode = CLIENT_B308.sharedCapsule.partCode;
-		await tx.modelPart.upsert({
-			where: { modelId_partCode: { modelId, partCode } },
-			update: {
-				partName: CLIENT_B308.sharedCapsule.partName,
-				lifecycleStatus: "PUBLISHED",
-				evidenceStatus: "PROVISIONAL",
-				routingSteps: [],
-			},
-			create: {
-				id: stableId(`model-part-b308-capsule-${model.modelNumber}`),
-				modelId,
-				partCode,
-				partName: CLIENT_B308.sharedCapsule.partName,
-				lifecycleStatus: "PUBLISHED",
-				evidenceStatus: "PROVISIONAL",
-				routingSteps: [],
-			},
-		});
-	}
-
-	// B308 export plan — WIP skewed to Decoration / Assembly / Warehouse (vs B251 Injection-heavy)
-	const b308PlanId = stableId("production-plan-b308-export");
-	const b308Tray = CLIENT_B308.trayQuantityStandard;
-	const b308PlanQty = 7 * b308Tray; // matches seeded B308 batches
-	const b308PlanPartIds = {};
-	await tx.project.upsert({
-		where: { id: b308PlanId },
-		update: {
-			workspaceId: "PATS",
-			projectCode: code("PLAN-B308-EXP"),
-			name: `${CLIENT_B308.productName} — Export replenishment`,
-			requiredProductionQuantity: b308PlanQty,
-			status: "RELEASED",
-			releasedAt: atOffset({ days: 1, hours: 2 }),
-			releasedBySubjectId: planner.id,
-			productId: productB308Id,
-		},
-		create: {
-			id: b308PlanId,
-			workspaceId: "PATS",
-			projectCode: code("PLAN-B308-EXP"),
-			name: `${CLIENT_B308.productName} — Export replenishment`,
-			requiredProductionQuantity: b308PlanQty,
-			productId: productB308Id,
-			status: "RELEASED",
-			releasedAt: atOffset({ days: 1, hours: 2 }),
-			releasedBySubjectId: planner.id,
-			createdAt: seedClock,
-		},
-	});
-	await tx.productSpecification.upsert({
-		where: { projectId: b308PlanId },
-		update: {
-			skuCode: code("B308-SKU-EXP"),
-			productName: CLIENT_B308.productName,
-			trayQuantityStandard: CLIENT_B308.trayQuantityStandard,
-			sourceRevisionRef: CLIENT_B308.revision,
-		},
-		create: {
-			id: stableId("product-spec-b308"),
-			projectId: b308PlanId,
-			skuCode: code("B308-SKU-EXP"),
-			productName: CLIENT_B308.productName,
-			trayQuantityStandard: CLIENT_B308.trayQuantityStandard,
-			sourceRevisionRef: CLIENT_B308.revision,
-			createdAt: seedClock,
-		},
-	});
-	const b308ModelPlanQtys = { "01": 2 * b308Tray, "02": 2 * b308Tray, "03": 2 * b308Tray, "04": 1 * b308Tray };
-	for (const [modelNumber, qty] of Object.entries(b308ModelPlanQtys)) {
-		await tx.projectModelAllocation.upsert({
-			where: {
-				projectId_modelId: {
-					projectId: b308PlanId,
-					modelId: b308ModelIds[modelNumber],
-				},
-			},
-			update: {
-				plannedQuantity: qty,
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				lifecycleStatus: "COMMITTED",
-			},
-			create: {
-				id: stableId(`pma-b308-${modelNumber}`),
-				projectId: b308PlanId,
-				modelId: b308ModelIds[modelNumber],
-				plannedQuantity: qty,
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				lifecycleStatus: "COMMITTED",
-			},
-		});
-	}
-	const b308PartsListId = stableId("parts-list-b308-v1");
-	await tx.partsList.upsert({
-		where: { id: b308PartsListId },
-		update: {
-			projectId: b308PlanId,
-			version: 1,
-			status: "PUBLISHED",
-			sourceRevisionRef: CLIENT_B308.revision,
-			publishedAt: seedClock,
-		},
-		create: {
-			id: b308PartsListId,
-			projectId: b308PlanId,
-			version: 1,
-			status: "PUBLISHED",
-			sourceRevisionRef: CLIENT_B308.revision,
-			publishedAt: seedClock,
-			createdAt: seedClock,
-		},
-	});
-	for (const model of CLIENT_B308.models) {
-		for (const [partCode, partName] of model.parts) {
-			const id = stableId(`plan-part-${partCode}`);
-			b308PlanPartIds[partCode] = id;
-			await tx.part.upsert({
-				where: { id },
-				update: {
-					projectId: b308PlanId,
-					partCode,
-					partName,
-					sourceModelId: b308ModelIds[model.modelNumber],
-					sourceModelPartId: b308PartIds[partCode],
-					lifecycleStatus: "PUBLISHED",
-					variancePercentThreshold: 0.05,
-				},
-				create: {
-					id,
-					projectId: b308PlanId,
-					partCode,
-					partName,
-					sourceModelId: b308ModelIds[model.modelNumber],
-					sourceModelPartId: b308PartIds[partCode],
-					lifecycleStatus: "PUBLISHED",
-					variancePercentThreshold: 0.05,
-				},
-			});
-		}
-	}
-	const b308LotDefs = [
-		["lot-b308-tako", "LOT-B308-01", "B308 Takoyaki — Export Lot A", "01", 2 * b308Tray, "B308-01-01"],
-		["lot-b308-ramen", "LOT-B308-02", "B308 Ramen Cup — Export Lot A", "02", 2 * b308Tray, "B308-01-05"],
-		["lot-b308-oni", "LOT-B308-03", "B308 Onigiri — Export Lot A", "03", 2 * b308Tray, "B308-01-08"],
-		["lot-b308-skewer", "LOT-B308-04", "B308 Yakitori — Export Lot A", "04", 1 * b308Tray, "B308-01-11"],
-	];
-	const b308LotIds = {};
-	for (const [key, lotCode, lotName, modelNumber, qty, partCode] of b308LotDefs) {
-		const lotId = stableId(key);
-		b308LotIds[modelNumber] = lotId;
-		await tx.lot.upsert({
-			where: { id: lotId },
-			update: {
-				projectId: b308PlanId,
-				lotCode: code(lotCode),
-				lotName,
-				partsListId: b308PartsListId,
-				partsListVersion: 1,
-				partId: b308PlanPartIds[partCode],
-				partName: CLIENT_B308.models.find((m) => m.modelNumber === modelNumber).parts[0][1],
-				requiredProductionQuantity: qty,
-				status: "ACTIVE",
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				labelPackSize: CLIENT_B308.trayQuantityStandard,
-				createdAtStage: "Planning",
-			},
-			create: {
-				id: lotId,
-				projectId: b308PlanId,
-				lotCode: code(lotCode),
-				lotName,
-				partsListId: b308PartsListId,
-				partsListVersion: 1,
-				partId: b308PlanPartIds[partCode],
-				partName: CLIENT_B308.models.find((m) => m.modelNumber === modelNumber).parts[0][1],
-				requiredProductionQuantity: qty,
-				status: "ACTIVE",
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				labelPackSize: CLIENT_B308.trayQuantityStandard,
-				createdAtStage: "Planning",
-				createdAt: seedClock,
-			},
-		});
-		for (const [pCode] of CLIENT_B308.models.find((m) => m.modelNumber === modelNumber).parts) {
-			await tx.lotPartAllocation.upsert({
-				where: {
-					lotId_partId: { lotId, partId: b308PlanPartIds[pCode] },
-				},
-				update: {
-					quantityMagnitude: `${qty}.000000`,
-					quantityUom: "piece",
-					usageBasis: "1 per product",
-					status: "COMMITTED",
-				},
-				create: {
-					id: stableId(`alloc-${lotCode}-${pCode}`),
-					lotId,
-					partId: b308PlanPartIds[pCode],
-					quantityMagnitude: `${qty}.000000`,
-					quantityUom: "piece",
-					usageBasis: "1 per product",
-					status: "COMMITTED",
-					createdAt: seedClock,
-				},
-			});
-		}
-	}
-	// Stage mix deliberately different from B251 (more Deco/Assembly/Warehouse, less Injection)
-	const b308BatchDefs = [
-		["batch-b308-tako-inj", "BNI-2608-101", "01", "B308-01-01", b308Tray, injectionStageId, null],
-		["batch-b308-tako-dec", "BNI-2608-102", "01", "B308-01-01", b308Tray, decorationStageId, subFullSprayId],
-		["batch-b308-ramen-dec", "BNI-2608-103", "02", "B308-01-05", b308Tray, decorationStageId, subMaskSprayId],
-		["batch-b308-ramen-asm", "BNI-2608-104", "02", "B308-01-06", b308Tray, assemblyStageId, subAssortmentId],
-		["batch-b308-oni-asm", "BNI-2608-105", "03", "B308-01-08", b308Tray, assemblyStageId, subSubAssemblyId],
-		["batch-b308-skewer-wh", "BNI-2608-106", "04", "B308-01-11", b308Tray, warehouseStageId, subMainPackingId],
-		["batch-b308-oni-dec", "BNI-2608-107", "03", "B308-01-09", b308Tray, decorationStageId, subTampoId],
-	];
-	for (const [key, batchCode, modelNumber, partCode, qty, stageId, subStageId] of b308BatchDefs) {
-		const id = stableId(key);
-		const lotId = b308LotIds[modelNumber];
-		await tx.batch.upsert({
-			where: { id },
-			update: {
-				batchCode: code(batchCode),
-				barcodeValue: code(batchCode),
-				lotId,
-				plannedQuantity: qty,
-				labelPackSize: CLIENT_B308.trayQuantityStandard,
-				currentStageId: stageId,
-				currentSubStageId: subStageId,
-				status: "ACTIVE",
-				createdBySubjectId: operator.id,
-			},
-			create: {
-				id,
-				batchCode: code(batchCode),
-				barcodeValue: code(batchCode),
-				lotId,
-				plannedQuantity: qty,
-				labelPackSize: CLIENT_B308.trayQuantityStandard,
-				currentStageId: stageId,
-				currentSubStageId: subStageId,
-				status: "ACTIVE",
-				createdBySubjectId: operator.id,
-				createdAt: seedClock,
-			},
-		});
-		await tx.batchPartLine.upsert({
-			where: { batchId_partId: { batchId: id, partId: b308PlanPartIds[partCode] } },
-			update: {
-				quantity: qty,
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-			},
-			create: {
-				batchId: id,
-				partId: b308PlanPartIds[partCode],
-				quantity: qty,
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-			},
-		});
-		await tx.batchPositionProjection.upsert({
-			where: { batchId: id },
-			update: {
-				stageId,
-				subStageId,
-				positionStatus: "ACCEPTED",
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				projectionVersion: 1,
-			},
-			create: {
-				batchId: id,
-				stageId,
-				subStageId,
-				positionStatus: "ACCEPTED",
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				projectionVersion: 1,
-			},
-		});
-	}
-	// Distinct activity for Street Food Friends (different part names in feed)
-	const b308EventDefs = [
-		["ev-b308-tako-inj", "batch-b308-tako-inj", injectionStageId, null, "B308-01-01", b308Tray, 1, 5],
-		["ev-b308-ramen-dec", "batch-b308-ramen-dec", decorationStageId, subMaskSprayId, "B308-01-05", b308Tray, 2, 3],
-		["ev-b308-oni-asm", "batch-b308-oni-asm", assemblyStageId, subSubAssemblyId, "B308-01-08", b308Tray, 2, 7],
-		["ev-b308-skewer-wh", "batch-b308-skewer-wh", warehouseStageId, subMainPackingId, "B308-01-11", b308Tray, 3, 2],
-	];
-	for (const [key, batchKey, stageId, subStageId, partCode, qty, day, hour] of b308EventDefs) {
-		const id = stableId(key);
-		const batchId = stableId(batchKey);
-		const modelNumber = b308BatchDefs.find((b) => b[0] === batchKey)[2];
-		const lotId = b308LotIds[modelNumber];
-		await tx.stageEvent.upsert({
-			where: { id },
-			update: {
-				stageId,
-				subStageId,
-				batchId,
-				lotId,
-				partId: b308PlanPartIds[partCode],
-				quantity: qty,
-				occurredAt: atOffset({ days: day, hours: hour }),
-				actor: planner.displayNameSnapshot ?? planner.id,
-				actorSubjectId: planner.id,
-				eventType: "STAGE_COMPLETED",
-				status: "ACCEPTED",
-				isRoutingViolation: false,
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				sourceRepresentation: CLIENT_B308.formCode,
-			},
-			create: {
-				id,
-				stageId,
-				subStageId,
-				batchId,
-				lotId,
-				partId: b308PlanPartIds[partCode],
-				quantity: qty,
-				occurredAt: atOffset({ days: day, hours: hour }),
-				actor: planner.displayNameSnapshot ?? planner.id,
-				actorSubjectId: planner.id,
-				eventType: "STAGE_COMPLETED",
-				status: "ACCEPTED",
-				isRoutingViolation: false,
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				sourceRepresentation: CLIENT_B308.formCode,
-			},
-		});
-	}
-	// Open QC on B308 Takoyaki deco batch (different product in QC list)
-	await tx.qualityInspection.upsert({
-		where: { id: stableId("qi-b308-open-tako") },
-		update: {
-			batchId: stableId("batch-b308-tako-dec"),
-			stageId: decorationStageId,
-			subStageId: subFullSprayId,
-			stationId: decorationStationId,
-			inspectedQuantity: "200.000000",
-			quantityUom: "piece",
-			status: "IN_PROGRESS",
-			inspectedBySubjectId: quality.id,
-			evidence: {
-				partCode: "B308-01-01",
-				partName: "Takoyaki Shell",
-				origin: "seed-provisional-variety",
-				evidenceStatus: "PROVISIONAL",
-			},
-			startedAt: atOffset({ days: 2, hours: 4 }),
-			completedAt: null,
-		},
-		create: {
-			id: stableId("qi-b308-open-tako"),
-			batchId: stableId("batch-b308-tako-dec"),
-			stageId: decorationStageId,
-			subStageId: subFullSprayId,
-			stationId: decorationStationId,
-			inspectedQuantity: "200.000000",
-			quantityUom: "piece",
-			status: "IN_PROGRESS",
-			inspectedBySubjectId: quality.id,
-			evidence: {
-				partCode: "B308-01-01",
-				partName: "Takoyaki Shell",
-				origin: "seed-provisional-variety",
-				evidenceStatus: "PROVISIONAL",
-			},
-			startedAt: atOffset({ days: 2, hours: 4 }),
-		},
-	});
 
 	await tx.auditRecord.upsert({
 		where: { id: stableId("audit-seed-b251-release") },
@@ -2433,34 +2110,30 @@ async function seedProfile(tx) {
 
 	return {
 		profile,
-		subjects: 4,
+		subjects: 6,
 		primaryProduct: CLIENT_B251.productCode,
-		secondaryProduct: CLIENT_B308.productCode,
 		productName: CLIENT_B251.productName,
-		secondaryProductName: CLIENT_B308.productName,
-		models: CLIENT_B251.models.length + CLIENT_B308.models.length,
+		models: CLIENT_B251.models.length,
 		injParts: injPartCount,
 		decoParts: decoPartCount,
 		paintParts: paintPartCount,
 		capsuleAttachments: capsuleAttachmentCount,
 		catalogModelParts: injPartCount + decoPartCount + paintPartCount + capsuleAttachmentCount,
 		planParts: Object.keys(planPartIds).length,
-		plans: 2,
-		lots: lotDefs.length + b308LotDefs.length,
-		batches: batchDefs.length + b308BatchDefs.length,
-		stations: 8,
-		workProcesses: 5,
+		plans: 1,
+		lots: lotDefs.length,
+		batches: batchDefs.length,
+		stations: 7,
+		workProcesses: 4,
 		booths: 2,
 		monitoringDailySheets: 2,
 		monitoringStationBoards: 2,
 		productId: productB251Id,
-		secondaryProductId: productB308Id,
 		projectId,
-		secondaryProjectId: b308PlanId,
 		openInspectionId: inspectionOpenId,
 		adminUsername: `${profile}.admin`,
 		evidenceNote:
-			"B251 client-parts-list + B308 Street Food Friends + monitoring encode seed — PROVISIONAL, not Drive-approved",
+			"B251 client-parts-list (PROVISIONAL) + monitoring encode seed — fabricated B308 family dropped; not Drive-approved",
 	};
 }
 

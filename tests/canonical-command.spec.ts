@@ -187,7 +187,7 @@ describe("canonical PATS command contract", () => {
 	});
 
 	it("fails command access closed without planning.manage", async () => {
-		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 		const response = await request(app)
 			.post("/api/v1/production-plans")
 			.set("Authorization", "Bearer command-token")
@@ -221,7 +221,7 @@ describe("canonical PATS command contract", () => {
 			auditRecord: { create: async () => undefined },
 			outboxMessage: { create: async () => undefined },
 		};
-		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
 			.post("/api/v1/stage-events")
@@ -234,12 +234,82 @@ describe("canonical PATS command contract", () => {
 	});
 
 	it("keeps quality commands behind the quality resolver capability", async () => {
-		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }]);
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 		const response = await request(app)
 			.post("/api/v1/quality-inspections")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "quality-1")
 			.send({ batchId: "batch-1", stageId: "stage-1" });
+
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
+	it("keeps monitoring daily-sheet encode behind daily-metrics.encode (operator denied without it)", async () => {
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+		const response = await request(app)
+			.put("/api/v1/monitoring/daily-sheets/sheet-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "monitoring-daily-1")
+			.send({ payload: { date: "2026-08-28", processName: "Daily sheet" } });
+
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
+	it("grants daily-sheet encode to a Line Leader (operator + daily-metrics.encode capability)", async () => {
+		const storedRecord: Record<string, unknown> | null = null;
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => storedRecord,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-daily", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			monitoringDailySheet: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "sheet-1", rowVersion: 1, ...data }),
+				update: async () => undefined,
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [
+			{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" },
+			{ kind: "CAPABILITY", key: "daily-metrics.encode", status: "ACTIVE" },
+		]);
+
+		const response = await request(app)
+			.put("/api/v1/monitoring/daily-sheets/sheet-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "monitoring-daily-2")
+			.send({ payload: { date: "2026-08-28", processName: "Daily sheet" } });
+
+		expect(response.status).to.equal(201);
+		expect(response.headers.location).to.equal("/api/v1/monitoring/daily-sheets/sheet-1");
+		expect(response.headers.etag).to.equal('"1"');
+	});
+
+	it("keeps operations structure commands behind operations.manage (operator denied)", async () => {
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/stages")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "operations-1")
+			.send({ name: "Blocked stage" });
+
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
+	it("keeps inventory issue behind inventory.issue (planner denied)", async () => {
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/inventory-transactions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "inventory-1")
+			.send({ type: "ISSUE", partId: "part-1", quantity: 5 });
 
 		expect(response.status).to.equal(403);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");

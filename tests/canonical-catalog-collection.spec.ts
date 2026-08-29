@@ -36,7 +36,7 @@ const product = {
 function appFor(
 	productClient: { count: () => Promise<number>; findMany: (args: Record<string, unknown>) => Promise<unknown[]> },
 	assignments: Array<{ kind: "ROLE_BUNDLE" | "CAPABILITY"; key: string; status: "ACTIVE" }> = [
-		{ kind: "ROLE_BUNDLE", key: "catalog-manager", status: "ACTIVE" },
+		{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" },
 	],
 ) {
 	const app = express();
@@ -109,7 +109,7 @@ describe("canonical catalog product collection", () => {
 	it("fails closed without catalog.read", async () => {
 		const app = express();
 		app.use("/api/v1", canonicalRouter({
-			identity: identity([{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]),
+			identity: identity([{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]),
 			catalogCollection: {
 				requiredCapability: "catalog.read",
 				handler: (_req, res) => res.json({ data: [] }),

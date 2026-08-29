@@ -3,40 +3,70 @@ import type { SubjectAssignmentRecord } from "./types";
 /**
  * Role-bundle → capability expansion (ABAC-lite).
  *
- * Monitoring (2026-08-11 working defaults):
- * - monitoring.read — Matrix wall + Management GETs
- * - monitoring.station.encode — Station board PUT (Journey A)
- * - daily-metrics.encode — Line Leader day-sheet PUT (Journey B); not a fourth business role
+ * Four roles (2026-08 design):
+ * - admin   — full access (absorbs former catalog-manager + inventory-controller)
+ * - planner — planning + read monitoring + catalog read
+ * - qi      — quality inspector (IQC + QC): quality + reconciliation resolve
+ * - operator— floor staff: execution, inventory, station encode
  *
- * Demo seed may still assign fat multi-bundles; do not treat seed as product RBAC truth.
+ * Line Leader is NOT a role — operator + daily-metrics.encode via LineLeaderAssignment.
+ *
+ * Quality staging (Journey D): stage scope is QualityStageAssignment (fail-closed),
+ * not this map.
  */
 export const ROLE_BUNDLE_CAPABILITIES: Readonly<Record<string, readonly string[]>> = Object.freeze({
-	"catalog-manager": ["catalog.read", "catalog.manage", "source-revision.approve"],
 	planner: [
 		"planning.read",
 		"planning.manage",
 		"material-requirement.manage",
 		// Planner may enter Manufacturing for read monitoring; encode stays off by default.
 		"monitoring.read",
+		"catalog.read",
 	],
-	"production-operator": [
+	admin: [
+		// Catalog (former catalog-manager)
+		"catalog.read",
+		"catalog.manage",
+		"source-revision.approve",
+		// Planning
+		"planning.read",
+		"planning.manage",
+		"material-requirement.manage",
+		// Execution
 		"execution.read",
 		"execution.write",
+		// Inventory (former inventory-controller)
+		"inventory.read",
+		"inventory.receive",
+		"inventory.issue",
+		"reconciliation.read",
+		// Monitoring
+		"monitoring.read",
+		"monitoring.station.encode",
+		"daily-metrics.encode",
+		// Quality
+		"quality.read",
+		"quality.resolve",
+		"reconciliation.resolve",
+		// Identity / operations
+		"identity.read",
+		"capabilities.read",
+		"operations.manage",
+	],
+	qi: [
+		"quality.read",
+		"quality.resolve",
+		"reconciliation.resolve",
+		"monitoring.read",
+	],
+	operator: [
+		"execution.read",
+		"execution.write",
+		"inventory.read",
 		"inventory.issue",
 		"monitoring.read",
 		// Journey A: floor operators may encode station boards by default.
 		"monitoring.station.encode",
-	],
-	"inventory-controller": ["inventory.read", "inventory.receive", "inventory.issue", "reconciliation.read"],
-	"quality-reviewer": ["quality.read", "quality.resolve", "reconciliation.resolve"],
-	"operations-admin": [
-		"identity.read",
-		"capabilities.read",
-		"operations.manage",
-		"monitoring.read",
-		"monitoring.station.encode",
-		// Admin optional encode — granted for operations bootstrap / support.
-		"daily-metrics.encode",
 	],
 });
 

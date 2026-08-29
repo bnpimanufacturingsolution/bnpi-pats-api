@@ -42,7 +42,7 @@ class FakeRepository implements SubjectRepository, LocalAccountRepository {
 	}
 
 	async listAssignments(_subjectId: string): Promise<SubjectAssignmentRecord[]> {
-		return [{ kind: "ROLE_BUNDLE", key: "production-operator", status: "ACTIVE" }];
+		return [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }];
 	}
 
 	async findByUsername(username: string): Promise<LocalCredentialRecord | null> {
