@@ -22,6 +22,10 @@ export const ROLE_BUNDLE_CAPABILITIES: Readonly<Record<string, readonly string[]
 		// Planner may enter Manufacturing for read monitoring; encode stays off by default.
 		"monitoring.read",
 		"catalog.read",
+		// Production summary read (dashboard / line report) — planner is a read-mostly
+		// planning + monitoring role that views the production picture, not the full
+		// floor-directory execution.read surface.
+		"dashboard.read",
 	],
 	admin: [
 		// Catalog (former catalog-manager)
@@ -44,6 +48,8 @@ export const ROLE_BUNDLE_CAPABILITIES: Readonly<Record<string, readonly string[]
 		"monitoring.read",
 		"monitoring.station.encode",
 		"daily-metrics.encode",
+		// Production summary read
+		"dashboard.read",
 		// Quality
 		"quality.read",
 		"quality.resolve",
@@ -67,6 +73,7 @@ export const ROLE_BUNDLE_CAPABILITIES: Readonly<Record<string, readonly string[]
 		"monitoring.read",
 		// Journey A: floor operators may encode station boards by default.
 		"monitoring.station.encode",
+		"dashboard.read",
 	],
 });
 

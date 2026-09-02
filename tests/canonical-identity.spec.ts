@@ -78,6 +78,7 @@ describe("canonical identity boundary", () => {
 		assert.deepStrictEqual(response.body, {
 			capabilities: [
 				"catalog.read",
+				"dashboard.read",
 				"execution.read",
 				"material-requirement.manage",
 				"monitoring.read",
@@ -124,6 +125,7 @@ describe("canonical identity boundary", () => {
 			.expect(200);
 		assert.deepStrictEqual(planner.body.capabilities, [
 			"catalog.read",
+			"dashboard.read",
 			"material-requirement.manage",
 			"monitoring.read",
 			"planning.manage",
