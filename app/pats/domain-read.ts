@@ -1123,7 +1123,7 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get("/dashboard-summaries", requireCapability("execution.read"), async (req, res) => {
+	router.get("/dashboard-summaries", requireCapability("dashboard.read"), async (req, res) => {
 		try {
 			const [plans, activeBatchRows, stageRows, openViolationRows, qualityHolds, inventoryTransactions] = await Promise.all([
 				database.project.count(),
@@ -1166,7 +1166,7 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get("/reports/line", requireCapability("execution.read"), async (req, res) => {
+	router.get("/reports/line", requireCapability("dashboard.read"), async (req, res) => {
 		try {
 			const reportNow = new Date();
 			const throughputStart = new Date(Date.UTC(reportNow.getUTCFullYear(), reportNow.getUTCMonth(), reportNow.getUTCDate()));

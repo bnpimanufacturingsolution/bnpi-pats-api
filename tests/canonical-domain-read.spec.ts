@@ -680,6 +680,44 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.dailyThroughput[0].expected).to.equal(200);
 	});
 
+	it("allows planner to read the dashboard summary (dashboard.read, not execution.read)", async () => {
+		// Planner is the regression subject: it must read the dashboard even though it
+		// deliberately lacks execution.read for the full floor-directory ops surface.
+		const app = appFor({
+			project: { count: async () => 4 },
+			batch: {
+				findMany: async () => [
+					{ id: "batch-1", plannedQuantity: 40, lot: { id: "lot-1", projectId: "project-1", requiredProductionQuantity: 100, project: { name: "Plan 1", product: { productName: "Product 1" } } }, positionProjection: { stageId: "stage-1", quantityMagnitude: "40" } },
+				],
+			},
+			stage: { findMany: async () => [{ id: "stage-1", name: "Injection", displayOrder: 1 }] },
+			routingViolation: { findMany: async () => [] },
+			qualityDecision: { count: async () => 0 },
+			inventoryTransaction: { count: async () => 0 },
+		}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/dashboard-summaries")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.plans).to.equal(4);
+	});
+
+	it("fails dashboard reads closed when the subject lacks dashboard.read", async () => {
+		// qi bundle has quality + monitoring, but NOT dashboard.read (or execution.read).
+		const app = appFor({ project: { count: async () => 0 } }, [
+			{ kind: "ROLE_BUNDLE", key: "qi", status: "ACTIVE" },
+		]);
+
+		const response = await request(app)
+			.get("/api/v1/dashboard-summaries")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
 	it("fails planning reads closed when the subject lacks planning.read", async () => {
 		const app = appFor({ project: { count: async () => 0, findMany: async () => [] } }, [
 			{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" },
