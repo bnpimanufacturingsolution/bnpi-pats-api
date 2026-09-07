@@ -5,6 +5,7 @@ import express from "express";
 import request from "supertest";
 import { parse } from "yaml";
 import { canonicalRouter } from "../app/canonical/router";
+import { effectiveCapabilities, ROLE_BUNDLE_CAPABILITIES } from "../app/identity/policy";
 import type { IdentityDependencies, SubjectAssignmentRecord, SubjectRecord, VerifiedIdentity } from "../app/identity/types";
 
 const verified: VerifiedIdentity = {
@@ -131,6 +132,39 @@ describe("canonical identity boundary", () => {
 			"planning.manage",
 			"planning.read",
 		]);
+	});
+
+	it("grants admin every capability the canonical surface can require (no admin access gaps)", () => {
+		const adminCapabilities = new Set(
+			effectiveCapabilities([{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]),
+		);
+		const gatedCapabilities = [
+			// create-app read boundaries (catalog, catalog collection, BOM reads)
+			"catalog.read",
+			// catalog mutation boundary (catalog/bom/process-route foundations)
+			"catalog.manage",
+			// domain reads (app/pats/domain-read.ts)
+			"planning.read",
+			"execution.read",
+			"monitoring.read",
+			"inventory.read",
+			"quality.read",
+			"quality.resolve",
+			"dashboard.read",
+			// domain commands (app/pats/command-router.ts)
+			"planning.manage",
+			"execution.write",
+			"inventory.issue",
+			"reconciliation.resolve",
+			"operations.manage",
+			"daily-metrics.encode",
+			"monitoring.station.encode",
+		];
+
+		const missing = gatedCapabilities.filter((capability) => !adminCapabilities.has(capability));
+		assert.deepStrictEqual(missing, []);
+		assert.ok(adminCapabilities.has("identity.read"));
+		assert.ok(adminCapabilities.has("capabilities.read"));
 	});
 
 	it("fails closed when authentication is absent", async () => {
