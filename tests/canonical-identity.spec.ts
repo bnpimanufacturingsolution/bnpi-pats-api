@@ -154,6 +154,7 @@ describe("canonical identity boundary", () => {
 			// domain commands (app/pats/command-router.ts)
 			"planning.manage",
 			"execution.write",
+			"inventory.receive",
 			"inventory.issue",
 			"reconciliation.resolve",
 			"operations.manage",
