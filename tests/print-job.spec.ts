@@ -2,11 +2,13 @@ import { expect } from "chai";
 import { recordPrintJob, type PrintJobStore } from "../app/pats/print-job";
 import type { PrintPort } from "../app/pats/print-ports";
 
-function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>> } {
+function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>>; transactions: Array<Record<string, unknown>> } {
 	const jobs: Array<Record<string, unknown>> = [];
+	const transactions: Array<Record<string, unknown>> = [];
 	let issued = 0;
-	const api: PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>> } = {
+	const api: PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>>; transactions: Array<Record<string, unknown>> } = {
 		jobs,
+		transactions,
 		get issued() {
 			return issued;
 		},
@@ -64,8 +66,9 @@ function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, u
 			findUnique: async () => ({ name: "Full Spray" }),
 		},
 		inventoryTransaction: {
-			create: async () => {
+			create: async ({ data }) => {
 				issued += 1;
+				transactions.push(data);
 				return { id: `iss-${issued}` };
 			},
 		},
@@ -171,5 +174,49 @@ describe("recordPrintJob", () => {
 			simulated,
 		);
 		expect(db.issued).to.equal(1);
+	});
+
+	it("labels and issues the ACTUAL pcs when provided (variance → RECORDED)", async () => {
+		const db = store();
+		const job = await recordPrintJob(
+			db,
+			{
+				batchId: "batch-1",
+				stationId: "station-1",
+				actualQuantity: 235,
+				actor: "Station",
+				actorSubjectId: "sub-1",
+			},
+			simulated,
+		);
+		// The label face carries what physically shipped, not the plan.
+		expect(job.quantity).to.equal(235);
+		expect(String(db.jobs[0]?.renderedPayload)).to.include("235 PCS");
+		// Ledger honesty: expected = planned (240), actual = counted (235) → variance.
+		expect(db.transactions[0]).to.include({
+			expectedQuantity: 240,
+			actualQuantity: 235,
+			status: "RECORDED",
+		});
+	});
+
+	it("issues ACCEPTED when the actual pcs match the plan", async () => {
+		const db = store();
+		await recordPrintJob(
+			db,
+			{
+				batchId: "batch-1",
+				stationId: "station-1",
+				actualQuantity: 240,
+				actor: "Station",
+				actorSubjectId: "sub-1",
+			},
+			simulated,
+		);
+		expect(db.transactions[0]).to.include({
+			expectedQuantity: 240,
+			actualQuantity: 240,
+			status: "ACCEPTED",
+		});
 	});
 });

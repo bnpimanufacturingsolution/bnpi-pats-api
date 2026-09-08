@@ -5,6 +5,13 @@ export type PrintJobCreateInput = {
 	batchId: string;
 	stationId: string;
 	reprintOf?: string | null;
+	/**
+	 * Actual pcs in the completed pack (label truth). Defaults to the planned
+	 * pack quantity when omitted; ISSUANCE posts expected=planned / actual=this
+	 * so short/over packs surface as variance (RECORDED) instead of silently
+	 * rounding to plan.
+	 */
+	actualQuantity?: number | null;
 };
 
 export type PrintJobRecord = {
@@ -188,6 +195,8 @@ export function resolvePrinterBinding(station: PrintJobStation): {
 
 export function buildLabelIr(input: {
 	batch: PrintJobBatch;
+	/** Actual pcs for the label face; defaults to the planned pack quantity. */
+	quantity?: number;
 	fromStepLabel: string;
 	toStepLabel: string;
 	sequence: number;
@@ -203,7 +212,7 @@ export function buildLabelIr(input: {
 		lotCode: input.batch.lot.lotCode,
 		partName: part?.part.partName ?? input.batch.lot.partName,
 		partCode: part?.part.partCode ?? "",
-		quantity: quantityOf(input.batch),
+		quantity: input.quantity ?? quantityOf(input.batch),
 		fromStepLabel: input.fromStepLabel,
 		toStepLabel: input.toStepLabel,
 		printedAt: input.printedAt,
@@ -242,6 +251,15 @@ export async function recordPrintJob(
 		if (!original) throw new Error("NOT_FOUND_REPRINT");
 	}
 
+	// Label truth: the completed pack's actual pcs. Defaults to the planned
+	// pack quantity; reprints inherit the original row's quantity so the label
+	// face never drifts from what physically shipped.
+	const plannedQuantity = quantityOf(batch);
+	const labelQuantity =
+		input.reprintOf || input.actualQuantity === null || input.actualQuantity === undefined
+			? plannedQuantity
+			: input.actualQuantity;
+
 	const partIds = batch.parts.map((part) => part.partId);
 	const steps = await store.routingStep.findMany({
 		where: {
@@ -273,6 +291,7 @@ export async function recordPrintJob(
 	const binding = resolvePrinterBinding(station);
 	const ir = buildLabelIr({
 		batch,
+		quantity: labelQuantity,
 		fromStepLabel: await stepLabel(store, fromStageId, fromSubStageId),
 		toStepLabel: await stepLabel(store, nextStep?.stageId ?? null, nextStep?.subStageId ?? null),
 		sequence,
@@ -317,6 +336,11 @@ export async function recordPrintJob(
 		Boolean(batch.parts[0]?.partId) &&
 		priorSuccessfulPrints === 0;
 	if (shouldIssue && nextStep && batch.parts[0]?.partId) {
+		// Plan vs reality on the ledger: expected = planned pack quantity,
+		// actual = the pcs the LL counted into the tray. Equal → ACCEPTED;
+		// different → RECORDED (variance surfaces in Reports via the part's
+		// varianceRule) — release is never blocked.
+		const hasVariance = labelQuantity !== plannedQuantity;
 		await store.inventoryTransaction.create({
 			data: {
 				transactionType: "ISSUANCE",
@@ -327,11 +351,11 @@ export async function recordPrintJob(
 				fromSubStageId,
 				toStageId: nextStep.stageId,
 				toSubStageId: nextStep.subStageId,
-				expectedQuantity: ir.quantity,
-				actualQuantity: ir.quantity,
+				expectedQuantity: plannedQuantity,
+				actualQuantity: labelQuantity,
 				recordedBy: input.actor,
 				recordedBySubjectId: input.actorSubjectId,
-				status: "ACCEPTED",
+				status: hasVariance ? "RECORDED" : "ACCEPTED",
 			},
 		});
 	}
