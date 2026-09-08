@@ -731,6 +731,82 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
 	});
 
+	it("serves print jobs to admin (execution.read) after canonical identity resolves the path", async () => {
+		const app = appFor(
+			{
+				printJob: {
+					findMany: async (args: { where: Record<string, unknown> }) => {
+						expect(args.where).to.deep.equal({});
+						return [
+							{
+								id: "pj-1",
+								batchId: "batch-1",
+								stationId: "station-inj-01",
+								sequence: 1,
+								occurredAt: new Date("2026-08-10T12:00:00.000Z"),
+							},
+						];
+					},
+				},
+			},
+			[{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/print-jobs")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.data).to.have.length(1);
+		expect(response.body.data[0]).to.include({ id: "pj-1", batchId: "batch-1", sequence: 1 });
+		expect(response.body.data[0].occurredAt).to.equal("2026-08-10T12:00:00.000Z");
+	});
+
+	it("serves print jobs to operator (execution.read) when filtered by batchId", async () => {
+		let receivedWhere: Record<string, unknown> | undefined;
+		const app = appFor(
+			{
+				printJob: {
+					findMany: async (args: { where: Record<string, unknown> }) => {
+						receivedWhere = args.where;
+						return [
+							{
+								id: "pj-2",
+								batchId: "batch-1",
+								stationId: "station-inj-01",
+								sequence: 1,
+								occurredAt: new Date("2026-08-10T13:00:00.000Z"),
+							},
+						];
+					},
+				},
+			},
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/print-jobs")
+			.query({ batchId: "batch-1" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedWhere).to.deep.equal({ batchId: "batch-1" });
+		expect(response.body.data).to.have.length(1);
+	});
+
+	it("fails print-job reads closed when the subject lacks execution.read", async () => {
+		const app = appFor({ printJob: { findMany: async () => [] } }, [
+			{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" },
+		]);
+
+		const response = await request(app)
+			.get("/api/v1/print-jobs")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
 	it("rejects unknown collection filters before touching persistence", async () => {
 		let called = false;
 		const app = appFor({
