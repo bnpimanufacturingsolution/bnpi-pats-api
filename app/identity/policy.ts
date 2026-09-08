@@ -82,6 +82,8 @@ const STANDALONE_CAPABILITIES = [
 	"monitoring.read",
 	"monitoring.station.encode",
 	"daily-metrics.encode",
+	// Reports QC reads for scope-less floor leads (read-only; resolve stays qi/admin).
+	"quality.read",
 ] as const;
 
 const KNOWN_CAPABILITIES = new Set([
