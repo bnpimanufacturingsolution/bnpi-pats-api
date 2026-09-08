@@ -39,7 +39,9 @@ export type PrintJobStore = {
 		}) => Promise<PrintJobBatch | null>;
 	};
 	printJob: {
-		count: (args: { where: { batchId: string; stationId: string } }) => Promise<number>;
+		count: (args: {
+			where: { batchId: string; stationId: string; status?: { not: string } };
+		}) => Promise<number>;
 		findFirst: (args: {
 			where: { id: string; batchId: string };
 		}) => Promise<{ id: string } | null>;
@@ -256,6 +258,17 @@ export async function recordPrintJob(
 	const fromStageId = batch.positionProjection?.stageId ?? batch.currentStageId;
 	const fromSubStageId = batch.positionProjection?.subStageId ?? batch.currentSubStageId;
 	const sequence = (await store.printJob.count({ where: { batchId: batch.id, stationId: station.id } })) + 1;
+	// Counted BEFORE this print is recorded: first SUCCESSFUL print issues (one
+	// ISSUANCE per pack, ever). A FAILED attempt consumes a sequence but never
+	// blocks the pack's issuance — its retry is a fresh print (seq 2+) and posts
+	// the move then. Reprints (reprintOf set) never issue again.
+	const priorSuccessfulPrints = await store.printJob.count({
+		where: {
+			batchId: batch.id,
+			stationId: station.id,
+			status: { not: "FAILED" },
+		},
+	});
 	const language = (station.printerLanguage ?? "ZPL").toUpperCase();
 	const binding = resolvePrinterBinding(station);
 	const ir = buildLabelIr({
@@ -296,12 +309,13 @@ export async function recordPrintJob(
 		},
 	});
 
+	// First SUCCESSFUL print issues (see priorSuccessfulPrints above).
 	const shouldIssue =
 		!input.reprintOf &&
 		delivered.status !== "FAILED" &&
 		nextStep &&
-		sequence === 1 &&
-		Boolean(batch.parts[0]?.partId);
+		Boolean(batch.parts[0]?.partId) &&
+		priorSuccessfulPrints === 0;
 	if (shouldIssue && nextStep && batch.parts[0]?.partId) {
 		await store.inventoryTransaction.create({
 			data: {

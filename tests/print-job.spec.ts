@@ -42,7 +42,10 @@ function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, u
 			}),
 		},
 		printJob: {
-			count: async () => jobs.length,
+			count: async ({ where }: { where?: { status?: { not?: string } } }) =>
+				jobs.filter(
+					(job) => (where?.status?.not ? job.status !== where.status.not : true),
+				).length,
 			findFirst: async ({ where }) =>
 				jobs.find((job) => job.id === where.id && job.batchId === where.batchId)
 					? { id: String(where.id) }
@@ -133,5 +136,40 @@ describe("recordPrintJob", () => {
 		);
 		expect(job.status).to.equal("FAILED");
 		expect(db.issued).to.equal(0);
+	});
+
+	it("issues on the fresh retry after a failed first print (first successful print wins)", async () => {
+		const db = store();
+		const failed = await recordPrintJob(
+			db,
+			{ batchId: "batch-1", stationId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			{
+				async deliver() {
+					return { status: "FAILED", failureReason: "Printer timed out." };
+				},
+			},
+		);
+		expect(failed.sequence).to.equal(1);
+		expect(db.issued).to.equal(0);
+
+		// The operator retries from the desk (fresh idempotency key, no reprintOf):
+		// this successful print IS the pack's first — it must post the ISSUANCE.
+		const retry = await recordPrintJob(
+			db,
+			{ batchId: "batch-1", stationId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			simulated,
+		);
+		expect(retry.sequence).to.equal(2);
+		expect(retry.reprintOf).to.equal(null);
+		expect(retry.status).to.equal("SIMULATED");
+		expect(db.issued).to.equal(1);
+
+		// And it stays one-per-pack: further fresh prints never re-issue.
+		await recordPrintJob(
+			db,
+			{ batchId: "batch-1", stationId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			simulated,
+		);
+		expect(db.issued).to.equal(1);
 	});
 });
