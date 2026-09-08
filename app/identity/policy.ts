@@ -69,6 +69,9 @@ export const ROLE_BUNDLE_CAPABILITIES: Readonly<Record<string, readonly string[]
 		"execution.read",
 		"execution.write",
 		"inventory.read",
+		// D1 capability split: receiving material at the station is part of the
+		// operator's floor duty; issuance stays the stricter inventory.issue gate.
+		"inventory.receive",
 		"inventory.issue",
 		"monitoring.read",
 		// Journey A: floor operators may encode station boards by default.

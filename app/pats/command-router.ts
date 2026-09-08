@@ -272,6 +272,23 @@ function requireCapability(capability: string, gate: (capability: string) => Req
 	return gate(capability);
 }
 
+/**
+ * D1 capability split: one route, two gates. RECEIVING material in is the
+ * operator's floor duty (inventory.receive); issuing material out stays behind
+ * the stricter inventory.issue. The body is parsed before this middleware runs
+ * (express.json mounts in the canonical router), so transactionType is
+ * readable; unknown/missing types fall back to the legacy inventory.issue gate
+ * and fail schema validation (400) for capability holders — fail-closed either
+ * way.
+ */
+function requireInventoryTransactionCapability(gate: (capability: string) => RequestHandler): RequestHandler {
+	return (req, res, next) => {
+		const transactionType = (req.body as { transactionType?: unknown } | null | undefined)?.transactionType;
+		const capability = transactionType === "RECEIVING" ? "inventory.receive" : "inventory.issue";
+		return gate(capability)(req, res, next);
+	};
+}
+
 async function batchRouteContext(transaction: CommandTransaction, batchId: string) {
 	const batch = await transaction.batch.findUnique({ where: { id: batchId }, include: { lot: true, parts: true, positionProjection: true } });
 	if (!batch) notFound("The requested batch was not found.");
@@ -749,7 +766,7 @@ export function commandRouter(
 		}
 	});
 
-	router.post("/inventory-transactions", requireCapability("inventory.issue", requireCanonicalCapability), async (req, res, next) => {
+	router.post("/inventory-transactions", requireInventoryTransactionCapability(requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, inventoryTransactionCreateSchema);
 			const response = await executeCommand(database, req, "inventoryTransactionRecord", body, async (transaction) => {
