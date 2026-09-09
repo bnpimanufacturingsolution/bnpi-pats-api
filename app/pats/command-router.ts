@@ -159,11 +159,23 @@ const qualityInspectionCreateSchema = z.object({
 	evidence: z.record(z.string(), z.unknown()).nullable().optional(),
 }).strict();
 
-const qualityDecisionSchema = z.object({
-	decision: z.enum(["PASSED", "FAILED", "HOLD"]),
-	reasonCode: z.string().trim().max(80).nullable().optional(),
-	reasonNote: z.string().trim().max(500).nullable().optional(),
-}).strict();
+const qualityDecisionSchema = z
+	.object({
+		decision: z.enum(["PASSED", "FAILED", "HOLD"]),
+		reasonCode: z.string().trim().max(80).nullable().optional(),
+		reasonNote: z.string().trim().max(500).nullable().optional(),
+	})
+	.strict()
+	.superRefine((body, ctx) => {
+		// A fail must say why (2026-09-09 QC plan D3); PASSED/HOLD need no reason.
+		if (body.decision === "FAILED" && !(body.reasonCode && body.reasonCode.length > 0)) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ["reasonCode"],
+				message: "A FAILED decision requires a reason code.",
+			});
+		}
+	});
 
 const routingViolationResolutionSchema = z.object({
 	resolutionNote: z.string().trim().min(1).max(500),
