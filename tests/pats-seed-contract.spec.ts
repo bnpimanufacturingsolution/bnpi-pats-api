@@ -117,6 +117,29 @@ describe("PATS seed contract", () => {
     expect(script).not.to.contain("planner/admin all stages = fat-shell convenience");
   });
 
+  it("seeds the Injection desk bridge (sub-stage, work-process, bound step, ledger)", () => {
+    const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+    const policy = fs.readFileSync(path.join(repositoryRoot, "app", "identity", "policy.ts"), "utf8");
+
+    // Desk bridge: an Injection sub-stage leaves the stage-wide bound step intact.
+    expect(script).to.contain("substage-injection-molding");
+    expect(script).to.contain("[injectionStageId, subInjectionMoldingId]");
+    expect(script).to.contain('"station-step-inj-mold"');
+    expect(script).to.contain("work-process-molding");
+    expect(script).to.contain("Molding\", 1, 14");
+
+    // Line Leader gains scope-less QC read for the Reports tab — read only, never resolve.
+    expect(script).to.contain('kind: "CAPABILITY", key: "quality.read"');
+    expect(script).not.to.contain('kind: "CAPABILITY", key: "quality.resolve"');
+    // The standalone grant must pass the policy KNOWN filter, not just the seed.
+    expect(policy).to.contain(`"quality.read",`);
+
+    // Ledger evidence rows are part of the seed's writable (and wiped) surface.
+    expect(script).to.contain('batchIds["batch-fw-inj"]');
+    expect(script).to.contain('"printJob"');
+    expect(script).to.contain("workProcesses: 5,");
+  });
+
   it("documents the RBAC fixture subjects and the negative-path QI without scope", () => {
     const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
 

@@ -202,6 +202,7 @@ async function wipeSeededTables(tx) {
 		"monitoringDailySheet",
 		"routingViolation",
 		"stageEvent",
+		"printJob",
 		"inventoryTransaction",
 		"batchPositionProjection",
 		"batchPartLine",
@@ -259,7 +260,10 @@ async function seedProfile(tx) {
 	//                                     station encode. DENIED: daily-sheet
 	//                                     encode, QC, ops-admin, catalog-manage.
 	//   positive  demo.lineleader      — operator + CAPABILITY daily-metrics.encode
-	//                                     (Journey B / day-sheet grant path).
+	//                                     (Journey B / day-sheet grant path) +
+	//                                     CAPABILITY quality.read (Reports QC reads
+	//                                     without a Quality stage scope; scope-less
+	//                                     LL cannot resolve, only read).
 	//   positive  demo.quality         — qi bundle + quality-stage scope
 	//                                     Decoration + Injection (QC-primary).
 	//   negative  demo.quality_noscope — qi bundle with NO quality-stage rows:
@@ -287,14 +291,17 @@ async function seedProfile(tx) {
 		passwordHash,
 	);
 	// Line Leader = operator + daily-metrics.encode assignment (not a fourth business role).
-	await upsertSubject(
+	const lineLeader = await upsertSubject(
 		tx,
 		"subject-lineleader",
 		`${profile}.lineleader`,
 		`${prefix} Line Leader`,
 		["operator"],
 		passwordHash,
-		[{ kind: "CAPABILITY", key: "daily-metrics.encode" }],
+		[
+			{ kind: "CAPABILITY", key: "daily-metrics.encode" },
+			{ kind: "CAPABILITY", key: "quality.read" },
+		],
 	);
 	const quality = await upsertSubject(
 		tx,
@@ -702,6 +709,10 @@ async function seedProfile(tx) {
 	const subSubAssemblyId = stableId("substage-sub-assembly");
 	const subAssortmentId = stableId("substage-assortment");
 	const subMainPackingId = stableId("substage-main-packing");
+	// Injection Molding: the Injection desk bridge sub-stage (Option A reshape).
+	// Leaf under the Injection stage so the monitoring desk resolves a non-null
+	// subStageId work-process and its daily sheet stops failing closed.
+	const subInjectionMoldingId = stableId("substage-injection-molding");
 	// Device install default (D-008): one Station per SubStage when present; stage-level otherwise.
 	// Keep legacy keys for injection/decoration-primary so existing station ids stay stable.
 	const injectionStationId = stableId("station-injection-01");
@@ -795,6 +806,7 @@ async function seedProfile(tx) {
 	}
 
 	for (const [id, name, displayOrder, flags] of [
+		[subInjectionMoldingId, "Molding", 1, { isConfigurable: true }],
 		[subFullSprayId, "Full Spray", 1, { isConfigurable: true }],
 		[subMaskSprayId, "Mask Spray", 2, { isConfigurable: true }],
 		[subTampoId, "Tampo", 3, { isConfigurable: true }],
@@ -825,6 +837,7 @@ async function seedProfile(tx) {
 	}
 
 	for (const [stageId, subStageId] of [
+		[injectionStageId, subInjectionMoldingId],
 		[decorationStageId, subFullSprayId],
 		[decorationStageId, subMaskSprayId],
 		[decorationStageId, subTampoId],
@@ -905,8 +918,11 @@ async function seedProfile(tx) {
 	}
 
 	for (const [id, stationId, stageId, subStageId] of [
-		// Injection has no floor sub-stages in seed → stage-wide bound step
+		// Injection keeps the stage-wide bound step (station history filters match
+		// null-rotor events) and gains a sub-stage-bound step so the Monitoring
+		// desk bridge can resolve its work-process against a non-null subStageId.
 		[stableId("station-step-inj"), injectionStationId, injectionStageId, null],
+		[stableId("station-step-inj-mold"), injectionStationId, injectionStageId, subInjectionMoldingId],
 		[stableId("station-step-dec-fs"), decorationStationId, decorationStageId, subFullSprayId],
 		[stableId("station-step-dec-ms"), decorationMaskStationId, decorationStageId, subMaskSprayId],
 		[stableId("station-step-dec-tp"), decorationTampoStationId, decorationStageId, subTampoId],
@@ -921,14 +937,15 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// Work processes under sub-stages (catalog leaf; not stations). Bridge names match current SubStages
-	// until Option A reshape (intermediate SubStage + finer processes).
+	// Work processes under sub-stages (catalog leaf; not stations). Bridge names match current SubStages.
+	const processMoldingId = stableId("work-process-molding");
 	const processFullSprayId = stableId("work-process-full-spray");
 	const processMaskSprayId = stableId("work-process-mask-spray");
 	const processTampoId = stableId("work-process-tampo");
 	const processMainPackingId = stableId("work-process-main-packing");
 
 	for (const [id, subStageId, name, displayOrder, labelledCycleTimeSec] of [
+		[processMoldingId, subInjectionMoldingId, "Molding", 1, 14],
 		[processFullSprayId, subFullSprayId, "Full Spray", 1, 12],
 		[processMaskSprayId, subMaskSprayId, "Mask Spray", 2, 10],
 		[processTampoId, subTampoId, "Tampo", 3, 6],
@@ -1507,6 +1524,59 @@ async function seedProfile(tx) {
 				lotPartAllocationId: allocId,
 				quantityMagnitude: `${qty}.000000`,
 				quantityUom: "piece",
+			},
+		});
+	}
+
+	// Outputs-ledger evidence: first-print injection rows so the desk carryover
+	// cue and Outputs ledger render non-empty for demo.lineleader. Sequence 1–2
+	// keep the next live print (count+1) continuous. Same-day so reconciliation
+	// (occurredAt date === sheet production date) counts them as labeled history.
+	const fwInjBatchId = batchIds["batch-fw-inj"];
+	for (const [seq, qty, dueOffset, idSuffix] of [
+		[1, 240, -150, "1"],
+		[2, 120, -40, "2"],
+	]) {
+		const printJobId = stableId(`print-job-inj-demo-${idSuffix}`);
+		await tx.printJob.upsert({
+			where: { id: printJobId },
+			update: {
+				batchId: fwInjBatchId,
+				stationId: injectionStationId,
+				fromStageId: injectionStageId,
+				fromSubStageId: null,
+				toStageId: decorationStageId,
+				toSubStageId: null,
+				barcodeValue: code("BNI-2607-015"),
+				quantity: qty,
+				sequence: seq,
+				language: "EN",
+				reprintOf: null,
+				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"DEMO-${seq}"}`,
+				status: "SENT",
+				failureReason: null,
+				actor: `${profile}.lineleader`,
+				actorSubjectId: lineLeader.id,
+				occurredAt: atOffset({ minutes: dueOffset }),
+			},
+			create: {
+				id: printJobId,
+				batchId: fwInjBatchId,
+				stationId: injectionStationId,
+				fromStageId: injectionStageId,
+				fromSubStageId: null,
+				toStageId: decorationStageId,
+				toSubStageId: null,
+				barcodeValue: code("BNI-2607-015"),
+				quantity: qty,
+				sequence: seq,
+				reprintOf: null,
+				language: "EN",
+				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"DEMO-${seq}"}`,
+				status: "SENT",
+				actor: `${profile}.lineleader`,
+				actorSubjectId: lineLeader.id,
+				occurredAt: atOffset({ minutes: dueOffset }),
 			},
 		});
 	}
@@ -2127,7 +2197,7 @@ async function seedProfile(tx) {
 		lots: lotDefs.length,
 		batches: batchDefs.length,
 		stations: 7,
-		workProcesses: 4,
+		workProcesses: 5,
 		booths: 2,
 		monitoringDailySheets: 2,
 		monitoringStationBoards: 2,

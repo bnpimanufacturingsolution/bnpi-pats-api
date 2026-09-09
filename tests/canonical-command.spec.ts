@@ -314,4 +314,95 @@ describe("canonical PATS command contract", () => {
 		expect(response.status).to.equal(403);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
 	});
+
+	const receivingBody = {
+		transactionType: "RECEIVING",
+		batchId: "batch-1",
+		partId: "part-1",
+		toStageId: "STG-INJECTION",
+		expectedQuantity: 120,
+		actualQuantity: 120,
+	};
+
+	const issuanceBody = {
+		transactionType: "ISSUANCE",
+		batchId: "batch-1",
+		partId: "part-1",
+		toStageId: "STG-INJECTION",
+		expectedQuantity: 120,
+		actualQuantity: 120,
+	};
+
+	function inventoryDatabase(): Record<string, unknown> {
+		const database: Record<string, unknown> = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-itx", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			batch: {
+				findUnique: async () => ({ id: "batch-1", lotId: "lot-1", lot: { projectId: "proj-1" } }),
+			},
+			part: { findFirst: async () => ({ id: "part-1" }) },
+			materialRequirement: { findFirst: async () => null },
+			inventoryTransaction: {
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "itx-1", rowVersion: 1, ...data }),
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		return database;
+	}
+
+	it("routes RECEIVING behind inventory.receive (operator granted, 201)", async () => {
+		const app = appFor(inventoryDatabase(), [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/inventory-transactions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "inventory-receive-1")
+			.send(receivingBody);
+
+		expect(response.status).to.equal(201);
+		expect(response.headers.location).to.equal("/api/v1/inventory-transactions/itx-1");
+		expect(response.body.status).to.equal("ACCEPTED");
+	});
+
+	it("routes RECEIVING behind inventory.receive (planner denied, 403)", async () => {
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/inventory-transactions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "inventory-receive-2")
+			.send(receivingBody);
+
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
+	it("routes ISSUANCE behind inventory.issue (inventory.issue holder granted, 201)", async () => {
+		const app = appFor(inventoryDatabase(), [{ kind: "CAPABILITY", key: "inventory.issue", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/inventory-transactions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "inventory-issue-1")
+			.send(issuanceBody);
+
+		expect(response.status).to.equal(201);
+		expect(response.headers.location).to.equal("/api/v1/inventory-transactions/itx-1");
+	});
+
+	it("keeps ISSUANCE behind inventory.issue even for inventory.receive holders", async () => {
+		// Direct CAPABILITY grant of inventory.receive only — no role bundle.
+		const app = appFor({}, [{ kind: "CAPABILITY", key: "inventory.receive", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/inventory-transactions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "inventory-receive-3")
+			.send(issuanceBody);
+
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
 });

@@ -759,6 +759,7 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			"/inventory-transactions",
 			"/routing-violations",
 			"/quality-inspections",
+			"/print-jobs",
 			"/dashboard-summaries",
 			"/reports",
 		];

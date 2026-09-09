@@ -2,11 +2,13 @@ import { expect } from "chai";
 import { recordPrintJob, type PrintJobStore } from "../app/pats/print-job";
 import type { PrintPort } from "../app/pats/print-ports";
 
-function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>> } {
+function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>>; transactions: Array<Record<string, unknown>> } {
 	const jobs: Array<Record<string, unknown>> = [];
+	const transactions: Array<Record<string, unknown>> = [];
 	let issued = 0;
-	const api: PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>> } = {
+	const api: PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>>; transactions: Array<Record<string, unknown>> } = {
 		jobs,
+		transactions,
 		get issued() {
 			return issued;
 		},
@@ -42,7 +44,10 @@ function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, u
 			}),
 		},
 		printJob: {
-			count: async () => jobs.length,
+			count: async ({ where }: { where?: { status?: { not?: string } } }) =>
+				jobs.filter(
+					(job) => (where?.status?.not ? job.status !== where.status.not : true),
+				).length,
 			findFirst: async ({ where }) =>
 				jobs.find((job) => job.id === where.id && job.batchId === where.batchId)
 					? { id: String(where.id) }
@@ -61,8 +66,9 @@ function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, u
 			findUnique: async () => ({ name: "Full Spray" }),
 		},
 		inventoryTransaction: {
-			create: async () => {
+			create: async ({ data }) => {
 				issued += 1;
+				transactions.push(data);
 				return { id: `iss-${issued}` };
 			},
 		},
@@ -133,5 +139,84 @@ describe("recordPrintJob", () => {
 		);
 		expect(job.status).to.equal("FAILED");
 		expect(db.issued).to.equal(0);
+	});
+
+	it("issues on the fresh retry after a failed first print (first successful print wins)", async () => {
+		const db = store();
+		const failed = await recordPrintJob(
+			db,
+			{ batchId: "batch-1", stationId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			{
+				async deliver() {
+					return { status: "FAILED", failureReason: "Printer timed out." };
+				},
+			},
+		);
+		expect(failed.sequence).to.equal(1);
+		expect(db.issued).to.equal(0);
+
+		// The operator retries from the desk (fresh idempotency key, no reprintOf):
+		// this successful print IS the pack's first — it must post the ISSUANCE.
+		const retry = await recordPrintJob(
+			db,
+			{ batchId: "batch-1", stationId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			simulated,
+		);
+		expect(retry.sequence).to.equal(2);
+		expect(retry.reprintOf).to.equal(null);
+		expect(retry.status).to.equal("SIMULATED");
+		expect(db.issued).to.equal(1);
+
+		// And it stays one-per-pack: further fresh prints never re-issue.
+		await recordPrintJob(
+			db,
+			{ batchId: "batch-1", stationId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			simulated,
+		);
+		expect(db.issued).to.equal(1);
+	});
+
+	it("labels and issues the ACTUAL pcs when provided (variance → RECORDED)", async () => {
+		const db = store();
+		const job = await recordPrintJob(
+			db,
+			{
+				batchId: "batch-1",
+				stationId: "station-1",
+				actualQuantity: 235,
+				actor: "Station",
+				actorSubjectId: "sub-1",
+			},
+			simulated,
+		);
+		// The label face carries what physically shipped, not the plan.
+		expect(job.quantity).to.equal(235);
+		expect(String(db.jobs[0]?.renderedPayload)).to.include("235 PCS");
+		// Ledger honesty: expected = planned (240), actual = counted (235) → variance.
+		expect(db.transactions[0]).to.include({
+			expectedQuantity: 240,
+			actualQuantity: 235,
+			status: "RECORDED",
+		});
+	});
+
+	it("issues ACCEPTED when the actual pcs match the plan", async () => {
+		const db = store();
+		await recordPrintJob(
+			db,
+			{
+				batchId: "batch-1",
+				stationId: "station-1",
+				actualQuantity: 240,
+				actor: "Station",
+				actorSubjectId: "sub-1",
+			},
+			simulated,
+		);
+		expect(db.transactions[0]).to.include({
+			expectedQuantity: 240,
+			actualQuantity: 240,
+			status: "ACCEPTED",
+		});
 	});
 });
