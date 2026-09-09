@@ -83,10 +83,14 @@ export function createApp(options: AppOptions = {}): Application {
 
 	// CORS must run before canonical routes so browser preflight requests are
 	// answered before the canonical method boundary can return 405.
+	// exposedHeaders: ETag carries the concurrency token (rowVersion) that
+	// optimistic-locking PUTs must echo back as If-Match — without it the
+	// browser client can never read the token and every update 412s.
 	app.use(
 		require("cors")({
 			origin: config.cors.origins,
 			credentials: config.cors.credentials,
+			exposedHeaders: ["ETag", "Location"],
 		}),
 	);
 

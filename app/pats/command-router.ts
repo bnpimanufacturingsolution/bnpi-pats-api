@@ -110,6 +110,9 @@ const printJobCreateSchema = z.object({
 	batchId: z.string().trim().min(1).max(100),
 	stationId: z.string().trim().min(1).max(100),
 	reprintOf: z.string().trim().min(1).max(100).nullable().optional(),
+	// Actual pcs in the completed pack (label truth). Optional — defaults to the
+	// planned pack quantity; must be a positive integer when provided.
+	actualQuantity: z.number().int().positive().nullable().optional(),
 }).strict();
 
 const deskPrintSchema = z.object({
@@ -728,6 +731,7 @@ export function commandRouter(
 						batchId: body.batchId,
 						stationId: body.stationId,
 						reprintOf: body.reprintOf ?? null,
+						actualQuantity: body.actualQuantity ?? null,
 						actor: actorDisplay(req),
 						actorSubjectId: actorId(req),
 					});
