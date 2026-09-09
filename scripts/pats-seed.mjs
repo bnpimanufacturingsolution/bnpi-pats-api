@@ -191,6 +191,9 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
  */
 async function wipeSeededTables(tx) {
 	for (const model of [
+		"idempotencyRecord",
+		"printJob",
+		"processChangeLog",
 		"outboxMessage",
 		"auditRecord",
 		"qualityDecision",
