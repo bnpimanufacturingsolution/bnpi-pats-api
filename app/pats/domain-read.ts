@@ -97,9 +97,12 @@ function routeResource(route: {
 
 type DashboardProgressSegment = {
 	kind: "stage" | "blocked" | "remaining";
+	stationId?: string;
 	stageId: string;
 	stageName: string;
 	quantity: number;
+	batchCount?: number;
+	blockedBatchCount?: number;
 };
 
 function dashboardProgress(
@@ -112,10 +115,17 @@ function dashboardProgress(
 			requiredProductionQuantity: number;
 			project: { name: string; product: { productName: string } | null };
 		};
-		positionProjection: { stageId: string; quantityMagnitude: unknown } | null;
+		positionProjection: { stageId: string; subStageId?: string | null; quantityMagnitude: unknown } | null;
 	}>,
 	stageRows: Array<{ id: string; name: string; displayOrder: number }>,
 	openViolationRows: Array<{ batchId: string; attemptedStageId: string }>,
+	stationRows: Array<{
+		id: string;
+		name: string;
+		stageId: string;
+		displayOrder: number;
+		boundSteps?: Array<{ stageId: string; subStageId: string | null }>;
+	}> = [],
 ) {
 	const blockedBatchIds = new Set(openViolationRows.map((violation) => violation.batchId));
 	const projects = new Map<
@@ -127,7 +137,7 @@ function dashboardProgress(
 			activeQuantity: number;
 			activeBatchCount: number;
 			lotIds: Set<string>;
-			stages: Map<string, { healthy: number; blocked: number }>;
+			slots: Map<string, { healthy: number; blocked: number }>;
 		}
 	>();
 
@@ -139,16 +149,47 @@ function dashboardProgress(
 			activeQuantity: 0,
 			activeBatchCount: 0,
 			lotIds: new Set(),
-			stages: new Map(),
+			slots: new Map(),
 		};
 		const quantity = Number(batch.positionProjection?.quantityMagnitude ?? batch.plannedQuantity);
 		const stageId = batch.positionProjection?.stageId;
 		if (!stageId || !Number.isFinite(quantity)) continue;
-		const stage = project.stages.get(stageId) ?? { healthy: 0, blocked: 0 };
+		const subStageId = (batch.positionProjection as { subStageId?: string | null })?.subStageId ?? null;
+
+		let slotKey = stageId;
+		if (stationRows.length > 0) {
+			const matched =
+				(subStageId
+					? stationRows.find((st) =>
+							st.boundSteps?.some(
+								(step) => step.stageId === stageId && step.subStageId === subStageId,
+							),
+						)
+					: undefined) ??
+				stationRows.find((st) =>
+					st.boundSteps?.some(
+						(step) => step.stageId === stageId && step.subStageId == null,
+					),
+				) ??
+				stationRows.find((st) => st.stageId === stageId);
+			if (matched) slotKey = matched.id;
+		}
+
+		const slot = project.slots.get(slotKey) ?? {
+			healthy: 0,
+			blocked: 0,
+			batchCount: 0,
+			blockedBatchCount: 0,
+		};
 		const isBlocked = blockedBatchIds.has(batch.id);
-		if (isBlocked) stage.blocked += quantity;
-		else stage.healthy += quantity;
-		project.stages.set(stageId, stage);
+		slot.batchCount += 1;
+		if (isBlocked) {
+			slot.blocked += quantity;
+			slot.blockedBatchCount += 1;
+		} else {
+			slot.healthy += quantity;
+		}
+		project.slots.set(slotKey, slot);
 		if (!project.lotIds.has(batch.lot.id)) {
 			project.plannedQuantity += batch.lot.requiredProductionQuantity;
 			project.lotIds.add(batch.lot.id);
@@ -162,17 +203,68 @@ function dashboardProgress(
 		.map(([projectId, project]) => {
 			const effectiveTotal = Math.max(project.plannedQuantity, project.activeQuantity);
 			const segments: DashboardProgressSegment[] = [];
-			for (const stage of stageRows) {
-				const quantities = project.stages.get(stage.id);
-				if (!quantities) continue;
-				if (quantities.healthy > 0) segments.push({ kind: "stage", stageId: stage.id, stageName: stage.name, quantity: quantities.healthy });
-				if (quantities.blocked > 0) segments.push({ kind: "blocked", stageId: stage.id, stageName: stage.name, quantity: quantities.blocked });
+
+			if (stationRows.length > 0) {
+				for (const station of stationRows) {
+					const quantities = project.slots.get(station.id);
+					if (!quantities) continue;
+					const totalQty = quantities.healthy + quantities.blocked;
+					if (totalQty > 0) {
+						segments.push({
+							kind: "stage",
+							stationId: station.id,
+							stageId: station.stageId,
+							stageName: station.name,
+							quantity: totalQty,
+							batchCount: quantities.batchCount,
+							blockedBatchCount: quantities.blockedBatchCount,
+						});
+					}
+				}
+			} else {
+				for (const stage of stageRows) {
+					const quantities = project.slots.get(stage.id);
+					if (!quantities) continue;
+					if (quantities.healthy > 0)
+						segments.push({
+							kind: "stage",
+							stageId: stage.id,
+							stageName: stage.name,
+							quantity: quantities.healthy,
+						});
+					if (quantities.blocked > 0)
+						segments.push({
+							kind: "blocked",
+							stageId: stage.id,
+							stageName: stage.name,
+							quantity: quantities.blocked,
+						});
+				}
 			}
+
 			const remaining = effectiveTotal - project.activeQuantity;
-			if (remaining > 0) segments.push({ kind: "remaining", stageId: "remaining", stageName: "Not started", quantity: remaining });
-			return { projectId, projectName: project.projectName, productName: project.productName, plannedQuantity: project.plannedQuantity, activeQuantity: project.activeQuantity, activeBatchCount: project.activeBatchCount, segments };
+			if (remaining > 0)
+				segments.push({
+					kind: "remaining",
+					stageId: "remaining",
+					stageName: "Not started",
+					quantity: remaining,
+				});
+			return {
+				projectId,
+				projectName: project.projectName,
+				productName: project.productName,
+				plannedQuantity: project.plannedQuantity,
+				activeQuantity: project.activeQuantity,
+				activeBatchCount: project.activeBatchCount,
+				segments,
+			};
 		})
-		.sort((left, right) => right.activeBatchCount - left.activeBatchCount || left.productName.localeCompare(right.productName));
+		.sort(
+			(left, right) =>
+				right.activeBatchCount - left.activeBatchCount ||
+				left.productName.localeCompare(right.productName),
+		);
 }
 
 function reportDateKey(value: Date): string {
@@ -1125,7 +1217,7 @@ export function domainReadRouter(
 
 	router.get("/dashboard-summaries", requireCapability("dashboard.read"), async (req, res) => {
 		try {
-			const [plans, activeBatchRows, stageRows, openViolationRows, qualityHolds, inventoryTransactions] = await Promise.all([
+			const [plans, activeBatchRows, stageRows, openViolationRows, qualityHolds, inventoryTransactions, stationRows] = await Promise.all([
 				database.project.count(),
 				database.batch.findMany({
 					where: { status: "ACTIVE" },
@@ -1140,13 +1232,20 @@ export function domainReadRouter(
 								project: { select: { name: true, product: { select: { productName: true } } } },
 							},
 						},
-						positionProjection: { select: { stageId: true, quantityMagnitude: true } },
+						positionProjection: { select: { stageId: true, subStageId: true, quantityMagnitude: true } },
 					},
 				}),
 				database.stage.findMany({ select: { id: true, name: true, displayOrder: true }, orderBy: [{ displayOrder: "asc" }, { id: "asc" }] }),
 				database.routingViolation.findMany({ where: { status: "OPEN" }, select: { batchId: true, attemptedStageId: true } }),
 				database.qualityDecision.count({ where: { decision: "HOLD" } }),
 				database.inventoryTransaction.count(),
+				typeof (database as { station?: { findMany?: unknown } }).station?.findMany === "function"
+					? (database as { station: { findMany: (args: unknown) => Promise<unknown[]> } }).station.findMany({
+							where: { isEnabled: true, NOT: { stageId: "STG-WAREHOUSE" } },
+							orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+							include: { boundSteps: true },
+						})
+					: Promise.resolve([]),
 			]);
 			const activeLots = new Set(activeBatchRows.map((row) => row.lot.id));
 			const activeProjects = new Set(activeBatchRows.map((row) => row.lot.projectId));
@@ -1159,7 +1258,18 @@ export function domainReadRouter(
 				openViolations: openViolationRows.length,
 				qualityHolds,
 				inventoryTransactions,
-				productionProgress: dashboardProgress(activeBatchRows, stageRows, openViolationRows),
+				productionProgress: dashboardProgress(
+					activeBatchRows,
+					stageRows,
+					openViolationRows,
+					stationRows as Array<{
+						id: string;
+						name: string;
+						stageId: string;
+						displayOrder: number;
+						boundSteps?: Array<{ stageId: string; subStageId: string | null }>;
+					}>,
+				),
 			});
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS dashboard data is unavailable.");
