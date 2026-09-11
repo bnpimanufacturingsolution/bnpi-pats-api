@@ -105,7 +105,9 @@ export const sanitizeInputs = (options: SanitizationOptions = defaultOptions) =>
 				}
 			}
 
-			logger.debug("Request sanitized", {
+			// silly: pure per-request noise; excluded from console and file logs.
+			// Successful sanitization is implied by the request proceeding.
+			logger.silly("Request sanitized", {
 				path: req.path,
 				method: req.method,
 			});
