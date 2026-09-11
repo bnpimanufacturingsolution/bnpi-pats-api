@@ -2018,7 +2018,27 @@ async function seedProfile(tx) {
 		updatedAt: new Date().toISOString(),
 	};
 
-	for (const payload of [sheetFullSprayPayload, sheetMaskPayload]) {
+	// Desk-id rows (Production Desk Hourly Sheet): the desk reads today's sheet by
+	// deterministic id (`desk-daily:{station}:{process}:{date}`), so the demo ships
+	// the same Full Spray / Mask Spray numbers under those ids. Reseed refreshes
+	// them like the stable-id sheets above (additive; a reseed on a later day
+	// leaves the prior day's desk rows orphaned — wipe with PATS_SEED_FRESH=1
+	// for a clean slate).
+	const deskFullSprayPayload = {
+		...sheetFullSprayPayload,
+		id: `desk-daily:${decorationStationId}:${processFullSprayId}:${monDate}`,
+	};
+	const deskMaskSprayPayload = {
+		...sheetMaskPayload,
+		id: `desk-daily:${decorationMaskStationId}:${processMaskSprayId}:${monDate}`,
+	};
+
+	for (const payload of [
+		sheetFullSprayPayload,
+		sheetMaskPayload,
+		deskFullSprayPayload,
+		deskMaskSprayPayload,
+	]) {
 		await tx.monitoringDailySheet.upsert({
 			where: { id: payload.id },
 			update: {
@@ -2196,7 +2216,7 @@ async function seedProfile(tx) {
 		stations: 7,
 		workProcesses: 5,
 		booths: 2,
-		monitoringDailySheets: 2,
+		monitoringDailySheets: 4,
 		monitoringStationBoards: 2,
 		productId: productB251Id,
 		projectId,

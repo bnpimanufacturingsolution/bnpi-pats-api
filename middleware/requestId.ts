@@ -33,15 +33,6 @@ export function requestIdMiddleware(req: Request, res: Response, next: NextFunct
 	// Add to response headers for client reference
 	res.setHeader("X-Request-Id", requestId);
 
-	// Log request start with ID
-	logger.info("Request started", {
-		requestId,
-		method: req.method,
-		path: req.path,
-		ip: req.ip,
-		userAgent: req.get("User-Agent"),
-	});
-
 	// Capture response time
 	const startTime = Date.now();
 

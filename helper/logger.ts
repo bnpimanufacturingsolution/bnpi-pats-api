@@ -1,11 +1,33 @@
 import winston, { log } from "winston";
 import { Logtail } from "@logtail/node";
 import { LogtailTransport } from "@logtail/winston";
+import type TransportStream from "winston-transport";
 import { config } from "../config/config";
+import {
+	consoleKeyOf,
+	durationBucket,
+	getSharedCollapseConsoleWriter,
+} from "./console-collapse";
 
 const { combine, timestamp, json, errors, printf, colorize } = winston.format;
 
-const consoleFormat = printf((info: Record<string, unknown>) => {
+/**
+ * Fixed 24h single-token console timestamp. A stable format keeps collapsed
+ * console rows comparable (the collapse key strips exactly this prefix).
+ */
+function hhmmss(date: Date): string {
+	const pad = (value: number) => String(value).padStart(2, "0");
+	return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/**
+ * Builds the full console line (info.consoleLine) plus its collapse identity
+ * (info.consoleKey) for the CollapsingConsoleTransport. Request metadata is
+ * rendered inline (method, path, status, bucketed duration) so access lines
+ * are informative and collapse per endpoint/status instead of being a wall
+ * of identical "Request completed" rows.
+ */
+export const consoleLineFormat = winston.format((info: winston.Logform.TransformableInfo) => {
 	const { level, message, error, module, timestamp, ...meta } = info;
 
 	let errorInfo = "";
@@ -38,11 +60,9 @@ const consoleFormat = printf((info: Record<string, unknown>) => {
 		validationInfo = ` | Validation Errors: [${errorFields}]`;
 	}
 
-	const time = timestamp
-		? new Date(timestamp as string).toLocaleTimeString()
-		: new Date().toLocaleTimeString();
+	const time = hhmmss(timestamp ? new Date(timestamp as string) : new Date());
 
-	const moduleInfo = module ? `[${module}]` : "";
+	const moduleInfo = module ? `[${module}] ` : "";
 
 	let mainMessage = message || "";
 	if (typeof mainMessage === "string" && mainMessage.includes("request body:")) {
@@ -52,13 +72,47 @@ const consoleFormat = printf((info: Record<string, unknown>) => {
 		);
 	}
 
-	return `${time} ${String(level).toUpperCase()} ${moduleInfo} ${mainMessage}${errorInfo}${validationInfo}${stackInfo}`;
-});
+	let requestInfo = "";
+	if (meta.method && meta.path) {
+		const status = typeof meta.statusCode === "number" ? ` ${meta.statusCode}` : "";
+		const bucketed = durationBucket(meta.duration);
+		requestInfo = ` ${meta.method} ${meta.path}${status}${bucketed ? ` ${bucketed}` : ""}`;
+	}
+
+	const line = `${time} ${String(level).toUpperCase()} ${moduleInfo}${mainMessage}${requestInfo}${errorInfo}${validationInfo}${stackInfo}`;
+	info.consoleLine = line;
+	info.consoleKey = consoleKeyOf(line);
+	return info;
+})();
+
+/**
+ * Console transport that collapses consecutive identical lines into one row
+ * with a repetition counter (see helper/console-collapse.ts). File transports
+ * are unaffected and keep every record with exact metadata.
+ *
+ * winston re-exports the winston-transport base class at runtime as
+ * `winston.Transport`; its bundled typings only alias the lowercase
+ * `winston.transport`, which does not exist at runtime, so the base is
+ * resolved through a cast typed by winston-transport's own declarations.
+ */
+const TransportBase = (winston as unknown as { Transport: typeof TransportStream }).Transport;
+
+class CollapsingConsoleTransport extends TransportBase {
+	public name = "collapsing-console";
+
+	public log(info: Record<string, unknown>, callback: () => void): void {
+		setImmediate(() => this.emit("logged", info));
+		const line =
+			typeof info.consoleLine === "string" ? info.consoleLine : String(info.message ?? "");
+		getSharedCollapseConsoleWriter().write(line);
+		callback();
+	}
+}
 
 export const getLogger = () => {
 	const logTransports: (winston.transport | LogtailTransport)[] = [
-		new winston.transports.Console({
-			format: combine(colorize(), timestamp(), consoleFormat),
+		new CollapsingConsoleTransport({
+			format: combine(colorize(), timestamp(), consoleLineFormat),
 		}),
 		new winston.transports.File({
 			filename: "logs/info.log",
@@ -91,9 +145,7 @@ export const getLogger = () => {
 					timestamp(),
 					printf((info: Record<string, unknown>) => {
 						const { level, message, stack, timestamp } = info;
-						const time = timestamp
-							? new Date(timestamp as string).toLocaleTimeString()
-							: new Date().toLocaleTimeString();
+						const time = hhmmss(timestamp ? new Date(timestamp as string) : new Date());
 						return `${time} ${String(level).toUpperCase()} EXCEPTION: ${message}\n${stack || ""}`;
 					}),
 				),
@@ -107,9 +159,7 @@ export const getLogger = () => {
 					timestamp(),
 					printf((info: Record<string, unknown>) => {
 						const { level, message, stack, timestamp } = info;
-						const time = timestamp
-							? new Date(timestamp as string).toLocaleTimeString()
-							: new Date().toLocaleTimeString();
+						const time = hhmmss(timestamp ? new Date(timestamp as string) : new Date());
 						return `${time} ${String(level).toUpperCase()} REJECTION: ${message}\n${stack || ""}`;
 					}),
 				),
