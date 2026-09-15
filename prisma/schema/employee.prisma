@@ -1,4 +1,4 @@
-// Employee Model - Syncs with third-party HRIS API with database fallback
+// Employee Model - database-backed employee records (optional external ID mapping)
 
 model Employee {
   id             String     @id @default(auto()) @map("_id") @db.ObjectId
@@ -8,13 +8,13 @@ model Employee {
 
   // External API reference
   externalId     String? @unique // ID from third-party API (maps to external "id")
-  externalSource String? // Name of the third-party system (e.g., "hris", "bamboohr")
+  externalSource String? // Name of the external system (e.g., "local", "bamboohr")
 
   // Employee Identification
   employeeId String  @unique // e.g., "EMP-GEN-HRUSER-001"
   userId     String? // External user ID reference
   personId   String? // External person ID reference
-  role       String? // e.g., "hris-hr-user", "hris-employee-manager"
+  role       String? // e.g., "hr-user", "employee-manager"
 
   // Personal Info (from user.metadata.employee.personalInfo)
   firstName   String

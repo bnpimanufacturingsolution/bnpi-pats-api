@@ -42,6 +42,61 @@
     }
   },
   {
+    "id": "stationSupportGet",
+    "method": "GET",
+    "url": "/stations/{stationId}/support",
+    "summary": "Read rebuildable station support projection (output + WIP)",
+    "description": "Secondary workstation cards. todayOutput aggregates first-success PrintJobs (SENT|SIMULATED, sequence 1) at this station for a UTC calendar day (query date=YYYY-MM-DD). materials are hop inventory (bound-step positions minus first-success print here). lotPlans carry ceil(lot.requiredProductionQuantity / lot.labelPackSize) for Lot Progress — the denominator is the lot plan, not hop occupancy. staff and expectedOutput stay null until product-owned sources exist.\n",
+    "tags": [
+      "PATS Execution"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "stationId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    ],
+    "queryParams": [
+      {
+        "name": "date",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date"
+        },
+        "description": "UTC calendar day for today's output (default current UTC date)"
+      }
+    ],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
     "id": "batchCollectionGet",
     "method": "GET",
     "url": "/batches",

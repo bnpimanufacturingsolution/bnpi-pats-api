@@ -13,7 +13,7 @@ const DELETE_ROLES = ["OWNER", "ADMIN"];
  * @openapi
  * tags:
  *   - name: Employee
- *     description: Employee management with third-party API sync and database fallback
+ *     description: Employee management (database-backed)
  */
 
 export const router = (route: Router, controller: EmployeeController): Router => {
@@ -25,10 +25,9 @@ export const router = (route: Router, controller: EmployeeController): Router =>
    * /api/employee:
    *   get:
    *     tags: [Employee]
-   *     summary: Get all employees
-   *     description: |
-   *       Retrieves employees. If syncConfig is provided, attempts to sync from
-   *       third-party API first, falling back to database on failure.
+ *     summary: Get all employees
+ *     description: |
+ *       Retrieves employees from the database.
    *     security:
    *       - bearerAuth: []
    *     parameters:
@@ -57,13 +56,8 @@ export const router = (route: Router, controller: EmployeeController): Router =>
    *         name: department
    *         schema:
    *           type: string
-   *         description: Filter by department
-   *       - in: query
-   *         name: forceDatabase
-   *         schema:
-   *           type: boolean
-   *         description: Skip API sync and use database only
-   *     responses:
+ *         description: Filter by department
+ *     responses:
    *       200:
    *         description: List of employees
    *       401:
@@ -102,91 +96,8 @@ export const router = (route: Router, controller: EmployeeController): Router =>
   routes.get("/stats", validateWorkspaceId, requireWorkspaceRole(READ_ROLES), controller.getStats);
 
   /**
-   * @openapi
-   * /api/employee/sync:
-   *   post:
-   *     tags: [Employee]
-   *     summary: Trigger employee sync from external API
-   *     description: |
-   *       Syncs employees from a third-party API. Falls back to database if API fails.
-   *     security:
-   *       - bearerAuth: []
-   *     requestBody:
-   *       required: true
-   *       content:
-   *         application/json:
-   *           schema:
-   *             type: object
-   *             required:
-   *               - apiUrl
-   *             properties:
-   *               apiUrl:
-   *                 type: string
-   *                 description: Third-party API URL
-   *                 example: "https://api.hris-system.com/employees"
-   *               authType:
-   *                 type: string
-   *                 enum: [bearer, api-key, basic, none]
-   *                 default: bearer
-   *               authToken:
-   *                 type: string
-   *                 description: Authentication token
-   *               apiKey:
-   *                 type: string
-   *                 description: API key (for api-key auth)
-   *               headers:
-   *                 type: object
-   *                 description: Additional headers
-   *               timeout:
-   *                 type: integer
-   *                 default: 30000
-   *               retryAttempts:
-   *                 type: integer
-   *                 default: 3
-   *               fieldMapping:
-   *                 type: object
-   *                 description: Custom field mapping from external to internal names
-   *     responses:
-   *       200:
-   *         description: Sync result with statistics
-   *       400:
-   *         $ref: '#/components/responses/BadRequest'
-   *       401:
-   *         $ref: '#/components/responses/Unauthorized'
-   */
-  routes.post("/sync", validateWorkspaceId, requireWorkspaceRole(WRITE_ROLES), controller.sync);
-
-  /**
-   * @openapi
-   * /api/employee/sync/status:
-   *   get:
-   *     tags: [Employee]
-   *     summary: Get sync status and health
-   *     security:
-   *       - bearerAuth: []
-   *     responses:
-   *       200:
-   *         description: Sync status including any issues
-   */
-  routes.get("/sync/status", validateWorkspaceId, requireWorkspaceRole(READ_ROLES), controller.getSyncStatus);
-
-  /**
-   * @openapi
-   * /api/employee/sync/issues:
-   *   get:
-   *     tags: [Employee]
-   *     summary: Get employees with sync issues
-   *     security:
-   *       - bearerAuth: []
-   *     responses:
-   *       200:
-   *         description: List of employees with FAILED or PENDING sync status
-   */
-  routes.get("/sync/issues", validateWorkspaceId, requireWorkspaceRole(READ_ROLES), controller.getSyncIssues);
-
-  /**
-   * @openapi
-   * /api/employee/external/{externalId}:
+    * @openapi
+    * /api/employee/external/{externalId}:
    *   get:
    *     tags: [Employee]
    *     summary: Get employee by external ID

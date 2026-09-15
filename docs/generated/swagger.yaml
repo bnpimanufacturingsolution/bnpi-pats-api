@@ -21,7 +21,7 @@ tags:
   - name: Documentation
     description: API documentation endpoints
   - name: Employee
-    description: Employee management with third-party API sync and database fallback
+    description: Employee management (database-backed)
 security:
   - bearerAuth: []
 components:
@@ -1177,8 +1177,7 @@ paths:
         - Employee
       summary: Get all employees
       description: |
-        Retrieves employees. If syncConfig is provided, attempts to sync from
-        third-party API first, falling back to database on failure.
+        Retrieves employees from the database.
       security:
         - bearerAuth: []
       parameters:
@@ -1213,11 +1212,6 @@ paths:
           schema:
             type: string
           description: Filter by department
-        - in: query
-          name: forceDatabase
-          schema:
-            type: boolean
-          description: Skip API sync and use database only
       responses:
         "200":
           description: List of employees
@@ -1292,82 +1286,6 @@ paths:
           description: Employee statistics by status, department, and sync status
         "401":
           $ref: "#/components/responses/Unauthorized"
-  /api/employee/sync:
-    post:
-      tags:
-        - Employee
-      summary: Trigger employee sync from external API
-      description: >
-        Syncs employees from a third-party API. Falls back to database if API
-        fails.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - apiUrl
-              properties:
-                apiUrl:
-                  type: string
-                  description: Third-party API URL
-                  example: https://api.hris-system.com/employees
-                authType:
-                  type: string
-                  enum:
-                    - bearer
-                    - api-key
-                    - basic
-                    - none
-                  default: bearer
-                authToken:
-                  type: string
-                  description: Authentication token
-                apiKey:
-                  type: string
-                  description: API key (for api-key auth)
-                headers:
-                  type: object
-                  description: Additional headers
-                timeout:
-                  type: integer
-                  default: 30000
-                retryAttempts:
-                  type: integer
-                  default: 3
-                fieldMapping:
-                  type: object
-                  description: Custom field mapping from external to internal names
-      responses:
-        "200":
-          description: Sync result with statistics
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-  /api/employee/sync/status:
-    get:
-      tags:
-        - Employee
-      summary: Get sync status and health
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Sync status including any issues
-  /api/employee/sync/issues:
-    get:
-      tags:
-        - Employee
-      summary: Get employees with sync issues
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: List of employees with FAILED or PENDING sync status
   /api/employee/external/{externalId}:
     get:
       tags:
@@ -2075,6 +1993,46 @@ paths:
           $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404
         "503":
           $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503
+  /stations/{stationId}/support:
+    get:
+      operationId: stationSupportGet
+      summary: Read rebuildable station support projection (output + WIP)
+      description: >
+        Secondary workstation cards. todayOutput aggregates first-success
+        PrintJobs (SENT|SIMULATED, sequence 1) at this station for a UTC
+        calendar day (query date=YYYY-MM-DD). materials are hop inventory
+        (bound-step positions minus first-success print here). lotPlans carry
+        ceil(lot.requiredProductionQuantity / lot.labelPackSize) for Lot
+        Progress — the denominator is the lot plan, not hop occupancy. staff and
+        expectedOutput stay null until product-owned sources exist.
+      tags:
+        - PATS Execution
+      x-required-capability: execution.read
+      parameters:
+        - name: stationId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: UTC calendar day for today's output (default current UTC date)
+      responses:
+        "200":
+          $ref: "#/components/responses/ResourceRead"
+        "400":
+          $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400
+        "403":
+          $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403
+        "404":
+          $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404
+        "503":
+          $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503
   /station-steps:
     get:
       operationId: stationStepCollectionGet
@@ -2361,6 +2319,33 @@ paths:
           $ref: "#/components/responses/CollectionRead"
         "403":
           $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403
+        "503":
+          $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503
+  /quality-inspections/resolve:
+    get:
+      operationId: qualityInspectionResolveGet
+      summary: Resolve a scanned batch code into an open quality inspection
+      description: Journey D scan-first resolve. Requires quality.resolve. Fail-closed
+        when the gate stage is not in the subject's allowedStages.
+      tags:
+        - PATS Quality
+      x-required-capability: quality.resolve
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          $ref: "#/components/responses/ResourceRead"
+        "400":
+          $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400
+        "403":
+          $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403
+        "404":
+          $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404
         "503":
           $ref: ./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503
   /quality-inspections:

@@ -4,7 +4,7 @@
     "method": "GET",
     "url": "/api/employee",
     "summary": "Get all employees",
-    "description": "Retrieves employees. If syncConfig is provided, attempts to sync from\nthird-party API first, falling back to database on failure.\n",
+    "description": "Retrieves employees from the database.\n",
     "tags": [
       "Employee"
     ],
@@ -58,13 +58,6 @@
           "type": "string"
         },
         "description": "Filter by department"
-      },
-      {
-        "name": "forceDatabase",
-        "schema": {
-          "type": "boolean"
-        },
-        "description": "Skip API sync and use database only"
       }
     ],
     "responses": {
@@ -203,155 +196,6 @@
         "contentTypes": []
       },
       "401": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "POST /api/employee/sync",
-    "method": "POST",
-    "url": "/api/employee/sync",
-    "summary": "Trigger employee sync from external API",
-    "description": "Syncs employees from a third-party API. Falls back to database if API fails.\n",
-    "tags": [
-      "Employee"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [
-      "application/json"
-    ],
-    "pathParams": [],
-    "queryParams": [],
-    "requestBody": {
-      "required": true,
-      "schema": {
-        "type": "object",
-        "required": [
-          "apiUrl"
-        ],
-        "properties": {
-          "apiUrl": {
-            "type": "string",
-            "description": "Third-party API URL",
-            "example": "https://api.hris-system.com/employees"
-          },
-          "authType": {
-            "type": "string",
-            "enum": [
-              "bearer",
-              "api-key",
-              "basic",
-              "none"
-            ],
-            "default": "bearer"
-          },
-          "authToken": {
-            "type": "string",
-            "description": "Authentication token"
-          },
-          "apiKey": {
-            "type": "string",
-            "description": "API key (for api-key auth)"
-          },
-          "headers": {
-            "type": "object",
-            "description": "Additional headers"
-          },
-          "timeout": {
-            "type": "integer",
-            "default": 30000
-          },
-          "retryAttempts": {
-            "type": "integer",
-            "default": 3
-          },
-          "fieldMapping": {
-            "type": "object",
-            "description": "Custom field mapping from external to internal names"
-          }
-        }
-      },
-      "contentTypes": [
-        "application/json"
-      ]
-    },
-    "responses": {
-      "200": {
-        "description": "Sync result with statistics",
-        "contentTypes": []
-      },
-      "400": {
-        "contentTypes": []
-      },
-      "401": {
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "GET /api/employee/sync/status",
-    "method": "GET",
-    "url": "/api/employee/sync/status",
-    "summary": "Get sync status and health",
-    "tags": [
-      "Employee"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [],
-    "queryParams": [],
-    "responses": {
-      "200": {
-        "description": "Sync status including any issues",
-        "contentTypes": []
-      }
-    },
-    "paginationHints": {
-      "hasPaginationParams": false,
-      "hasSearchParam": false,
-      "hasSortParams": false
-    }
-  },
-  {
-    "id": "GET /api/employee/sync/issues",
-    "method": "GET",
-    "url": "/api/employee/sync/issues",
-    "summary": "Get employees with sync issues",
-    "tags": [
-      "Employee"
-    ],
-    "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
-    "contentTypes": [],
-    "pathParams": [],
-    "queryParams": [],
-    "responses": {
-      "200": {
-        "description": "List of employees with FAILED or PENDING sync status",
         "contentTypes": []
       }
     },

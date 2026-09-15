@@ -11,7 +11,6 @@ export const employeeModule = (prisma: PrismaClient): Router => {
 export { router } from "./employee.router";
 export { controller } from "./employee.controller";
 export { employeeRepository } from "./employee.repository";
-export { EmployeeService, createEmployeeService } from "./employee.service";
 export * from "../../zod/employee.zod";
 
 // For backward compatibility / CommonJS require
