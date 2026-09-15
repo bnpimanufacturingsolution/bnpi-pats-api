@@ -108,7 +108,11 @@ async function main() {
 	}
 
 	const products = await api("GET", "/catalog/products", { headers: plannerAuth });
-	const productRows = dataOf(products.body).filter((p) => String(p.productCode ?? "").startsWith("DEMO-") || String(p.productName ?? "").includes("DEMO"));
+	const productRows = dataOf(products.body).filter(
+		(p) =>
+			String(p.productName ?? "").includes("Machibouke") ||
+			String(p.productCode ?? "").startsWith("B251"),
+	);
 	const allProducts = dataOf(products.body);
 	const product = productRows[0] ?? allProducts[0];
 	const productId = product?.productId ?? product?.id;
@@ -121,12 +125,12 @@ async function main() {
 
 	const plans = await api("GET", "/production-plans", { headers: plannerAuth });
 	const planRows = dataOf(plans.body);
-	const demoPlan =
-		planRows.find((p) => String(p.planCode ?? "") === "DEMO-PLAN-001") ??
-		planRows.find((p) => String(p.planCode ?? "").startsWith("DEMO-") && p.status === "RELEASED") ??
+	const seedPlan =
+		planRows.find((p) => String(p.planCode ?? "") === "PLAN-B251-JUL") ??
+		planRows.find((p) => String(p.planCode ?? "").startsWith("PLAN-") && p.status === "RELEASED") ??
 		planRows[0];
-	const planId = demoPlan?.planId ?? demoPlan?.id;
-	rec("production-plans", plans.status === 200 ? "PASS" : "FAIL", `count=${planRows.length} first=${planId} status=${demoPlan?.status}`);
+	const planId = seedPlan?.planId ?? seedPlan?.id;
+	rec("production-plans", plans.status === 200 ? "PASS" : "FAIL", `count=${planRows.length} first=${planId} status=${seedPlan?.status}`);
 
 	let planEtag = null;
 	let planDetail = null;
@@ -141,7 +145,7 @@ async function main() {
 
 	// Create a draft plan for mutation + concurrency checks (unique keys each run)
 	const runSuffix = Date.now().toString(36);
-	const draftPlanCode = `DEMO-ACC-PLAN-${runSuffix}`;
+	const draftPlanCode = `ACC-PLAN-${runSuffix}`;
 	const draftIdemKey = `journey-draft-plan-${runSuffix}`;
 	const draftBody = {
 		planCode: draftPlanCode,
@@ -221,10 +225,13 @@ async function main() {
 	} else {
 		const stations = await api("GET", "/stations", { headers: operatorAuth });
 		const stationRows = dataOf(stations.body);
-		// Prefer DEMO-coded stations
+		// Prefer the seeded Injection station
 		const station =
-			stationRows.find((s) => String(s.stationCode ?? s.name ?? "").includes("DEMO") || String(s.stationCode ?? "").includes("Injection")) ??
-			stationRows[0];
+			stationRows.find(
+				(s) =>
+					String(s.stationCode ?? "").includes("ST-INJ") ||
+					String(s.name ?? "").includes("Injection"),
+			) ?? stationRows[0];
 		const stationId = station?.stationId ?? station?.id;
 		rec("stations", stations.status === 200 ? "PASS" : "FAIL", `count=${stationRows.length} first=${stationId}`);
 
@@ -233,20 +240,20 @@ async function main() {
 
 		const batches = await api("GET", "/batches", { headers: operatorAuth });
 		const batchRows = dataOf(batches.body);
-		const demoBatch =
-			batchRows.find((b) => String(b.batchCode ?? "") === "DEMO-BATCH-001") ??
-			batchRows.find((b) => String(b.batchCode ?? "").startsWith("DEMO-BATCH-")) ??
+		const seedBatch =
+			batchRows.find((b) => String(b.batchCode ?? "") === "BNI-2607-015") ??
+			batchRows.find((b) => String(b.batchCode ?? "").startsWith("BNI-")) ??
 			batchRows[0];
-		const batchId = demoBatch?.batchId ?? demoBatch?.id;
+		const batchId = seedBatch?.batchId ?? seedBatch?.id;
 		rec("batches", batches.status === 200 ? "PASS" : "FAIL", `count=${batchRows.length} first=${batchId}`);
 
 		const positions = await api("GET", "/batch-positions", { headers: operatorAuth });
 		const positionRows = dataOf(positions.body);
-		const demoPosition =
-			positionRows.find((p) => p.batchId === batchId || String(p.batch?.batchCode ?? "").startsWith("DEMO-")) ??
+		const seedPosition =
+			positionRows.find((p) => p.batchId === batchId || String(p.batch?.batchCode ?? "").startsWith("BNI-")) ??
 			positionRows[0];
 		rec("batch-positions", positions.status === 200 ? "PASS" : "FAIL", `count=${positionRows.length}`);
-		samples.position = demoPosition ?? null;
+		samples.position = seedPosition ?? null;
 
 		const events = await api("GET", "/stage-events", { headers: operatorAuth });
 		rec("stage-events", events.status === 200 ? "PASS" : "FAIL", `count=${dataOf(events.body).length}`);

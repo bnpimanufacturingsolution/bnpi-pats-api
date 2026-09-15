@@ -438,7 +438,7 @@ describe("canonical PATS domain read contract", () => {
 							batch: {
 								id: "batch-1",
 								batchCode: "BNI-2607-01",
-								barcodeValue: "DEMO-BNI-2607-01",
+								barcodeValue: "BNI-2607-01",
 								plannedQuantity: 200,
 								status: "IN_PROGRESS",
 								lot: {
@@ -457,7 +457,7 @@ describe("canonical PATS domain read contract", () => {
 							batch: {
 								id: "batch-2",
 								batchCode: "BNI-2607-02",
-								barcodeValue: "DEMO-BNI-2607-02",
+								barcodeValue: "BNI-2607-02",
 								plannedQuantity: 80,
 								status: "IN_PROGRESS",
 								lot: {
@@ -490,7 +490,7 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.materials).to.deep.equal([
 			{
 				batchId: "batch-1",
-				barcodeValue: "DEMO-BNI-2607-01",
+				barcodeValue: "BNI-2607-01",
 				partName: "Ice L",
 				quantity: 100,
 			},

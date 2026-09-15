@@ -61,7 +61,6 @@ if (freshReset) {
 }
 
 const profile = mode;
-const prefix = mode.toUpperCase();
 // Relative-to-now anchor so every fresh seed is "recent" and plans/batches/QC
 // line up with the monitoring sheets (which snap to today) instead of a stale
 // frozen date. All offsets below spread from this single instant per run.
@@ -75,9 +74,12 @@ function stableId(key) {
 	return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
 }
 
-/** Profile-scoped business codes (DEMO-B251 / UAT-B251) for multi-profile DBs. */
+/** Business codes are bare stems (B251, ST-INJ-01, ...). No profile prefix:
+ *  PATS business codes are globally unique in the schema, so multi-profile
+ *  co-seeding is not supported. Profile identity lives in stableId() keys and
+ *  sourceReference.seedProfile. */
 function code(value) {
-	return `${prefix}-${value}`;
+	return value;
 }
 
 function atOffset({ days = 0, hours = 0, minutes = 0 } = {}) {
@@ -192,13 +194,37 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
  * check above). Runs inside the seed $transaction so a failed reset+reseed rolls
  * back cleanly. Children are deleted before parents. Tables outside the seed's
  * writable surface are intentionally left untouched.
+ *
+ * Beyond the seed-written tables this also clears:
+ * - runtime-accumulating canonical tables (processChangeLog, idempotencyRecord)
+ *   whose rows reference seeded subjects/projects and would otherwise wedge the
+ *   reset; they are rebuilt from live API traffic.
+ * - legacy orphan join tables (StationProcess, LineLeaderAssignment) that predate
+ *   the current schema, still FK into seed tables, and have no Prisma model. They
+ *   are cleared with raw SQL and skipped when absent (fresh DBs without the legacy
+ *   migration history).
  */
 async function wipeSeededTables(tx) {
+	for (const legacyTable of ["StationProcess", "LineLeaderAssignment"]) {
+		try {
+			await tx.$executeRawUnsafe(`DELETE FROM "${legacyTable}"`);
+		} catch (error) {
+			// eslint-disable-next-line no-constant-condition
+			if (!(error instanceof Error) || !/relation .* does not exist|42P01/.test(error.message)) throw error;
+		}
+	}
+
 	for (const model of [
 		"outboxMessage",
 		"auditRecord",
+		"idempotencyRecord",
 		"qualityDecision",
 		"qualityInspection",
+		"workInstruction",
+		"processChangeLog",
+		"subjectAssignment",
+		"subjectCredential",
+		"userPreference",
 		"monitoringStationBoard",
 		"monitoringDailySheet",
 		"routingViolation",
@@ -207,36 +233,34 @@ async function wipeSeededTables(tx) {
 		"inventoryTransaction",
 		"batchPositionProjection",
 		"batchPartLine",
-		"batch",
 		"lotPartAllocation",
-		"lot",
+		"batch",
 		"materialRequirement",
 		"routingStep",
 		"pmrs",
 		"partsList",
+		"qualityStageAssignment",
+		"stationStep",
+		"subStageEligibility",
+		"processRouteStage",
+		"booth",
+		"workProcess",
+		"stage",
+		"subStage",
+		"station",
+		"bomLine",
+		"bomDefinition",
+		"modelPart",
+		"processRoute",
+		"lot",
 		"part",
 		"planDemandAllocation",
 		"projectModelAllocation",
 		"productSpecification",
 		"project",
-		"workInstruction",
-		"booth",
-		"workProcess",
-		"stationStep",
-		"station",
-		"subStageEligibility",
-		"subStage",
-		"processRouteStage",
-		"processRoute",
-		"bomLine",
-		"bomDefinition",
-		"modelPart",
 		"model",
 		"product",
-		"userPreference",
-		"qualityStageAssignment",
-		"subjectAssignment",
-		"subjectCredential",
+		"workflowGroup",
 		"subject",
 	]) {
 		await tx[model].deleteMany({});
@@ -1558,7 +1582,7 @@ async function seedProfile(tx) {
 				sequence: seq,
 				language: "EN",
 				reprintOf: null,
-				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"DEMO-${seq}"}`,
+				renderedPayload: `{"sequence":${seq},"label":"BNI-2607-015-${seq}"}`,
 				status: "SENT",
 				failureReason: null,
 				actor: `${profile}.lineleader`,
@@ -1578,7 +1602,7 @@ async function seedProfile(tx) {
 				sequence: seq,
 				reprintOf: null,
 				language: "EN",
-				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"DEMO-${seq}"}`,
+				renderedPayload: `{"sequence":${seq},"label":"BNI-2607-015-${seq}"}`,
 				status: "SENT",
 				actor: `${profile}.lineleader`,
 				actorSubjectId: lineLeader.id,
@@ -1711,7 +1735,7 @@ async function seedProfile(tx) {
 				actualQuantityMagnitude: `${actual}.000000`,
 				quantityUom: "piece",
 				usageBasis: "1 per product",
-				withdrawalFormRef: type === "ISSUANCE" ? `${prefix}-WD-${partCode}` : null,
+				withdrawalFormRef: type === "ISSUANCE" ? `WD-${partCode}` : null,
 				recordedAt: atOffset({ days: day, hours: hour }),
 				recordedBy: operator.displayNameSnapshot ?? operator.id,
 				recordedBySubjectId: operator.id,
@@ -1732,7 +1756,7 @@ async function seedProfile(tx) {
 				actualQuantityMagnitude: `${actual}.000000`,
 				quantityUom: "piece",
 				usageBasis: "1 per product",
-				withdrawalFormRef: type === "ISSUANCE" ? `${prefix}-WD-${partCode}` : null,
+				withdrawalFormRef: type === "ISSUANCE" ? `WD-${partCode}` : null,
 				recordedAt: atOffset({ days: day, hours: hour }),
 				recordedBy: operator.displayNameSnapshot ?? operator.id,
 				recordedBySubjectId: operator.id,
@@ -1914,7 +1938,7 @@ async function seedProfile(tx) {
 			resourceType: "ProductionPlan",
 			resourceId: projectId,
 			outcome: "SUCCESS",
-			correlationId: `${prefix}-SEED-B251`,
+			correlationId: `SEED-B251`,
 			detail: {
 				seedProfile: profile,
 				productCode: CLIENT_B251.productCode,
@@ -1931,7 +1955,7 @@ async function seedProfile(tx) {
 			resourceType: "ProductionPlan",
 			resourceId: projectId,
 			outcome: "SUCCESS",
-			correlationId: `${prefix}-SEED-B251`,
+			correlationId: `SEED-B251`,
 			detail: {
 				seedProfile: profile,
 				productCode: CLIENT_B251.productCode,
