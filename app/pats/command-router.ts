@@ -212,6 +212,14 @@ const stationStepCreateSchema = z.object({
 	subStageId: z.string().trim().min(1).max(100).nullable().optional(),
 }).strict();
 
+const stationProcessesSchema = z.object({
+	processIds: z.array(z.string().trim().min(1).max(100)).min(0),
+}).strict();
+
+const stationOrderSchema = z.object({
+	stationIds: z.array(z.string().trim().min(1).max(100)).min(1),
+}).strict();
+
 const workInstructionCreateSchema = z.object({
 	stageId: z.string().trim().min(1).max(100),
 	subStageId: z.string().trim().min(1).max(100).nullable().optional(),
@@ -1089,6 +1097,54 @@ export function commandRouter(
 						ETag: `"${board.rowVersion}"`,
 					},
 				};
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.put("/stations/:stationId/processes", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, stationProcessesSchema);
+			const stationId = req.params.stationId;
+			const response = await executeCommand(database, req, "stationProcessesReplace", { stationId, processIds: body.processIds }, async (transaction) => {
+				const station = await transaction.station.findUnique({ where: { id: stationId } });
+				if (!station) notFound("The requested station was not found.");
+				if (body.processIds.length > 0) {
+					const processes = await transaction.workProcess.findMany({ where: { id: { in: body.processIds } } });
+					const foundIds = new Set(processes.map((p) => p.id));
+					const missing = body.processIds.filter((id) => !foundIds.has(id));
+					if (missing.length > 0) notFound(`The following work processes were not found: ${missing.join(", ")}`);
+				}
+				await transaction.booth.updateMany({
+					where: { stationId, workProcessId: { notIn: body.processIds } },
+					data: { workProcessId: null },
+				});
+				for (const processId of body.processIds) {
+					const booth = await transaction.booth.findFirst({ where: { stationId, workProcessId: null } });
+					if (booth) {
+						await transaction.booth.update({ where: { id: booth.id }, data: { workProcessId: processId } });
+					}
+				}
+				await recordCommandSuccess(transaction, req, "STATION_PROCESSES_REPLACED", "Station", stationId, { processCount: body.processIds.length });
+				return { status: 200, body: { stationId, processIds: body.processIds }, headers: { ETag: `"${stationId}"` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.put("/stations/order", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, stationOrderSchema);
+			const response = await executeCommand(database, req, "stationOrderReorder", { stationIds: body.stationIds }, async (transaction) => {
+				const stations = await transaction.station.findMany({ where: { id: { in: body.stationIds } } });
+				const foundIds = new Set(stations.map((s) => s.id));
+				const missing = body.stationIds.filter((id) => !foundIds.has(id));
+				if (missing.length > 0) notFound(`The following stations were not found: ${missing.join(", ")}`);
+				for (const [index, stationId] of body.stationIds.entries()) {
+					await transaction.station.update({ where: { id: stationId }, data: { displayOrder: index } });
+				}
+				await recordCommandSuccess(transaction, req, "STATIONS_REORDERED", "Station", body.stationIds[0] ?? "", { stationCount: body.stationIds.length });
+				return { status: 200, body: { stationIds: body.stationIds }, headers: { ETag: `"order-${body.stationIds[0] ?? ""}"` } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }

@@ -825,4 +825,19 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:malformed-request");
 		expect(called).to.equal(false);
 	});
+
+	it("returns a station directory from server persistence", async () => {
+		const app = appFor(
+			{ station: { findMany: async () => [{ id: "station-1", name: "Station 1", stageId: "stage-1", displayOrder: 0, stationCode: "ST-01" }] } },
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/stations")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.data).to.have.length(1);
+		expect(response.body.data[0]).to.deep.include({ id: "station-1", name: "Station 1", stationCode: "ST-01" });
+	});
 });

@@ -105,11 +105,15 @@ function monitoringSeedDate() {
  *   Direct CAPABILITY grants (e.g. Line Leader `daily-metrics.encode`). Not a fourth business role.
  */
 async function upsertSubject(tx, key, username, displayName, roleBundles, passwordHash, extraAssignments = []) {
+	// Email snapshot stays bound to the username: `/users/me` is the Layer-1
+	// identity anchor and e2e asserts the `demo.*@pats.local` address set
+	// exactly (see e2e/rbac/api-matrix.spec.ts). Only the display name is narrative.
+	const snapshotEmail = `${username}@pats.local`;
 	const subject = await tx.subject.upsert({
 		where: { id: stableId(key) },
 		update: {
 			displayNameSnapshot: displayName,
-			emailSnapshot: `${username}@pats.local`,
+			emailSnapshot: snapshotEmail,
 			status: "ACTIVE",
 		},
 		create: {
@@ -118,7 +122,7 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
 			issuer: "pats-local",
 			providerSubject: username,
 			displayNameSnapshot: displayName,
-			emailSnapshot: `${username}@pats.local`,
+			emailSnapshot: snapshotEmail,
 			status: "ACTIVE",
 		},
 	});
@@ -269,12 +273,17 @@ async function seedProfile(tx) {
 	// The operator-only deny path needs no separate user — demo.operator already
 	// is the operator without daily-metrics.encode. demo.inventory/demo.guest were
 	// considered and dropped: they add no distinct capability assertion.
+	//
+	// Display names and email snapshots are NARRATIVE ONLY (realistic employee
+	// names so surfaces read like a live factory). The `demo.*` usernames are the
+	// RBAC fixture contract — e2e/RBAC tests log in with them and must never be
+	// renamed. Re-seeding updates the display/email snapshots idempotently.
 
 	const planner = await upsertSubject(
 		tx,
 		"subject-planner",
 		`${profile}.planner`,
-		`${prefix} Planner`,
+		"Marco Villanueva",
 		// Pure planner: planning + read-only monitoring + catalog read. Not a QC account.
 		["planner"],
 		passwordHash,
@@ -283,7 +292,7 @@ async function seedProfile(tx) {
 		tx,
 		"subject-operator",
 		`${profile}.operator`,
-		`${prefix} Operator`,
+		"Joshua Reyes",
 		["operator"],
 		passwordHash,
 	);
@@ -292,7 +301,7 @@ async function seedProfile(tx) {
 		tx,
 		"subject-lineleader",
 		`${profile}.lineleader`,
-		`${prefix} Line Leader`,
+		"Aila Torres",
 		["operator"],
 		passwordHash,
 		[
@@ -304,7 +313,7 @@ async function seedProfile(tx) {
 		tx,
 		"subject-quality",
 		`${profile}.quality`,
-		`${prefix} Quality`,
+		"Karen Limjoco",
 		["qi"],
 		passwordHash,
 	);
@@ -316,7 +325,7 @@ async function seedProfile(tx) {
 		tx,
 		"subject-quality-noscope",
 		`${profile}.quality_noscope`,
-		`${prefix} Quality NoScope`,
+		"Paolo Garcia",
 		["qi"],
 		passwordHash,
 	);
@@ -324,7 +333,7 @@ async function seedProfile(tx) {
 		tx,
 		"subject-admin",
 		`${profile}.admin`,
-		`${prefix} Admin`,
+		"Liza Dela Cruz",
 		["admin"],
 		passwordHash,
 	);
@@ -1972,7 +1981,7 @@ async function seedProfile(tx) {
 		lineLabel: "Main line",
 		processId: processFullSprayId,
 		processName: "Full Spray",
-		lineLeaderName: "DEMO Line Leader",
+		lineLeaderName: "Aila Torres",
 		productId: productB251Id,
 		productName: CLIENT_B251.productName,
 		modelId: "01",
@@ -1999,7 +2008,7 @@ async function seedProfile(tx) {
 		lineLabel: "Main line",
 		processId: processMaskSprayId,
 		processName: "Mask Spray",
-		lineLeaderName: "DEMO Line Leader",
+		lineLeaderName: "Aila Torres",
 		productId: productB251Id,
 		productName: CLIENT_B251.productName,
 		modelId: "02",
