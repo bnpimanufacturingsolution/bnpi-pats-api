@@ -61,7 +61,6 @@ if (freshReset) {
 }
 
 const profile = mode;
-const prefix = mode.toUpperCase();
 // Relative-to-now anchor so every fresh seed is "recent" and plans/batches/QC
 // line up with the monitoring sheets (which snap to today) instead of a stale
 // frozen date. All offsets below spread from this single instant per run.
@@ -75,9 +74,12 @@ function stableId(key) {
 	return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
 }
 
-/** Profile-scoped business codes (DEMO-B251 / UAT-B251) for multi-profile DBs. */
+/** Business codes are bare stems (B251, ST-INJ-01, ...). No profile prefix:
+ *  PATS business codes are globally unique in the schema, so multi-profile
+ *  co-seeding is not supported. Profile identity lives in stableId() keys and
+ *  sourceReference.seedProfile. */
 function code(value) {
-	return `${prefix}-${value}`;
+	return value;
 }
 
 function atOffset({ days = 0, hours = 0, minutes = 0 } = {}) {
@@ -105,11 +107,15 @@ function monitoringSeedDate() {
  *   Direct CAPABILITY grants (e.g. Line Leader `daily-metrics.encode`). Not a fourth business role.
  */
 async function upsertSubject(tx, key, username, displayName, roleBundles, passwordHash, extraAssignments = []) {
+	// Email snapshot stays bound to the username: `/users/me` is the Layer-1
+	// identity anchor and e2e asserts the `demo.*@pats.local` address set
+	// exactly (see e2e/rbac/api-matrix.spec.ts). Only the display name is narrative.
+	const snapshotEmail = `${username}@pats.local`;
 	const subject = await tx.subject.upsert({
 		where: { id: stableId(key) },
 		update: {
 			displayNameSnapshot: displayName,
-			emailSnapshot: `${username}@pats.local`,
+			emailSnapshot: snapshotEmail,
 			status: "ACTIVE",
 		},
 		create: {
@@ -118,7 +124,7 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
 			issuer: "pats-local",
 			providerSubject: username,
 			displayNameSnapshot: displayName,
-			emailSnapshot: `${username}@pats.local`,
+			emailSnapshot: snapshotEmail,
 			status: "ACTIVE",
 		},
 	});
@@ -188,13 +194,37 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
  * check above). Runs inside the seed $transaction so a failed reset+reseed rolls
  * back cleanly. Children are deleted before parents. Tables outside the seed's
  * writable surface are intentionally left untouched.
+ *
+ * Beyond the seed-written tables this also clears:
+ * - runtime-accumulating canonical tables (processChangeLog, idempotencyRecord)
+ *   whose rows reference seeded subjects/projects and would otherwise wedge the
+ *   reset; they are rebuilt from live API traffic.
+ * - legacy orphan join tables (StationProcess, LineLeaderAssignment) that predate
+ *   the current schema, still FK into seed tables, and have no Prisma model. They
+ *   are cleared with raw SQL and skipped when absent (fresh DBs without the legacy
+ *   migration history).
  */
 async function wipeSeededTables(tx) {
+	for (const legacyTable of ["StationProcess", "LineLeaderAssignment"]) {
+		try {
+			await tx.$executeRawUnsafe(`DELETE FROM "${legacyTable}"`);
+		} catch (error) {
+			// eslint-disable-next-line no-constant-condition
+			if (!(error instanceof Error) || !/relation .* does not exist|42P01/.test(error.message)) throw error;
+		}
+	}
+
 	for (const model of [
 		"outboxMessage",
 		"auditRecord",
+		"idempotencyRecord",
 		"qualityDecision",
 		"qualityInspection",
+		"workInstruction",
+		"processChangeLog",
+		"subjectAssignment",
+		"subjectCredential",
+		"userPreference",
 		"monitoringStationBoard",
 		"monitoringDailySheet",
 		"routingViolation",
@@ -203,36 +233,34 @@ async function wipeSeededTables(tx) {
 		"inventoryTransaction",
 		"batchPositionProjection",
 		"batchPartLine",
-		"batch",
 		"lotPartAllocation",
-		"lot",
+		"batch",
 		"materialRequirement",
 		"routingStep",
 		"pmrs",
 		"partsList",
+		"qualityStageAssignment",
+		"stationStep",
+		"subStageEligibility",
+		"processRouteStage",
+		"booth",
+		"workProcess",
+		"stage",
+		"subStage",
+		"station",
+		"bomLine",
+		"bomDefinition",
+		"modelPart",
+		"processRoute",
+		"lot",
 		"part",
 		"planDemandAllocation",
 		"projectModelAllocation",
 		"productSpecification",
 		"project",
-		"workInstruction",
-		"booth",
-		"workProcess",
-		"stationStep",
-		"station",
-		"subStageEligibility",
-		"subStage",
-		"processRouteStage",
-		"processRoute",
-		"bomLine",
-		"bomDefinition",
-		"modelPart",
 		"model",
 		"product",
-		"userPreference",
-		"qualityStageAssignment",
-		"subjectAssignment",
-		"subjectCredential",
+		"workflowGroup",
 		"subject",
 	]) {
 		await tx[model].deleteMany({});
@@ -269,12 +297,17 @@ async function seedProfile(tx) {
 	// The operator-only deny path needs no separate user — demo.operator already
 	// is the operator without daily-metrics.encode. demo.inventory/demo.guest were
 	// considered and dropped: they add no distinct capability assertion.
+	//
+	// Display names and email snapshots are NARRATIVE ONLY (realistic employee
+	// names so surfaces read like a live factory). The `demo.*` usernames are the
+	// RBAC fixture contract — e2e/RBAC tests log in with them and must never be
+	// renamed. Re-seeding updates the display/email snapshots idempotently.
 
 	const planner = await upsertSubject(
 		tx,
 		"subject-planner",
 		`${profile}.planner`,
-		`${prefix} Planner`,
+		"Marco Villanueva",
 		// Pure planner: planning + read-only monitoring + catalog read. Not a QC account.
 		["planner"],
 		passwordHash,
@@ -283,7 +316,7 @@ async function seedProfile(tx) {
 		tx,
 		"subject-operator",
 		`${profile}.operator`,
-		`${prefix} Operator`,
+		"Joshua Reyes",
 		["operator"],
 		passwordHash,
 	);
@@ -292,7 +325,7 @@ async function seedProfile(tx) {
 		tx,
 		"subject-lineleader",
 		`${profile}.lineleader`,
-		`${prefix} Line Leader`,
+		"Aila Torres",
 		["operator"],
 		passwordHash,
 		[
@@ -304,7 +337,7 @@ async function seedProfile(tx) {
 		tx,
 		"subject-quality",
 		`${profile}.quality`,
-		`${prefix} Quality`,
+		"Karen Limjoco",
 		["qi"],
 		passwordHash,
 	);
@@ -316,7 +349,7 @@ async function seedProfile(tx) {
 		tx,
 		"subject-quality-noscope",
 		`${profile}.quality_noscope`,
-		`${prefix} Quality NoScope`,
+		"Paolo Garcia",
 		["qi"],
 		passwordHash,
 	);
@@ -324,7 +357,7 @@ async function seedProfile(tx) {
 		tx,
 		"subject-admin",
 		`${profile}.admin`,
-		`${prefix} Admin`,
+		"Liza Dela Cruz",
 		["admin"],
 		passwordHash,
 	);
@@ -1549,7 +1582,7 @@ async function seedProfile(tx) {
 				sequence: seq,
 				language: "EN",
 				reprintOf: null,
-				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"DEMO-${seq}"}`,
+				renderedPayload: `{"sequence":${seq},"label":"BNI-2607-015-${seq}"}`,
 				status: "SENT",
 				failureReason: null,
 				actor: `${profile}.lineleader`,
@@ -1569,7 +1602,7 @@ async function seedProfile(tx) {
 				sequence: seq,
 				reprintOf: null,
 				language: "EN",
-				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"DEMO-${seq}"}`,
+				renderedPayload: `{"sequence":${seq},"label":"BNI-2607-015-${seq}"}`,
 				status: "SENT",
 				actor: `${profile}.lineleader`,
 				actorSubjectId: lineLeader.id,
@@ -1702,7 +1735,7 @@ async function seedProfile(tx) {
 				actualQuantityMagnitude: `${actual}.000000`,
 				quantityUom: "piece",
 				usageBasis: "1 per product",
-				withdrawalFormRef: type === "ISSUANCE" ? `${prefix}-WD-${partCode}` : null,
+				withdrawalFormRef: type === "ISSUANCE" ? `WD-${partCode}` : null,
 				recordedAt: atOffset({ days: day, hours: hour }),
 				recordedBy: operator.displayNameSnapshot ?? operator.id,
 				recordedBySubjectId: operator.id,
@@ -1723,7 +1756,7 @@ async function seedProfile(tx) {
 				actualQuantityMagnitude: `${actual}.000000`,
 				quantityUom: "piece",
 				usageBasis: "1 per product",
-				withdrawalFormRef: type === "ISSUANCE" ? `${prefix}-WD-${partCode}` : null,
+				withdrawalFormRef: type === "ISSUANCE" ? `WD-${partCode}` : null,
 				recordedAt: atOffset({ days: day, hours: hour }),
 				recordedBy: operator.displayNameSnapshot ?? operator.id,
 				recordedBySubjectId: operator.id,
@@ -1905,7 +1938,7 @@ async function seedProfile(tx) {
 			resourceType: "ProductionPlan",
 			resourceId: projectId,
 			outcome: "SUCCESS",
-			correlationId: `${prefix}-SEED-B251`,
+			correlationId: `SEED-B251`,
 			detail: {
 				seedProfile: profile,
 				productCode: CLIENT_B251.productCode,
@@ -1922,7 +1955,7 @@ async function seedProfile(tx) {
 			resourceType: "ProductionPlan",
 			resourceId: projectId,
 			outcome: "SUCCESS",
-			correlationId: `${prefix}-SEED-B251`,
+			correlationId: `SEED-B251`,
 			detail: {
 				seedProfile: profile,
 				productCode: CLIENT_B251.productCode,
@@ -1972,7 +2005,7 @@ async function seedProfile(tx) {
 		lineLabel: "Main line",
 		processId: processFullSprayId,
 		processName: "Full Spray",
-		lineLeaderName: "DEMO Line Leader",
+		lineLeaderName: "Aila Torres",
 		productId: productB251Id,
 		productName: CLIENT_B251.productName,
 		modelId: "01",
@@ -1999,7 +2032,7 @@ async function seedProfile(tx) {
 		lineLabel: "Main line",
 		processId: processMaskSprayId,
 		processName: "Mask Spray",
-		lineLeaderName: "DEMO Line Leader",
+		lineLeaderName: "Aila Torres",
 		productId: productB251Id,
 		productName: CLIENT_B251.productName,
 		modelId: "02",

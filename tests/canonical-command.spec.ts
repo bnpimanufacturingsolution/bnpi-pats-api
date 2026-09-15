@@ -405,4 +405,211 @@ describe("canonical PATS command contract", () => {
 		expect(response.status).to.equal(403);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
 	});
+
+	it("replaces station processes and reassigns booth work processes", async () => {
+		let clearedBooths: Record<string, unknown>[] = [];
+		let assignedBooth: Record<string, unknown> | null = null;
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-station-proc", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			station: {
+				findUnique: async () => ({ id: "station-1", name: "Station 1" }),
+			},
+			workProcess: {
+				findMany: async () => [{ id: "proc-1", name: "Process 1" }, { id: "proc-2", name: "Process 2" }],
+			},
+			booth: {
+				updateMany: async ({ data }: { data: Record<string, unknown> }) => { clearedBooths.push(data); return { count: 1 }; },
+				findFirst: async () => ({ id: "booth-1", stationId: "station-1", workProcessId: null }),
+				update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => { assignedBooth = { ...where, ...data }; return { id: "booth-1", ...data }; },
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
+		const response = await request(app)
+			.put("/api/v1/stations/station-1/processes")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "station-proc-1")
+			.send({ processIds: ["proc-1"] });
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.deep.equal({ stationId: "station-1", processIds: ["proc-1"] });
+		expect(clearedBooths[0]).to.deep.equal({ workProcessId: null });
+		expect(assignedBooth).to.include({ id: "booth-1", workProcessId: "proc-1" });
+	});
+
+	it("fails station processes replace when station is not found", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-station-missing", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			station: { findUnique: async () => null },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
+		const response = await request(app)
+			.put("/api/v1/stations/missing-station/processes")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "station-proc-missing")
+			.send({ processIds: ["proc-1"] });
+
+		expect(response.status).to.equal(404);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:not-found");
+	});
+
+	it("keeps station processes replace behind operations.manage (operator denied)", async () => {
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+		const response = await request(app)
+			.put("/api/v1/stations/station-1/processes")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "station-proc-denied")
+			.send({ processIds: ["proc-1"] });
+
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
+	it("reorders stations by updating displayOrder", async () => {
+		let updatedStations: { id: string; displayOrder: number }[] = [];
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-order", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			station: {
+				findMany: async () => [
+					{ id: "station-1", name: "Station 1" },
+					{ id: "station-2", name: "Station 2" },
+				],
+				update: async ({ where, data }: { where: { id: string }; data: { displayOrder: number } }) => {
+					updatedStations.push({ id: where.id, ...data });
+					return { id: where.id, ...data };
+				},
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
+		const response = await request(app)
+			.put("/api/v1/stations/order")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "station-order-1")
+			.send({ stationIds: ["station-2", "station-1"] });
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.deep.equal({ stationIds: ["station-2", "station-1"] });
+		expect(updatedStations).to.deep.equal([
+			{ id: "station-2", displayOrder: 0 },
+			{ id: "station-1", displayOrder: 1 },
+		]);
+	});
+
+	it("fails station order when a station is not found", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-order-missing", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			station: {
+				findMany: async () => [{ id: "station-1", name: "Station 1" }],
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
+		const response = await request(app)
+			.put("/api/v1/stations/order")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "station-order-missing")
+			.send({ stationIds: ["station-1", "station-missing"] });
+
+		expect(response.status).to.equal(404);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:not-found");
+	});
+
+	it("keeps station order behind operations.manage (operator denied)", async () => {
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+		const response = await request(app)
+			.put("/api/v1/stations/order")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "station-order-denied")
+			.send({ stationIds: ["station-1"] });
+
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
+	it("creates a batch with idempotency and audit evidence", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-batch", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			lot: { findUnique: async () => ({ id: "lot-1", projectId: "proj-1" }) },
+			part: { findMany: async () => [] },
+			batch: {
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "batch-1", rowVersion: 1, batchCode: data.batchCode, ...data }),
+			},
+			batchPositionProjection: { create: async () => undefined },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/batches")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "batch-create-1")
+			.send({ batchCode: "B-1001", barcodeValue: "BAR-1001", lotId: "lot-1", plannedQuantity: 100, labelPackSize: 10, currentStageId: "stage-1" });
+
+		expect(response.status).to.equal(201);
+		expect(response.body).to.include({ batchId: "batch-1", batchCode: "B-1001" });
+		expect(response.headers.location).to.equal("/api/v1/batches/batch-1");
+		expect(response.headers.etag).to.equal('"1"');
+	});
+
+	it("creates a sub-stage", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-sub", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			subStage: {
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "substage-1", rowVersion: 1, name: data.name, displayOrder: data.displayOrder, ...data }),
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/sub-stages")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "substage-create-1")
+			.send({ name: "New SubStage", displayOrder: 0 });
+
+		expect(response.status).to.equal(201);
+		expect(response.body).to.include({ subStageId: "substage-1", name: "New SubStage" });
+	});
 });

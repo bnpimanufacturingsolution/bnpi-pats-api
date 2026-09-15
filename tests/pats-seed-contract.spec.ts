@@ -156,4 +156,33 @@ describe("PATS seed contract", () => {
       /qualityNoScope\.id, \[decorationStageId, injectionStageId\]/,
     );
   });
+
+  it("uses realistic employee display names while keeping demo.* usernames as fixtures", () => {
+    const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+
+    // The RBAC fixture contract is the username — it must keep the profile prefix.
+    expect(script).to.contain('`${profile}.planner`');
+    expect(script).to.contain('`${profile}.admin`');
+    expect(script).to.contain('`${profile}.quality_noscope`');
+    // Display names are narrative-only and must not derive from the prefix.
+    for (const name of [
+      "Liza Dela Cruz",
+      "Marco Villanueva",
+      "Joshua Reyes",
+      "Aila Torres",
+      "Karen Limjoco",
+      "Paolo Garcia",
+    ]) {
+      expect(script, `seed must assign ${name}`).to.contain(name);
+    }
+    expect(script).not.to.contain("`${prefix} Planner`");
+    expect(script).not.to.contain("`${prefix} Admin`");
+    expect(script).not.to.contain("`${prefix} Line Leader`");
+    expect(script).not.to.contain("`${prefix} Operator`");
+    expect(script).not.to.contain("`${prefix} Quality");
+    expect(script).not.to.contain("DEMO Line Leader");
+    // Email snapshots stay bound to the username (Layer-1 identity anchor
+    // asserted exactly in e2e/rbac/api-matrix.spec.ts) — narrative does not touch them.
+    expect(script).to.contain('`${username}@pats.local`');
+  });
 });

@@ -438,7 +438,7 @@ describe("canonical PATS domain read contract", () => {
 							batch: {
 								id: "batch-1",
 								batchCode: "BNI-2607-01",
-								barcodeValue: "DEMO-BNI-2607-01",
+								barcodeValue: "BNI-2607-01",
 								plannedQuantity: 200,
 								status: "IN_PROGRESS",
 								lot: {
@@ -457,7 +457,7 @@ describe("canonical PATS domain read contract", () => {
 							batch: {
 								id: "batch-2",
 								batchCode: "BNI-2607-02",
-								barcodeValue: "DEMO-BNI-2607-02",
+								barcodeValue: "BNI-2607-02",
 								plannedQuantity: 80,
 								status: "IN_PROGRESS",
 								lot: {
@@ -490,7 +490,7 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.materials).to.deep.equal([
 			{
 				batchId: "batch-1",
-				barcodeValue: "DEMO-BNI-2607-01",
+				barcodeValue: "BNI-2607-01",
 				partName: "Ice L",
 				quantity: 100,
 			},
@@ -824,5 +824,20 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.status).to.equal(400);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:malformed-request");
 		expect(called).to.equal(false);
+	});
+
+	it("returns a station directory from server persistence", async () => {
+		const app = appFor(
+			{ station: { findMany: async () => [{ id: "station-1", name: "Station 1", stageId: "stage-1", displayOrder: 0, stationCode: "ST-01" }] } },
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/stations")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.data).to.have.length(1);
+		expect(response.body.data[0]).to.deep.include({ id: "station-1", name: "Station 1", stationCode: "ST-01" });
 	});
 });
