@@ -826,6 +826,7 @@ model WorkProcess {
   booths         Booth[]
   dailySheets    MonitoringDailySheet[]
   stationBoards  MonitoringStationBoard[]
+  stationSteps   StationStep[]
 
   @@index([subStageId])
   @@index([name])
@@ -909,16 +910,18 @@ model MonitoringStationBoard {
 }
 
 model StationStep {
-  stationId  String
-  station    Station   @relation(fields: [stationId], references: [id])
-  stageId    String
-  stage      Stage     @relation(fields: [stageId], references: [id])
-  subStageId String?
-  subStage   SubStage? @relation(fields: [subStageId], references: [id])
+  stationId     String
+  station       Station     @relation(fields: [stationId], references: [id])
+  stageId       String
+  stage         Stage       @relation(fields: [stageId], references: [id])
+  subStageId    String?
+  subStage      SubStage?   @relation(fields: [subStageId], references: [id])
+  workProcessId String?
+  workProcess   WorkProcess? @relation(fields: [workProcessId], references: [id])
   // Composite id needs a non-null member for subStageId-null base steps.
-  id         String    @id @default(uuid())
+  id            String      @id @default(uuid())
 
-  @@unique([stationId, stageId, subStageId])
+  @@unique([stationId, stageId, subStageId, workProcessId])
 }
 
 model WorkInstruction {

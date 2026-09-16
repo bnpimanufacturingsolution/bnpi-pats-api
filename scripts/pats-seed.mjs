@@ -947,32 +947,35 @@ async function seedProfile(tx) {
 		});
 	}
 
-	for (const [id, stationId, stageId, subStageId] of [
-		// Injection keeps the stage-wide bound step (station history filters match
-		// null-rotor events) and gains a sub-stage-bound step so the Monitoring
-		// desk bridge can resolve its work-process against a non-null subStageId.
-		[stableId("station-step-inj"), injectionStationId, injectionStageId, null],
-		[stableId("station-step-inj-mold"), injectionStationId, injectionStageId, subInjectionMoldingId],
-		[stableId("station-step-dec-fs"), decorationStationId, decorationStageId, subFullSprayId],
-		[stableId("station-step-dec-ms"), decorationMaskStationId, decorationStageId, subMaskSprayId],
-		[stableId("station-step-dec-tp"), decorationTampoStationId, decorationStageId, subTampoId],
-		[stableId("station-step-subassy"), assemblySubAssemblyStationId, assemblyStageId, subSubAssemblyId],
-		[stableId("station-step-assort"), assemblyAssortmentStationId, assemblyStageId, subAssortmentId],
-		[stableId("station-step-wh"), warehouseStationId, warehouseStageId, subMainPackingId],
-	]) {
-		await tx.stationStep.upsert({
-			where: { id },
-			update: { stationId, stageId, subStageId },
-			create: { id, stationId, stageId, subStageId },
-		});
-	}
-
-	// Work processes under sub-stages (catalog leaf; not stations). Bridge names match current SubStages.
+	// Work process IDs (catalog leaf; bound to station steps + created below).
 	const processMoldingId = stableId("work-process-molding");
 	const processFullSprayId = stableId("work-process-full-spray");
 	const processMaskSprayId = stableId("work-process-mask-spray");
 	const processTampoId = stableId("work-process-tampo");
 	const processMainPackingId = stableId("work-process-main-packing");
+
+	for (const [id, stationId, stageId, subStageId, workProcessId] of [
+		// Injection keeps the stage-wide bound step (station history filters match
+		// null-rotor events) and gains a sub-stage-bound step so the Monitoring
+		// desk bridge can resolve its work-process against a non-null subStageId.
+		// Each monitored sub-stage step also binds its concrete work process (sub-process).
+		[stableId("station-step-inj"), injectionStationId, injectionStageId, null, null],
+		[stableId("station-step-inj-mold"), injectionStationId, injectionStageId, subInjectionMoldingId, processMoldingId],
+		[stableId("station-step-dec-fs"), decorationStationId, decorationStageId, subFullSprayId, processFullSprayId],
+		[stableId("station-step-dec-ms"), decorationMaskStationId, decorationStageId, subMaskSprayId, processMaskSprayId],
+		[stableId("station-step-dec-tp"), decorationTampoStationId, decorationStageId, subTampoId, processTampoId],
+		[stableId("station-step-subassy"), assemblySubAssemblyStationId, assemblyStageId, subSubAssemblyId, null],
+		[stableId("station-step-assort"), assemblyAssortmentStationId, assemblyStageId, subAssortmentId, null],
+		[stableId("station-step-wh"), warehouseStationId, warehouseStageId, subMainPackingId, processMainPackingId],
+	]) {
+		await tx.stationStep.upsert({
+			where: { id },
+			update: { stationId, stageId, subStageId, workProcessId },
+			create: { id, stationId, stageId, subStageId, workProcessId },
+		});
+	}
+
+	// Work processes under sub-stages (catalog leaf; not stations). Bridge names match current SubStages.
 
 	for (const [id, subStageId, name, displayOrder, labelledCycleTimeSec] of [
 		[processMoldingId, subInjectionMoldingId, "Molding", 1, 14],
