@@ -340,10 +340,10 @@ describe("canonical PATS domain read contract", () => {
 	it("returns server-owned station history from execution evidence", async () => {
 		const occurredAt = new Date("2026-07-31T02:00:00.000Z");
 		const app = appFor({
-			station: {
+			section: {
 				findUnique: async () => ({
 					id: "station-injection",
-					stationCode: "ST-INJ-01",
+					sectionCode: "ST-INJ-01",
 					name: "Injection Station 01",
 					stageId: "stage-injection",
 					boundSteps: [{ stageId: "stage-injection", subStageId: null }],
@@ -408,10 +408,10 @@ describe("canonical PATS domain read contract", () => {
 		let printSelect: Record<string, unknown> | undefined;
 		let positionWhere: Record<string, unknown> | undefined;
 		const app = appFor({
-			station: {
+			section: {
 				findUnique: async () => ({
 					id: "station-deco-fs",
-					stationCode: "ST-DECO-FS",
+					sectionCode: "ST-DECO-FS",
 					name: "Full Spray PC",
 					stageId: "stage-decoration",
 					boundSteps: [{ stageId: "stage-decoration", subStageId: "sub-full-spray" }],
@@ -519,10 +519,10 @@ describe("canonical PATS domain read contract", () => {
 
 	it("does not count reprint print jobs as today's output", async () => {
 		const app = appFor({
-			station: {
+			section: {
 				findUnique: async () => ({
 					id: "station-deco-fs",
-					stationCode: "ST-DECO-FS",
+					sectionCode: "ST-DECO-FS",
 					name: "Full Spray PC",
 					stageId: "stage-decoration",
 					boundSteps: [{ stageId: "stage-decoration", subStageId: "sub-full-spray" }],
@@ -557,7 +557,7 @@ describe("canonical PATS domain read contract", () => {
 
 	it("rejects invalid station support date query", async () => {
 		const app = appFor({
-			station: { findUnique: async () => null },
+			section: { findUnique: async () => null },
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
@@ -828,16 +828,16 @@ describe("canonical PATS domain read contract", () => {
 
 	it("returns a station directory from server persistence", async () => {
 		const app = appFor(
-			{ station: { findMany: async () => [{ id: "station-1", name: "Station 1", stageId: "stage-1", displayOrder: 0, stationCode: "ST-01" }] } },
+			{ section: { findMany: async () => [{ id: "station-1", name: "Station 1", stageId: "stage-1", displayOrder: 0, sectionCode: "ST-01" }] } },
 			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
 		);
 
 		const response = await request(app)
-			.get("/api/v1/stations")
+			.get("/api/v1/sections")
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
 		expect(response.body.data).to.have.length(1);
-		expect(response.body.data[0]).to.deep.include({ id: "station-1", name: "Station 1", stationCode: "ST-01" });
+		expect(response.body.data[0]).to.deep.include({ id: "station-1", name: "Station 1", sectionCode: "ST-01" });
 	});
 });

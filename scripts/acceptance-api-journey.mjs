@@ -2,7 +2,7 @@
  * Disposable-environment API journey for full App–API acceptance.
  * Usage: node scripts/acceptance-api-journey.mjs
  * Env: PATS_API_BASE (default http://127.0.0.1:3302/api/v1)
- *      PATS_SEED_PASSWORD (default pats-demo-seed-2026)
+ *      PATS_SEED_PASSWORD (default bnpi-pats-floor-2026)
  */
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,7 +10,7 @@ import { join } from "node:path";
 
 const base = (process.env.PATS_API_BASE ?? "http://127.0.0.1:3302/api/v1").replace(/\/$/, "");
 const healthBase = base.replace(/\/api\/v1$/, "");
-const password = process.env.PATS_SEED_PASSWORD ?? "pats-demo-seed-2026";
+const password = process.env.PATS_SEED_PASSWORD ?? "bnpi-pats-floor-2026";
 const results = [];
 const samples = {};
 
@@ -77,7 +77,7 @@ async function main() {
 		unauth.headers["content-type"] ?? "missing",
 	);
 
-	const planner = await login("demo.planner");
+	const planner = await login("marco.villanueva");
 	if (!planner.token) {
 		rec("auth-login-planner", "FAIL", `${planner.res.status} ${planner.res.raw.slice(0, 200)}`);
 		finish();
@@ -86,11 +86,11 @@ async function main() {
 	rec("auth-login-planner", "PASS", "ok");
 	const plannerAuth = { Authorization: `Bearer ${planner.token}` };
 
-	const operator = await login("demo.operator");
+	const operator = await login("joshua.reyes");
 	rec("auth-login-operator", operator.token ? "PASS" : "FAIL", String(operator.res.status));
 	const operatorAuth = operator.token ? { Authorization: `Bearer ${operator.token}` } : null;
 
-	const quality = await login("demo.quality");
+	const quality = await login("karen.limjoco");
 	rec("auth-login-quality", quality.token ? "PASS" : "FAIL", String(quality.res.status));
 	const qualityAuth = quality.token ? { Authorization: `Bearer ${quality.token}` } : null;
 
@@ -291,9 +291,9 @@ async function main() {
 		}
 
 		// Stage event: use position's current expected route if available, or first station-step
-		const pos = demoPosition;
+		const pos = seedPosition;
 		const eventBatchId = pos?.batchId ?? batchId;
-		const eventStageId = pos?.stageId ?? demoBatch?.currentStageId ?? stepRows[0]?.stageId;
+		const eventStageId = pos?.stageId ?? seedBatch?.currentStageId ?? stepRows[0]?.stageId;
 		const eventSubStageId = pos?.subStageId ?? stepRows[0]?.subStageId ?? null;
 		if (eventBatchId && eventStageId) {
 			const eventBody = {
@@ -319,14 +319,13 @@ async function main() {
 		const invRows = dataOf(inv.body);
 		const existingInv =
 			invRows.find((row) => row.batchId === eventBatchId) ??
-			invRows.find((row) => String(row.withdrawalFormRef ?? "").includes("DEMO")) ??
 			invRows[0];
 		const batchRowsAll = dataOf(batches.body);
-		const batchRow = batchRowsAll.find((b) => (b.batchId ?? b.id) === eventBatchId) ?? demoBatch;
-		// Prefer part that already has inventory on this exact DEMO batch (avoids DEMO/UAT cross-mix).
-		const invForDemoBatch = invRows.find((row) => row.batchId === eventBatchId);
+		const batchRow = batchRowsAll.find((b) => (b.batchId ?? b.id) === eventBatchId) ?? seedBatch;
+		// Prefer part that already has inventory on this exact seed batch.
+		const invForSeedBatch = invRows.find((row) => row.batchId === eventBatchId);
 		const partId =
-			invForDemoBatch?.partId ??
+			invForSeedBatch?.partId ??
 			batchRow?.parts?.[0]?.partId ??
 			planDetail?.lots?.[0]?.partAllocations?.[0]?.partId ??
 			planDetail?.parts?.[0]?.id ??

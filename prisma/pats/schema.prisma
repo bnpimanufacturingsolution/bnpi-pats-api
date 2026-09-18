@@ -753,12 +753,12 @@ enum ScreenType {
   TABLET
 }
 
-model Station {
+model Section {
   id                    String        @id @default(uuid())
   workspaceId           String
   name                  String
-  // Nullable during the compatibility bridge; all new API-created stations require a code.
-  stationCode           String?       @unique
+  // Nullable during the compatibility bridge; all new API-created sections require a code.
+  sectionCode           String?       @unique
   operationalContextKey String        @default("PATS")
   stageId               String
   screenType            ScreenType    @default(COMPUTER)
@@ -792,7 +792,7 @@ model PrintJob {
   id               String         @id @default(uuid())
   batchId          String
   stationId        String
-  station          Station        @relation(fields: [stationId], references: [id])
+  station          Section        @relation(fields: [stationId], references: [id])
   fromStageId      String
   fromSubStageId   String?
   toStageId        String?
@@ -822,7 +822,6 @@ model WorkProcess {
   displayOrder   Int
   isEnabled      Boolean  @default(true)
   isSystemSeed   Boolean  @default(false)
-  labelledCycleTimeSec Int?
   booths         Booth[]
   dailySheets    MonitoringDailySheet[]
   stationBoards  MonitoringStationBoard[]
@@ -838,7 +837,7 @@ model Booth {
   boothCode      String
   label          String?
   stationId      String?
-  station        Station?     @relation(fields: [stationId], references: [id])
+  station        Section?     @relation(fields: [stationId], references: [id])
   stageId        String
   subStageId     String?
   workProcessId  String?
@@ -910,7 +909,7 @@ model MonitoringStationBoard {
 
 model StationStep {
   stationId  String
-  station    Station   @relation(fields: [stationId], references: [id])
+  station    Section   @relation(fields: [stationId], references: [id])
   stageId    String
   stage      Stage     @relation(fields: [stageId], references: [id])
   subStageId String?

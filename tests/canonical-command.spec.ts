@@ -3,6 +3,9 @@ import request from "supertest";
 import { expect } from "chai";
 import { canonicalRouter, requireCanonicalCapability } from "../app/canonical/router";
 import { commandRouter } from "../app/pats/command-router";
+import { domainReadRouter } from "../app/pats/domain-read";
+import { PrismaClient } from "../generated/pats-client";
+import type { CommandTransaction } from "../app/pats/command-support";
 import type { IdentityDependencies, SubjectAssignmentRecord } from "../app/identity/types";
 
 function identity(assignments: SubjectAssignmentRecord[]): IdentityDependencies {
@@ -24,6 +27,139 @@ function appFor(database: Record<string, unknown>, assignments: SubjectAssignmen
 	}));
 	return app;
 }
+
+describe("section identity mounting regression", () => {
+	function boundary(mount: "read-only" | "command-only" | "combined", role: string) {
+		const calls = { authenticate: 0, resolve: 0, assignments: 0, persistence: [] as string[] };
+		const section = { id: "section-1", sectionCode: "SEC-01", name: "Section 1", displayOrder: 0, boundSteps: [] };
+		const database = new Proxy(new PrismaClient(), {
+			get(_target, property) {
+				calls.persistence.push(String(property));
+				switch (property) {
+					case "section": return {
+						findMany: async () => [section],
+						update: async ({ where, data }: { where: { id: string }; data: { displayOrder: number } }) => {
+							expect(where.id).to.equal(section.id);
+							section.displayOrder = data.displayOrder;
+							calls.persistence.push("section.update");
+							return section;
+						},
+					};
+					case "idempotencyRecord": return {
+						findUnique: async () => null,
+						create: async () => ({ id: "section-idempotency" }),
+						update: async () => ({ id: "section-idempotency" }),
+					};
+					case "$transaction": return async (work: (transaction: CommandTransaction) => Promise<unknown>) => work(database);
+					case "auditRecord": return {
+						create: async ({ data }: { data: { actorSubjectId: string; action: string } }) => {
+							expect(data.actorSubjectId).to.equal("section-subject");
+							expect(data.action).to.equal("SECTIONS_REORDERED");
+							return data;
+						},
+					};
+					case "outboxMessage": return { create: async () => ({ id: "section-outbox" }) };
+					default: throw new Error(`Unexpected persistence access: ${String(property)}`);
+				}
+			},
+		});
+		const identity: IdentityDependencies = {
+			authenticator: {
+				authenticate: async (req) => {
+					calls.authenticate += 1;
+					return req.header("Authorization") === "Bearer section-token"
+						? { provider: "local", issuer: "pats-local", providerSubject: "section-user" }
+						: null;
+				},
+			},
+			subjects: {
+				resolve: async () => {
+					calls.resolve += 1;
+					return { id: "section-subject", provider: "local", issuer: "pats-local", providerSubject: "section-user", status: "ACTIVE" };
+				},
+				findById: async () => null,
+				listAssignments: async () => {
+					calls.assignments += 1;
+					return [{ kind: "ROLE_BUNDLE", key: role, status: "ACTIVE" }];
+				},
+			},
+		};
+		const app = express();
+		app.use("/api/v1", canonicalRouter({
+			identity,
+			...(mount !== "command-only" ? { domainReads: { router: domainReadRouter(database, requireCanonicalCapability) } } : {}),
+			...(mount !== "read-only" ? { domainCommands: { router: commandRouter(database, requireCanonicalCapability) } } : {}),
+		}));
+		return { app, calls };
+	}
+
+	const endpoints = [
+		{ method: "get", path: "/sections", kind: "read" },
+		{ method: "post", path: "/sections", kind: "command" },
+		{ method: "patch", path: "/sections/section-1", kind: "command" },
+		{ method: "delete", path: "/sections/section-1", kind: "command" },
+		{ method: "put", path: "/sections/section-1/processes", kind: "command" },
+		{ method: "put", path: "/sections/order", kind: "command" },
+		{ method: "get", path: "/stations/section-1/history", kind: "read" },
+		{ method: "get", path: "/stations/section-1/support", kind: "read" },
+		{ method: "get", path: "/work-processes", kind: "read" },
+		{ method: "post", path: "/work-processes", kind: "command" },
+		{ method: "patch", path: "/work-processes/process-1", kind: "command" },
+		{ method: "delete", path: "/work-processes/process-1", kind: "command" },
+	] as const;
+
+	for (const mount of ["read-only", "command-only", "combined"] as const) {
+		for (const endpoint of endpoints.filter(({ kind }) => mount === "combined" || mount === `${kind}-only`)) {
+			for (const authorization of [undefined, "Bearer rejected-token"]) {
+				it(`${mount}: ${endpoint.method} ${endpoint.path} requires accepted credentials (${authorization ? "rejected" : "missing"})`, async () => {
+					const { app, calls } = boundary(mount, "admin");
+					const pending = request(app)[endpoint.method](`/api/v1${endpoint.path}`);
+					if (authorization) pending.set("Authorization", authorization);
+					const response = await pending.expect(401).expect("Content-Type", /application\/problem\+json/);
+					expect(response.body.type).to.equal("urn:bandai:pats:problem:authentication-required");
+					expect(response.body.instance).to.equal(`/api/v1${endpoint.path}`);
+					expect(response.headers["www-authenticate"]).to.equal("Bearer");
+					expect(calls).to.deep.equal({ authenticate: 1, resolve: 0, assignments: 0, persistence: [] });
+				});
+			}
+			it(`${mount}: ${endpoint.method} ${endpoint.path} denies a verified subject without the capability`, async () => {
+				const { app, calls } = boundary(mount, endpoint.kind === "read" ? "planner" : "operator");
+				const response = await request(app)[endpoint.method](`/api/v1${endpoint.path}`)
+					.set("Authorization", "Bearer section-token")
+					.expect(403).expect("Content-Type", /application\/problem\+json/);
+				expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+				expect(calls.authenticate).to.be.greaterThan(0);
+				expect(calls.resolve).to.equal(calls.authenticate);
+				expect(calls.assignments).to.equal(calls.authenticate);
+				expect(calls.persistence).to.deep.equal([]);
+			});
+		}
+
+		if (mount !== "command-only") {
+			it(`${mount}: allows an operator to read sections through identity and capability middleware`, async () => {
+				const { app, calls } = boundary(mount, "operator");
+				const response = await request(app).get("/api/v1/sections")
+					.set("Authorization", "Bearer section-token").expect(200);
+				expect(response.body.data).to.have.length(1);
+				expect(response.body.data[0]).to.include({ id: "section-1", sectionCode: "SEC-01" });
+				expect(calls.assignments).to.equal(1);
+				expect(calls.persistence).to.deep.equal(["section"]);
+			});
+		}
+		if (mount !== "read-only") {
+			it(`${mount}: allows an admin to reorder sections with the resolved audit actor`, async () => {
+				const { app, calls } = boundary(mount, "admin");
+				const response = await request(app).put("/api/v1/sections/order")
+					.set("Authorization", "Bearer section-token")
+					.set("Idempotency-Key", "section-order-auth")
+					.send({ sectionIds: ["section-1"] }).expect(200);
+				expect(response.body).to.deep.equal({ sectionIds: ["section-1"] });
+				expect(calls.assignments).to.equal(mount === "combined" ? 2 : 1);
+				expect(calls.persistence).to.include.members(["section.update", "auditRecord", "outboxMessage", "idempotencyRecord"]);
+			});
+		}
+	}
+});
 
 describe("canonical PATS command contract", () => {
 	it("creates a production plan, records audit/outbox evidence, and replays the response", async () => {
@@ -196,6 +332,75 @@ describe("canonical PATS command contract", () => {
 
 		expect(response.status).to.equal(403);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
+	it("deletes a draft project and logs audit event", async () => {
+		let deletedId: string | undefined;
+		let loggedEvent: string | undefined;
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idemp-del", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			project: {
+				findUnique: async () => ({ id: "proj-1", projectCode: "PRJ-B251-2609-01", name: "Draft run", status: "DRAFT", lots: [], rowVersion: 1 }),
+				delete: async ({ where }: { where: { id: string } }) => {
+					deletedId = where.id;
+					return { id: where.id };
+				},
+			},
+			partsList: { findMany: async () => [], deleteMany: async () => undefined },
+			routingStep: { deleteMany: async () => undefined },
+			part: { deleteMany: async () => undefined },
+			projectModelAllocation: { deleteMany: async () => undefined },
+			planDemandAllocation: { deleteMany: async () => undefined },
+			materialRequirement: { deleteMany: async () => undefined },
+			productSpecification: { deleteMany: async () => undefined },
+			pmrs: { deleteMany: async () => undefined },
+			workflowGroup: { deleteMany: async () => undefined },
+			processChangeLog: { deleteMany: async () => undefined },
+			auditRecord: {
+				create: async ({ data }: { data: { action: string } }) => {
+					loggedEvent = data.action;
+				},
+			},
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database);
+		const response = await request(app)
+			.delete("/api/v1/projects/proj-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "proj-delete-1");
+
+		expect(response.status).to.equal(204);
+		expect(deletedId).to.equal("proj-1");
+		expect(loggedEvent).to.equal("PROJECT_DRAFT_DELETED");
+	});
+
+	it("rejects deletion of a released project with 409 conflict", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idemp-del-rel", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			project: {
+				findUnique: async () => ({ id: "proj-1", projectCode: "PRJ-B251-2609-01", name: "Released run", status: "RELEASED", lots: [], rowVersion: 2 }),
+			},
+		};
+		const app = appFor(database);
+		const response = await request(app)
+			.delete("/api/v1/projects/proj-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "proj-delete-rel");
+
+		expect(response.status).to.equal(409);
+		expect(response.body.detail).to.include("Released or completed projects cannot be deleted");
 	});
 
 	it("accepts only the next forward route step for a stage event", async () => {
@@ -417,7 +622,7 @@ describe("canonical PATS command contract", () => {
 				delete: async () => undefined,
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
-			station: {
+			section: {
 				findUnique: async () => ({ id: "station-1", name: "Station 1" }),
 			},
 			workProcess: {
@@ -433,13 +638,13 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
 		const response = await request(app)
-			.put("/api/v1/stations/station-1/processes")
+			.put("/api/v1/sections/station-1/processes")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "station-proc-1")
 			.send({ processIds: ["proc-1"] });
 
 		expect(response.status).to.equal(200);
-		expect(response.body).to.deep.equal({ stationId: "station-1", processIds: ["proc-1"] });
+		expect(response.body).to.deep.equal({ sectionId: "station-1", processIds: ["proc-1"] });
 		expect(clearedBooths[0]).to.deep.equal({ workProcessId: null });
 		expect(assignedBooth).to.include({ id: "booth-1", workProcessId: "proc-1" });
 	});
@@ -453,13 +658,13 @@ describe("canonical PATS command contract", () => {
 				delete: async () => undefined,
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
-			station: { findUnique: async () => null },
+			section: { findUnique: async () => null },
 			auditRecord: { create: async () => undefined },
 			outboxMessage: { create: async () => undefined },
 		};
 		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
 		const response = await request(app)
-			.put("/api/v1/stations/missing-station/processes")
+			.put("/api/v1/sections/missing-station/processes")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "station-proc-missing")
 			.send({ processIds: ["proc-1"] });
@@ -471,7 +676,7 @@ describe("canonical PATS command contract", () => {
 	it("keeps station processes replace behind operations.manage (operator denied)", async () => {
 		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 		const response = await request(app)
-			.put("/api/v1/stations/station-1/processes")
+			.put("/api/v1/sections/station-1/processes")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "station-proc-denied")
 			.send({ processIds: ["proc-1"] });
@@ -490,7 +695,7 @@ describe("canonical PATS command contract", () => {
 				delete: async () => undefined,
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
-			station: {
+			section: {
 				findMany: async () => [
 					{ id: "station-1", name: "Station 1" },
 					{ id: "station-2", name: "Station 2" },
@@ -505,13 +710,13 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
 		const response = await request(app)
-			.put("/api/v1/stations/order")
+			.put("/api/v1/sections/order")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "station-order-1")
-			.send({ stationIds: ["station-2", "station-1"] });
+			.send({ sectionIds: ["station-2", "station-1"] });
 
 		expect(response.status).to.equal(200);
-		expect(response.body).to.deep.equal({ stationIds: ["station-2", "station-1"] });
+		expect(response.body).to.deep.equal({ sectionIds: ["station-2", "station-1"] });
 		expect(updatedStations).to.deep.equal([
 			{ id: "station-2", displayOrder: 0 },
 			{ id: "station-1", displayOrder: 1 },
@@ -527,7 +732,7 @@ describe("canonical PATS command contract", () => {
 				delete: async () => undefined,
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
-			station: {
+			section: {
 				findMany: async () => [{ id: "station-1", name: "Station 1" }],
 			},
 			auditRecord: { create: async () => undefined },
@@ -535,10 +740,10 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
 		const response = await request(app)
-			.put("/api/v1/stations/order")
+			.put("/api/v1/sections/order")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "station-order-missing")
-			.send({ stationIds: ["station-1", "station-missing"] });
+			.send({ sectionIds: ["station-1", "station-missing"] });
 
 		expect(response.status).to.equal(404);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:not-found");
@@ -547,10 +752,10 @@ describe("canonical PATS command contract", () => {
 	it("keeps station order behind operations.manage (operator denied)", async () => {
 		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 		const response = await request(app)
-			.put("/api/v1/stations/order")
+			.put("/api/v1/sections/order")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "station-order-denied")
-			.send({ stationIds: ["station-1"] });
+			.send({ sectionIds: ["station-1"] });
 
 		expect(response.status).to.equal(403);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
