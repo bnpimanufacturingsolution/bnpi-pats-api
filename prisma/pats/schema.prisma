@@ -792,7 +792,7 @@ model PrintJob {
   id               String         @id @default(uuid())
   batchId          String
   stationId        String
-  station          Section?     @relation(fields: [stationId], references: [id])
+  station          Section        @relation(fields: [stationId], references: [id])
   fromStageId      String
   fromSubStageId   String?
   toStageId        String?

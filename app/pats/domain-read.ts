@@ -5,6 +5,20 @@ import { actorId, CommandProblem, sendCommandProblem } from "./command-support";
 import { parseBatchResolveCode, resolveBatchByCode } from "./batch-resolve";
 import { parseResolveCode, resolveQualityInspectionByCode } from "./quality-resolve";
 import { listAllowedQualityStageIds } from "./quality-stage-scope";
+import { setDeprecationHeaders } from "../canonical/response-headers";
+
+// Station→Section rename (2026-09-16) transitional bridge: /sections is
+// CANONICAL, /stations is TRANSITIONAL (§7) with Deprecation/Sunset headers.
+const SECTION_LEGACY_SUNSET = new Date("2027-06-30T00:00:00Z");
+
+function isLegacyStationPath(req: Request): boolean {
+	const path = req.baseUrl + req.path;
+	return /(^|\/)stations(\/|$)/.test(path);
+}
+
+function applyLegacyStationHeaders(req: Request, res: Response): void {
+	if (isLegacyStationPath(req)) setDeprecationHeaders(res, SECTION_LEGACY_SUNSET);
+}
 
 type DomainReadDatabase = Pick<
 	PatsPrismaClient,
@@ -460,19 +474,20 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get("/sections", requireCapability("execution.read"), async (req, res) => {
+	router.get(["/sections", "/stations"], requireCapability("execution.read"), async (req, res) => {
 		try {
 			const stations = await database.section.findMany({ orderBy: [{ displayOrder: "asc" }, { id: "asc" }], include: { boundSteps: true } });
+			applyLegacyStationHeaders(req, res);
 			res.setHeader("Cache-Control", "no-store").json({ data: stations.map((s) => ({ ...s, stationCode: s.sectionCode })) });
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS section configuration is unavailable.");
 		}
 	});
 
-	router.get("/stations/:stationId/history", requireCapability("execution.read"), async (req, res) => {
+	router.get(["/sections/:sectionId/history", "/stations/:stationId/history"], requireCapability("execution.read"), async (req, res) => {
 		try {
 			const station = await database.section.findUnique({
-				where: { id: req.params.stationId },
+				where: { id: req.params.sectionId ?? req.params.stationId },
 				select: {
 					id: true,
 					sectionCode: true,
@@ -515,8 +530,12 @@ export function domainReadRouter(
 			const lotCodes = new Map(lots.map((lot) => [lot.id, lot.lotCode]));
 			const partsById = new Map(parts.map((part) => [part.id, part]));
 
-			res.setHeader("Cache-Control", "no-store").json({
+			res.setHeader("Cache-Control", "no-store");
+			applyLegacyStationHeaders(req, res);
+			res.json({
 				station: { id: station.id, stationCode: station.sectionCode, name: station.name, stageId: station.stageId },
+				// Canonical alias for the renamed resource; `station` is the TRANSITIONAL shape (§7).
+				section: { id: station.id, sectionCode: station.sectionCode, name: station.name, stageId: station.stageId },
 				events: events.map((event) => ({
 					id: event.id,
 					occurredAt: event.occurredAt.toISOString(),
@@ -562,7 +581,7 @@ export function domainReadRouter(
 	 * - wipProgress: same positions (compat)
 	 * - staff / expectedOutput / targetQuantity: null until product owns sources
 	 */
-	router.get("/stations/:stationId/support", requireCapability("execution.read"), async (req, res) => {
+	router.get(["/sections/:sectionId/support", "/stations/:stationId/support"], requireCapability("execution.read"), async (req, res) => {
 		try {
 			const requestQuery = query(req);
 			const allowedKeys = new Set(["date"]);
@@ -577,7 +596,7 @@ export function domainReadRouter(
 			}
 
 			const station = await database.section.findUnique({
-				where: { id: req.params.stationId },
+				where: { id: req.params.sectionId ?? req.params.stationId },
 				select: {
 					id: true,
 					sectionCode: true,
@@ -741,9 +760,14 @@ export function domainReadRouter(
 			}
 			const lotPlans = [...lotPlanMap.values()];
 
-			res.setHeader("Cache-Control", "no-store").json({
+			res.setHeader("Cache-Control", "no-store");
+			applyLegacyStationHeaders(req, res);
+			res.json({
 				stationId: station.id,
 				stationCode: station.sectionCode,
+				// Canonical aliases for the renamed resource (§7).
+				sectionId: station.id,
+				sectionCode: station.sectionCode,
 				name: station.name,
 				asOf: new Date().toISOString(),
 				date: window.dateKey,
@@ -826,14 +850,16 @@ export function domainReadRouter(
 	router.get("/booths", requireCapability("execution.read"), async (req, res) => {
 		try {
 			const requestQuery = query(req);
-			const allowedKeys = new Set(["stationId"]);
+			// `station_id` is canonical snake_case (§5); `stationId` is the TRANSITIONAL alias (§7).
+			const allowedKeys = new Set(["station_id", "stationId"]);
 			if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
 				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The booth query is invalid.");
 				return;
 			}
-			const stationId = Array.isArray(requestQuery.stationId)
-				? requestQuery.stationId[0]
-				: requestQuery.stationId;
+			const stationIdRaw = requestQuery.station_id ?? requestQuery.stationId;
+			const stationId = Array.isArray(stationIdRaw)
+				? stationIdRaw[0]
+				: stationIdRaw;
 			const booths = await database.booth.findMany({
 				where: {
 					isEnabled: true,
