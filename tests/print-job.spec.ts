@@ -12,7 +12,7 @@ function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, u
 		get issued() {
 			return issued;
 		},
-		station: {
+		section: {
 			findUnique: async () => ({
 				id: "station-1",
 				name: "Injection",

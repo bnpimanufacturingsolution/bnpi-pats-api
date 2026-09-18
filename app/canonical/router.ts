@@ -743,10 +743,12 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			identityMiddleware ??
 			((_req: Request, res: Response) => identityUnavailable(_req, res));
 		const domainReadPrefixes = [
+			"/projects",
 			"/production-plans",
 			"/workflow-groups",
 			"/stages",
 			"/sub-stages",
+			"/sections",
 			"/stations",
 			"/station-steps",
 			"/work-instructions",
@@ -778,9 +780,11 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			identityMiddleware ??
 			((_req: Request, res: Response) => identityUnavailable(_req, res));
 		const domainCommandPrefixes = [
+			"/projects",
 			"/production-plans",
 			"/stages",
 			"/sub-stages",
+			"/sections",
 			"/stations",
 			"/station-steps",
 			"/work-instructions",

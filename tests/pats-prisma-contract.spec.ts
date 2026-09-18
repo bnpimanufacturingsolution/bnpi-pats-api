@@ -40,7 +40,7 @@ describe("PATS Prisma boundary", () => {
       "model Lot {",
       "model Batch {",
       "model BatchPartLine {",
-      "model Station {",
+	      "model Section {",
       "model StationStep {",
       "model SourceRun {",
       "model SourceArtifact {",

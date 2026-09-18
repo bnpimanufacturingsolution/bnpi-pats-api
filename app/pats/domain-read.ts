@@ -12,7 +12,7 @@ type DomainReadDatabase = Pick<
 	| "workflowGroup"
 	| "stage"
 	| "subStage"
-	| "station"
+	| "section"
 	| "stationStep"
 	| "workInstruction"
 	| "workProcess"
@@ -256,7 +256,7 @@ export function domainReadRouter(
 ): Router {
 	const router = Router();
 
-	router.get("/production-plans", requireCapability("planning.read"), async (req, res) => {
+	router.get(["/projects", "/production-plans"], requireCapability("planning.read"), async (req, res) => {
 		const page = pagination(req, res);
 		if (!page) return;
 		try {
@@ -281,29 +281,41 @@ export function domainReadRouter(
 					},
 				}),
 			]);
-			const data = plans.map((plan) => ({
-				planId: plan.id,
-				planCode: plan.projectCode,
-				name: plan.name,
-				status: plan.status,
-				requiredProductionQuantity: plan.requiredProductionQuantity,
-				productId: plan.productId,
-				productName: plan.product?.productName ?? null,
-				lotCount: plan.lots.length,
-				rowVersion: plan.rowVersion,
-				createdAt: plan.createdAt.toISOString(),
-				releasedAt: date(plan.releasedAt),
-			}));
+			const isProject = (req.baseUrl + req.path).includes("/projects");
+			const data = plans.map((plan) => {
+				const base = {
+					planId: plan.id,
+					planCode: plan.projectCode,
+					name: plan.name,
+					status: plan.status,
+					requiredProductionQuantity: plan.requiredProductionQuantity,
+					productId: plan.productId,
+					productName: plan.product?.productName ?? null,
+					lotCount: plan.lots.length,
+					rowVersion: plan.rowVersion,
+					createdAt: plan.createdAt.toISOString(),
+					releasedAt: date(plan.releasedAt),
+				};
+				if (isProject) {
+					return {
+						projectId: plan.id,
+						projectCode: plan.projectCode,
+						...base,
+					};
+				}
+				return base;
+			});
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(data, page, totalItems));
 		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production plan data is unavailable.");
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS project data is unavailable.");
 		}
 	});
 
-	router.get("/production-plans/:planId", requireCapability("planning.read"), async (req, res) => {
+	router.get(["/projects/:projectId", "/production-plans/:planId"], requireCapability("planning.read"), async (req, res) => {
+		const targetId = req.params.projectId ?? req.params.planId;
 		try {
 			const plan = await database.project.findUnique({
-				where: { id: req.params.planId },
+				where: { id: targetId },
 				include: {
 					product: { select: { id: true, productCode: true, productName: true } },
 					productSpecification: true,
@@ -323,14 +335,16 @@ export function domainReadRouter(
 				},
 			});
 			if (!plan) {
-				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested production plan was not found.");
+				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested project was not found.");
 				return;
 			}
 			// Mutable plan resources expose the optimistic-concurrency token as a strong ETag.
 			// Clients must send this value (or body.rowVersion) as If-Match on plan commands.
 			res.setHeader("ETag", `"${plan.rowVersion}"`);
 			res.setHeader("Cache-Control", "no-store").json({
+				projectId: plan.id,
 				planId: plan.id,
+				projectCode: plan.projectCode,
 				planCode: plan.projectCode,
 				name: plan.name,
 				status: plan.status,
@@ -446,22 +460,22 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get("/stations", requireCapability("execution.read"), async (req, res) => {
+	router.get("/sections", requireCapability("execution.read"), async (req, res) => {
 		try {
-			const stations = await database.station.findMany({ orderBy: [{ displayOrder: "asc" }, { id: "asc" }], include: { boundSteps: true } });
-			res.setHeader("Cache-Control", "no-store").json({ data: stations });
+			const stations = await database.section.findMany({ orderBy: [{ displayOrder: "asc" }, { id: "asc" }], include: { boundSteps: true } });
+			res.setHeader("Cache-Control", "no-store").json({ data: stations.map((s) => ({ ...s, stationCode: s.sectionCode })) });
 		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station configuration is unavailable.");
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS section configuration is unavailable.");
 		}
 	});
 
 	router.get("/stations/:stationId/history", requireCapability("execution.read"), async (req, res) => {
 		try {
-			const station = await database.station.findUnique({
+			const station = await database.section.findUnique({
 				where: { id: req.params.stationId },
 				select: {
 					id: true,
-					stationCode: true,
+					sectionCode: true,
 					name: true,
 					stageId: true,
 					boundSteps: { select: { stageId: true, subStageId: true } },
@@ -502,7 +516,7 @@ export function domainReadRouter(
 			const partsById = new Map(parts.map((part) => [part.id, part]));
 
 			res.setHeader("Cache-Control", "no-store").json({
-				station: { id: station.id, stationCode: station.stationCode, name: station.name, stageId: station.stageId },
+				station: { id: station.id, stationCode: station.sectionCode, name: station.name, stageId: station.stageId },
 				events: events.map((event) => ({
 					id: event.id,
 					occurredAt: event.occurredAt.toISOString(),
@@ -562,11 +576,11 @@ export function domainReadRouter(
 				return;
 			}
 
-			const station = await database.station.findUnique({
+			const station = await database.section.findUnique({
 				where: { id: req.params.stationId },
 				select: {
 					id: true,
-					stationCode: true,
+					sectionCode: true,
 					name: true,
 					stageId: true,
 					boundSteps: { select: { stageId: true, subStageId: true } },
@@ -729,7 +743,7 @@ export function domainReadRouter(
 
 			res.setHeader("Cache-Control", "no-store").json({
 				stationId: station.id,
-				stationCode: station.stationCode,
+				stationCode: station.sectionCode,
 				name: station.name,
 				asOf: new Date().toISOString(),
 				date: window.dateKey,
@@ -760,12 +774,16 @@ export function domainReadRouter(
 			const stationSteps = await database.stationStep.findMany({
 				orderBy: [{ stationId: "asc" }, { stageId: "asc" }, { id: "asc" }],
 				include: {
-					station: { select: { id: true, stationCode: true, name: true } },
+					station: { select: { id: true, sectionCode: true, name: true } },
 					stage: { select: { id: true, name: true } },
 					subStage: { select: { id: true, name: true } },
 				},
 			});
-			res.setHeader("Cache-Control", "no-store").json({ data: stationSteps });
+			const stationStepsResponse = stationSteps.map((step) => ({
+				...step,
+				station: { id: step.station.id, stationCode: step.station.sectionCode, name: step.station.name },
+			}));
+			res.setHeader("Cache-Control", "no-store").json({ data: stationStepsResponse });
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station-step configuration is unavailable.");
 		}
@@ -797,7 +815,6 @@ export function domainReadRouter(
 					subStageName: process.subStage.name,
 					name: process.name,
 					displayOrder: process.displayOrder,
-					labelledCycleTimeSec: process.labelledCycleTimeSec,
 					isEnabled: process.isEnabled,
 				})),
 			});

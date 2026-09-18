@@ -28,7 +28,7 @@ export type PrintJobRecord = {
 };
 
 export type PrintJobStore = {
-	station: {
+	section: {
 		findUnique: (args: { where: { id: string } }) => Promise<PrintJobStation | null>;
 	};
 	batch: {
@@ -228,7 +228,7 @@ export async function recordPrintJob(
 	input: PrintJobCreateInput & { actor: string; actorSubjectId: string },
 	port?: PrintPort,
 ): Promise<PrintJobRecord> {
-	const station = await store.station.findUnique({ where: { id: input.stationId } });
+	const station = await store.section.findUnique({ where: { id: input.stationId } });
 	if (!station) throw new Error("NOT_FOUND_STATION");
 	const batch = await store.batch.findUnique({
 		where: { id: input.batchId },
