@@ -840,4 +840,103 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.data).to.have.length(1);
 		expect(response.body.data[0]).to.deep.include({ id: "station-1", name: "Station 1", sectionCode: "ST-01" });
 	});
+
+	it("filters sections by search across name and code", async () => {
+		let receivedWhere: Record<string, unknown> | undefined;
+		const app = appFor(
+			{
+				section: {
+					findMany: async (args: Record<string, unknown>) => {
+						receivedWhere = args.where as Record<string, unknown>;
+						return [];
+					},
+				},
+			},
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/sections")
+			.query({ search: "deco" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedWhere).to.deep.equal({
+			OR: [
+				{ name: { contains: "deco", mode: "insensitive" } },
+				{ sectionCode: { contains: "deco", mode: "insensitive" } },
+			],
+		});
+	});
+
+	it("lists work processes with section links and filters them by search", async () => {
+		let receivedWhere: Record<string, unknown> | undefined;
+		const app = appFor(
+			{
+				workProcess: {
+					findMany: async (args: Record<string, unknown>) => {
+						receivedWhere = args.where as Record<string, unknown>;
+						return [{
+							id: "proc-1",
+							subStageId: "sub-1",
+							name: "Manual Spray",
+							displayOrder: 1,
+							isEnabled: true,
+							sectionId: "section-1",
+							parentProcessId: null,
+							subStage: { id: "sub-1", name: "Full Spray" },
+						}];
+					},
+				},
+			},
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/work-processes")
+			.query({ search: "spray" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedWhere).to.deep.equal({
+			isEnabled: true,
+			OR: [
+				{ name: { contains: "spray", mode: "insensitive" } },
+				{ subStage: { name: { contains: "spray", mode: "insensitive" } } },
+			],
+		});
+		expect(response.body.data).to.deep.equal([{
+			id: "proc-1",
+			subStageId: "sub-1",
+			subStageName: "Full Spray",
+			name: "Manual Spray",
+			displayOrder: 1,
+			isEnabled: true,
+			sectionId: "section-1",
+			parentProcessId: null,
+		}]);
+	});
+
+	it("rejects unknown work-process query keys", async () => {
+		let called = false;
+		const app = appFor(
+			{
+				workProcess: {
+					findMany: async () => {
+						called = true;
+						return [];
+					},
+				},
+			},
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/work-processes")
+			.query({ bogus: "1" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(400);
+		expect(called).to.equal(false);
+	});
 });

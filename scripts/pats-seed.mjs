@@ -751,19 +751,33 @@ async function seedProfile(tx) {
 	// Leaf under the Injection stage so the monitoring desk resolves a non-null
 	// subStageId work-process and its daily sheet stops failing closed.
 	const subInjectionMoldingId = stableId("substage-injection-molding");
-	// Device install default (D-008): one Station per SubStage when present; stage-level otherwise.
-	// Keep legacy keys for injection/decoration-primary so existing station ids stay stable.
+	// Line-setup tree reshape (2026-09-19): one Section per Stage — the board's
+	// Section → Process → Sub-process parents. The per-SubStage desk rows are
+	// retired (see retiredDeskSectionIds below); four stable keys are reused
+	// as the parents so every existing section reference keeps resolving.
 	const injectionSectionId = stableId("station-injection-01");
-	const decorationSectionId = stableId("station-decoration-full-spray"); // primary deco PC (was decoration-01)
+	const decorationSectionId = stableId("station-decoration-full-spray"); // now the Decoration parent
+	const assemblySubAssemblySectionId = stableId("station-assembly-sub-assembly"); // now the Assembly parent
+	const warehouseSectionId = stableId("station-warehouse-main-packing"); // now the Warehouse parent
+	// Retired per-SubStage desk keys: rows are disabled on reseed (additive
+	// hardening) and wiped on fresh reseed. Kept as constants so the
+	// disable-list stays explicit.
 	const decorationLineSectionId = stableId("station-decoration-line-spray");
 	const decorationTampoSectionId = stableId("station-decoration-tampo");
 	const decorationMimakiSectionId = stableId("station-decoration-mimaki");
 	const assemblyStagingSectionId = stableId("station-assembly-staging");
-	const assemblySubAssemblySectionId = stableId("station-assembly-sub-assembly");
 	const assemblyMainAssemblySectionId = stableId("station-assembly-main-assembly");
 	const assemblyCapsulationSectionId = stableId("station-assembly-capsulation");
 	const assemblyAssortmentSectionId = stableId("station-assembly-assortment");
-	const warehouseSectionId = stableId("station-warehouse-main-packing");
+	const retiredDeskSectionIds = [
+		decorationLineSectionId,
+		decorationTampoSectionId,
+		decorationMimakiSectionId,
+		assemblyStagingSectionId,
+		assemblyMainAssemblySectionId,
+		assemblyCapsulationSectionId,
+		assemblyAssortmentSectionId,
+	];
 
 	await tx.workflowGroup.upsert({
 		where: { id: workflowId },
@@ -935,17 +949,10 @@ async function seedProfile(tx) {
 	}
 
 	for (const [id, name, sectionCode, stageId, displayOrder] of [
-		[injectionSectionId, "Injection · Molding", "ST-INJ-01", injectionStageId, 1],
-		[decorationSectionId, "Decoration · Full Spray", "ST-DEC-FS", decorationStageId, 2],
-		[decorationLineSectionId, "Decoration · Line Spray (Mask)", "ST-DEC-LS", decorationStageId, 3],
-		[decorationTampoSectionId, "Decoration · Tampo", "ST-DEC-TP", decorationStageId, 4],
-		[decorationMimakiSectionId, "Decoration · Mimaki", "ST-DEC-MK", decorationStageId, 5],
-		[assemblyStagingSectionId, "Assembly · Staging", "ST-ASM-STG", assemblyStageId, 6],
-		[assemblySubAssemblySectionId, "Assembly · Sub Assembly", "ST-ASM-SUB", assemblyStageId, 7],
-		[assemblyMainAssemblySectionId, "Assembly · Main Assembly", "ST-ASM-MAIN", assemblyStageId, 8],
-		[assemblyCapsulationSectionId, "Assembly · Capsulation", "ST-ASM-CAP", assemblyStageId, 9],
-		[assemblyAssortmentSectionId, "Assembly · Assortment", "ST-ASM-AST", assemblyStageId, 10],
-		[warehouseSectionId, "Warehouse · Main Packing", "ST-WH-PK", warehouseStageId, 11],
+		[injectionSectionId, "Injection", "SEC-INJ", injectionStageId, 1],
+		[decorationSectionId, "Decoration", "SEC-DEC", decorationStageId, 2],
+		[assemblySubAssemblySectionId, "Assembly", "SEC-ASM", assemblyStageId, 3],
+		[warehouseSectionId, "Warehouse", "SEC-WH", warehouseStageId, 4],
 	]) {
 		await tx.section.upsert({
 			where: { id },
@@ -978,14 +985,14 @@ async function seedProfile(tx) {
 		[stableId("station-step-inj"), injectionSectionId, injectionStageId, null],
 		[stableId("station-step-inj-mold"), injectionSectionId, injectionStageId, subInjectionMoldingId],
 		[stableId("station-step-dec-fs"), decorationSectionId, decorationStageId, subFullSprayId],
-		[stableId("station-step-dec-ls"), decorationLineSectionId, decorationStageId, subLineSprayId],
-		[stableId("station-step-dec-tp"), decorationTampoSectionId, decorationStageId, subTampoId],
-		[stableId("station-step-dec-mk"), decorationMimakiSectionId, decorationStageId, subMimakiId],
-		[stableId("station-step-asm-stg"), assemblyStagingSectionId, assemblyStageId, subAssemblyStagingId],
+		[stableId("station-step-dec-ls"), decorationSectionId, decorationStageId, subLineSprayId],
+		[stableId("station-step-dec-tp"), decorationSectionId, decorationStageId, subTampoId],
+		[stableId("station-step-dec-mk"), decorationSectionId, decorationStageId, subMimakiId],
+		[stableId("station-step-asm-stg"), assemblySubAssemblySectionId, assemblyStageId, subAssemblyStagingId],
 		[stableId("station-step-subassy"), assemblySubAssemblySectionId, assemblyStageId, subSubAssemblyId],
-		[stableId("station-step-asm-main"), assemblyMainAssemblySectionId, assemblyStageId, subMainAssemblyId],
-		[stableId("station-step-asm-cap"), assemblyCapsulationSectionId, assemblyStageId, subCapsulationId],
-		[stableId("station-step-assort"), assemblyAssortmentSectionId, assemblyStageId, subAssortmentId],
+		[stableId("station-step-asm-main"), assemblySubAssemblySectionId, assemblyStageId, subMainAssemblyId],
+		[stableId("station-step-asm-cap"), assemblySubAssemblySectionId, assemblyStageId, subCapsulationId],
+		[stableId("station-step-assort"), assemblySubAssemblySectionId, assemblyStageId, subAssortmentId],
 		[stableId("station-step-wh"), warehouseSectionId, warehouseStageId, subMainPackingId],
 	]) {
 		await tx.stationStep.upsert({
@@ -1013,6 +1020,20 @@ async function seedProfile(tx) {
 	const processAsmAstId = stableId("work-process-asm-ast");
 	const processMainPackingId = stableId("work-process-main-packing");
 
+	// Board tree links: each process belongs to its stage's parent section.
+	const processSectionBySubStage = {
+		[subInjectionMoldingId]: injectionSectionId,
+		[subFullSprayId]: decorationSectionId,
+		[subLineSprayId]: decorationSectionId,
+		[subTampoId]: decorationSectionId,
+		[subMimakiId]: decorationSectionId,
+		[subAssemblyStagingId]: assemblySubAssemblySectionId,
+		[subSubAssemblyId]: assemblySubAssemblySectionId,
+		[subMainAssemblyId]: assemblySubAssemblySectionId,
+		[subCapsulationId]: assemblySubAssemblySectionId,
+		[subAssortmentId]: assemblySubAssemblySectionId,
+		[subMainPackingId]: warehouseSectionId,
+	};
 	for (const [id, subStageId, name, displayOrder] of [
 		[processInjMachineOpId, subInjectionMoldingId, "Machine Operator", 1, 14],
 		[processInjGateCutId, subInjectionMoldingId, "Gate Cutting", 2, null],
@@ -1031,12 +1052,14 @@ async function seedProfile(tx) {
 		[processAsmAstId, subAssortmentId, "Assortment Task", 1, null],
 		[processMainPackingId, subMainPackingId, "Main Packing", 1, null],
 	]) {
+		const sectionId = processSectionBySubStage[subStageId] ?? null;
 		await tx.workProcess.upsert({
 			where: { id },
 			update: {
 				subStageId,
 				name,
 				displayOrder,
+				sectionId,
 				isEnabled: true,
 				isSystemSeed: true,
 			},
@@ -1045,6 +1068,7 @@ async function seedProfile(tx) {
 				subStageId,
 				name,
 				displayOrder,
+				sectionId,
 				isEnabled: true,
 				isSystemSeed: true,
 			},
@@ -1090,6 +1114,12 @@ async function seedProfile(tx) {
 	});
 	await tx.section.updateMany({
 		where: { id: retiredQualityCheckSectionId },
+		data: { isEnabled: false },
+	});
+	// Tree reshape: the retired per-SubStage desks stay queryable by id for
+	// audit history but leave the board (fresh reseed wipes them outright).
+	await tx.section.updateMany({
+		where: { id: { in: retiredDeskSectionIds } },
 		data: { isEnabled: false },
 	});
 
@@ -2112,7 +2142,7 @@ async function seedProfile(tx) {
 	};
 	const deskMaskSprayPayload = {
 		...sheetMaskPayload,
-		id: `desk-daily:${decorationLineSectionId}:${processLsMaskId}:${monDate}`,
+		id: `desk-daily:${decorationSectionId}:${processLsMaskId}:${monDate}`,
 	};
 
 	for (const payload of [
