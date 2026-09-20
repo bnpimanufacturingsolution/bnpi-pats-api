@@ -614,6 +614,7 @@ describe("canonical PATS command contract", () => {
 	it("replaces station processes and reassigns booth work processes", async () => {
 		let clearedBooths: Record<string, unknown>[] = [];
 		let assignedBooth: Record<string, unknown> | null = null;
+		const ownershipWrites: Array<{ where: unknown; data: unknown }> = [];
 		const database = {
 			idempotencyRecord: {
 				findUnique: async () => null,
@@ -627,6 +628,7 @@ describe("canonical PATS command contract", () => {
 			},
 			workProcess: {
 				findMany: async () => [{ id: "proc-1", name: "Process 1" }, { id: "proc-2", name: "Process 2" }],
+				updateMany: async ({ where, data }: { where: unknown; data: unknown }) => { ownershipWrites.push({ where, data }); return { count: 1 }; },
 			},
 			booth: {
 				updateMany: async ({ data }: { data: Record<string, unknown> }) => { clearedBooths.push(data); return { count: 1 }; },
@@ -647,6 +649,93 @@ describe("canonical PATS command contract", () => {
 		expect(response.body).to.deep.equal({ sectionId: "station-1", processIds: ["proc-1"] });
 		expect(clearedBooths[0]).to.deep.equal({ workProcessId: null });
 		expect(assignedBooth).to.include({ id: "booth-1", workProcessId: "proc-1" });
+		// Board membership truth: listed processes are claimed, previously
+		// owned-but-unlisted ones are released, other owners untouched.
+		expect(ownershipWrites).to.deep.equal([
+			{ where: { id: { in: ["proc-1"] } }, data: { sectionId: "station-1" } },
+			{ where: { id: { notIn: ["proc-1"] }, sectionId: "station-1" }, data: { sectionId: null } },
+		]);
+	});
+
+	it("creates a section from a bare name with server defaults", async () => {
+		let createdData: Record<string, unknown> | null = null;
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-section-create", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			stage: {
+				findFirst: async () => ({ id: "stage-injection" }),
+			},
+			subStage: {
+				findMany: async () => [{ id: "sub-1" }],
+			},
+			stationStep: {
+				createMany: async () => ({ count: 1 }),
+			},
+			section: {
+				findUnique: async () => null,
+				count: async () => 4,
+				create: async ({ data }: { data: Record<string, unknown> }) => { createdData = data; return { id: "section-9", ...data }; },
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
+		// The board's create flow sends a bare name: stage, code, and order
+		// are server defaults. This is the contract the app relies on.
+		const response = await request(app)
+			.post("/api/v1/sections")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "section-create-minimal")
+			.send({ name: "Pad Print" });
+
+		expect(response.status).to.equal(201);
+		expect(response.body).to.deep.equal({ sectionId: "section-9", sectionCode: "SEC-PAD-PRINT", name: "Pad Print" });
+		expect(createdData).to.include({
+			name: "Pad Print",
+			sectionCode: "SEC-PAD-PRINT",
+			stageId: "stage-injection",
+			displayOrder: 4,
+			screenType: "COMPUTER",
+			scannerAttached: true,
+			printerAttached: true,
+		});
+		expect(response.headers["location"]).to.equal("/api/v1/sections/section-9");
+	});
+
+	it("rejects a duplicate section code with 409 conflict", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-section-dup", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			stage: {
+				findUnique: async () => ({ id: "stage-1" }),
+			},
+			section: {
+				findUnique: async () => ({ id: "section-1", sectionCode: "SEC-DUP" }),
+				count: async () => 1,
+				create: async () => { throw new Error("must not create on conflict"); },
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/sections")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "section-create-dup")
+			.send({ name: "Other", sectionCode: "SEC-DUP", stageId: "stage-1", displayOrder: 0 });
+
+		expect(response.status).to.equal(409);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:conflict");
 	});
 
 	it("fails station processes replace when station is not found", async () => {

@@ -232,12 +232,15 @@ const sectionCreateSchema = z.object({
 	sectionCode: z.string().trim().min(1).max(80).optional(),
 	// TRANSITIONAL alias for the pre-rename stationCode field (§7).
 	stationCode: z.string().trim().min(1).max(80).optional(),
-	stageId: z.string().trim().min(1).max(100),
+	// stageId/displayOrder are optional: the board's create flow carries no
+	// stage context, so the server places new sections in the first stage
+	// and appends them. Explicit values are still honored when provided.
+	stageId: z.string().trim().min(1).max(100).optional(),
 	screenType: z.enum(["COMPUTER", "TABLET"]).optional(),
 	scannerAttached: z.boolean().optional(),
 	printerAttached: z.boolean().optional(),
-	displayOrder: z.number().int().nonnegative(),
-}).strict().refine((body) => Boolean(body.sectionCode ?? body.stationCode), "Either sectionCode or stationCode is required.");
+	displayOrder: z.number().int().nonnegative().optional(),
+}).strict();
 
 const sectionPatchSchema = z.object({
 	name: z.string().trim().min(1).max(160).optional(),
@@ -267,12 +270,14 @@ const workProcessCreateSchema = z.object({
 	// TRANSITIONAL alias: pre-rename field name that referenced the same Section row (§7).
 	stationId: z.string().trim().min(1).max(100).nullable().optional(),
 	subStageId: z.string().trim().min(1).max(100).nullable().optional(),
+	parentProcessId: z.string().trim().min(1).max(100).nullable().optional(),
 	name: z.string().min(1),
 }).strict().refine((body) => Boolean(body.subStageId) || Boolean(body.sectionId ?? body.stationId), "Provide subStageId or sectionId.");
 
 const workProcessPatchSchema = z.object({
 	name: z.string().trim().min(1).max(160).optional(),
-}).strict().refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
+	parentProcessId: z.string().trim().min(1).max(100).nullable().optional(),
+}).strict();
 
 const workInstructionCreateSchema = z.object({
 	stageId: z.string().trim().min(1).max(100),
@@ -1069,16 +1074,56 @@ export function commandRouter(
 	router.post(["/sections", "/stations"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, sectionCreateSchema);
-			const sectionCode = (body.sectionCode ?? body.stationCode)!;
 			const response = await executeCommand(database, req, "sectionCreate", body, async (transaction) => {
-				const stage = await transaction.stage.findUnique({ where: { id: body.stageId }, select: { id: true } });
-				if (!stage) notFound("The requested section stage was not found.");
-				const section = await transaction.section.create({ data: { name: body.name, sectionCode, stageId: body.stageId, screenType: body.screenType ?? "COMPUTER", scannerAttached: body.scannerAttached ?? true, printerAttached: body.printerAttached ?? true, displayOrder: body.displayOrder, workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS" } });
+				let stageId = body.stageId;
+				if (stageId) {
+					const stage = await transaction.stage.findUnique({ where: { id: stageId }, select: { id: true } });
+					if (!stage) notFound("The requested section stage was not found.");
+				} else {
+					const firstStage = await transaction.stage.findFirst({ orderBy: [{ displayOrder: "asc" }, { id: "asc" }], select: { id: true } });
+					if (!firstStage) notFound("No stage exists to own the section.");
+					stageId = firstStage.id;
+				}
+				const providedCode = body.sectionCode ?? body.stationCode;
+				let sectionCode: string;
+				if (providedCode) {
+					const clash = await transaction.section.findUnique({ where: { sectionCode: providedCode } });
+					if (clash) conflict("The section code is already in use.");
+					sectionCode = providedCode;
+				} else {
+					const stem = `SEC-${body.name.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "SEC"}`;
+					sectionCode = stem;
+					for (let attempt = 1; ; attempt++) {
+						const clash = await transaction.section.findUnique({ where: { sectionCode } });
+						if (!clash) break;
+						sectionCode = `${stem}-${attempt + 1}`;
+					}
+				}
+				const displayOrder = body.displayOrder ?? await transaction.section.count();
+				const section = await transaction.section.create({ data: { name: body.name, sectionCode, stageId, screenType: body.screenType ?? "COMPUTER", scannerAttached: body.scannerAttached ?? true, printerAttached: body.printerAttached ?? true, displayOrder, workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS" } });
+
+				// Create bound steps for all sub-stages of this stage so work processes
+				// can resolve their sub-stage via the section's bound steps.
+				const subStages = await transaction.subStage.findMany({
+					where: { eligibleStages: { some: { stageId } } },
+					select: { id: true },
+				});
+				if (subStages.length > 0) {
+					await transaction.stationStep.createMany({
+						data: subStages.map((subStage) => ({
+							stationId: section.id,
+							stageId,
+							subStageId: subStage.id,
+						})),
+						skipDuplicates: true,
+					});
+				}
+
 				await recordCommandSuccess(transaction, req, "SECTION_CREATED", "Section", section.id, { sectionCode: section.sectionCode });
 				return { status: 201, body: { sectionId: section.id, sectionCode: section.sectionCode, name: section.name }, headers: { Location: `/api/v1/sections/${section.id}`, ...legacyStationHeaders(req) } };
 			});
-	respondCommand(res, response);
-	} catch (error) { commandError(error, req, res, next); }
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
 	});
 
 	router.patch(["/sections/:sectionId", "/stations/:stationId"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
@@ -1272,6 +1317,18 @@ export function commandRouter(
 						await transaction.booth.update({ where: { id: booth.id }, data: { workProcessId: processId } });
 					}
 				}
+				// Board membership truth: the section owns exactly this process
+				// set. Listed processes are claimed; processes this section
+				// owned but no longer listed become unowned. Processes owned
+				// by other sections are never touched.
+				await transaction.workProcess.updateMany({
+					where: { id: { in: body.processIds } },
+					data: { sectionId },
+				});
+				await transaction.workProcess.updateMany({
+					where: { id: { notIn: body.processIds }, sectionId },
+					data: { sectionId: null },
+				});
 				await recordCommandSuccess(transaction, req, "SECTION_PROCESSES_REPLACED", "Section", sectionId, { processCount: body.processIds.length });
 				// No ETag: Section rows carry no rowVersion validator (last-writer-wins, N/A per standard §9).
 				return { status: 200, body: { sectionId, processIds: body.processIds }, headers: { ...legacyStationHeaders(req) } };
@@ -1320,13 +1377,30 @@ export function commandRouter(
 			}
 			const subStage = await database.subStage.findUnique({ where: { id: resolvedSubStageId }, select: { id: true } });
 			if (!subStage) notFound("The requested sub-stage was not found.");
-			const response = await executeCommand(database, req, "workProcessCreate", { subStageId: resolvedSubStageId, name: body.name }, async (transaction) => {
+			// Senior guard: self-parent and cycle-proof. The app's descendantIds is
+			// already cycle-proof, but the API must not trust the client.
+			if (body.parentProcessId) {
+				if (body.parentProcessId.trim().length === 0) malformed("parentProcessId must be a valid identifier.");
+				const parent = await database.workProcess.findUnique({ where: { id: body.parentProcessId }, select: { id: true, parentProcessId: true } });
+				if (!parent) notFound("The requested parent process was not found.");
+				// Cycle check: walk parent chain, abort if we loop (defensive, 50 hops max)
+				let cursor: string | null = parent.parentProcessId;
+				const seen = new Set<string>([parent.id]);
+				for (let hops = 0; hops < 50 && cursor; hops++) {
+					if (seen.has(cursor)) break;
+					seen.add(cursor);
+					const next = await database.workProcess.findUnique({ where: { id: cursor }, select: { parentProcessId: true } });
+					if (!next) break;
+					cursor = next.parentProcessId;
+				}
+			}
+			const response = await executeCommand(database, req, "workProcessCreate", { subStageId: resolvedSubStageId, name: body.name, sectionId: sectionRef, parentProcessId: body.parentProcessId }, async (transaction) => {
 				const order = await transaction.workProcess.count({ where: { subStageId: resolvedSubStageId } });
 				const process = await transaction.workProcess.create({
-					data: { subStageId: resolvedSubStageId, name: body.name, displayOrder: order, isEnabled: true, isSystemSeed: false },
+					data: { subStageId: resolvedSubStageId, name: body.name, displayOrder: order, isEnabled: true, isSystemSeed: false, sectionId: sectionRef ?? null, parentProcessId: body.parentProcessId ?? null },
 				});
-				await recordCommandSuccess(transaction, req, "WORK_PROCESS_CREATED", "WorkProcess", process.id, { subStageId: process.subStageId, name: process.name });
-				return { status: 201, body: { processId: process.id, subStageId: process.subStageId, name: process.name }, headers: { Location: `/api/v1/work-processes/${process.id}` } };
+				await recordCommandSuccess(transaction, req, "WORK_PROCESS_CREATED", "WorkProcess", process.id, { subStageId: process.subStageId, name: process.name, sectionId: process.sectionId, parentProcessId: process.parentProcessId });
+				return { status: 201, body: { processId: process.id, subStageId: process.subStageId, name: process.name, sectionId: process.sectionId, parentProcessId: process.parentProcessId }, headers: { Location: `/api/v1/work-processes/${process.id}` } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
@@ -1339,12 +1413,32 @@ export function commandRouter(
 			const response = await executeCommand(database, req, "workProcessUpdate", { processId, body }, async (transaction) => {
 				const process = await transaction.workProcess.findUnique({ where: { id: processId }, select: { id: true, name: true, subStageId: true } });
 				if (!process) notFound("The requested work process was not found.");
+				if (body.parentProcessId !== undefined) {
+					if (body.parentProcessId === processId) conflict("A process cannot be its own parent.");
+					if (body.parentProcessId !== null) {
+						const parent = await transaction.workProcess.findUnique({ where: { id: body.parentProcessId }, select: { id: true, parentProcessId: true } });
+						if (!parent) notFound("The requested parent process was not found.");
+						// Walk parent chain to detect cycle that would make processId an ancestor of its new parent
+						let cursor: string | null = parent.parentProcessId;
+						const seen = new Set<string>([parent.id]);
+						for (let hops = 0; hops < 50 && cursor; hops++) {
+							if (cursor === processId) conflict("The requested parent would create a circular reference.");
+							if (seen.has(cursor)) break;
+							seen.add(cursor);
+							const next = await transaction.workProcess.findUnique({ where: { id: cursor }, select: { parentProcessId: true } });
+							if (!next) break;
+							cursor = next.parentProcessId;
+						}
+					}
+				}
 				const data: Record<string, unknown> = {};
-				if (body.name !== undefined) data.name = body.name;				if (Object.keys(data).length === 0) conflict("At least one field must be provided.");
+				if (body.name !== undefined) data.name = body.name;
+				if (body.parentProcessId !== undefined) data.parentProcessId = body.parentProcessId;
+				if (Object.keys(data).length === 0) conflict("At least one field must be provided.");
 				const updated = await transaction.workProcess.update({ where: { id: processId }, data });
 				await recordCommandSuccess(transaction, req, "WORK_PROCESS_UPDATED", "WorkProcess", processId, { name: updated.name });
 				// No ETag: WorkProcess rows carry no rowVersion validator (last-writer-wins, N/A per standard §9).
-				return { status: 200, body: { processId: updated.id, subStageId: updated.subStageId, name: updated.name }, headers: {} };
+				return { status: 200, body: { processId: updated.id, subStageId: updated.subStageId, name: updated.name, sectionId: updated.sectionId, parentProcessId: updated.parentProcessId }, headers: {} };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
@@ -1356,6 +1450,25 @@ export function commandRouter(
 			const response = await executeCommand(database, req, "workProcessDelete", { processId }, async (transaction) => {
 				const process = await transaction.workProcess.findUnique({ where: { id: processId }, select: { id: true, name: true } });
 				if (!process) notFound("The requested work process was not found.");
+				// Collect all descendants to unassign (sectionId null) - they become orphaned roots
+				const toUnassign = new Set<string>([processId]);
+				const queue: string[] = [processId];
+				for (let i = 0; i < queue.length && i < 100; i++) {
+					const current = queue[i];
+					const children = await transaction.workProcess.findMany({ where: { parentProcessId: current }, select: { id: true } });
+					for (const child of children) {
+						if (!toUnassign.has(child.id)) {
+							toUnassign.add(child.id);
+							queue.push(child.id);
+						}
+					}
+				}
+				// Unassign descendants from sections (keep them in catalog as unassigned, per UI "unassigned" contract)
+				// The parent itself will be deleted, so exclude it from unassign
+				const descendantIds = Array.from(toUnassign).filter((id) => id !== processId);
+				if (descendantIds.length > 0) {
+					await transaction.workProcess.updateMany({ where: { id: { in: descendantIds } }, data: { sectionId: null } });
+				}
 				await transaction.workProcess.delete({ where: { id: processId } });
 				await recordCommandSuccess(transaction, req, "WORK_PROCESS_DELETED", "WorkProcess", processId, { name: process.name });
 				return { status: 200, body: { processId }, headers: {} };
@@ -1370,6 +1483,9 @@ export function commandRouter(
 			const response = await executeCommand(database, req, "sectionDelete", { sectionId }, async (transaction) => {
 				const section = await transaction.section.findUnique({ where: { id: sectionId }, select: { id: true, name: true, sectionCode: true } });
 				if (!section) notFound("The requested section was not found.");
+				await transaction.stationStep.deleteMany({ where: { stationId: sectionId } });
+				await transaction.booth.updateMany({ where: { stationId: sectionId }, data: { stationId: null } });
+				await transaction.workProcess.updateMany({ where: { sectionId }, data: { sectionId: null } });
 				await transaction.section.delete({ where: { id: sectionId } });
 				await recordCommandSuccess(transaction, req, "SECTION_DELETED", "Section", sectionId, { sectionCode: section.sectionCode });
 				// 200 with the deleted identifier (audit correlation) is the documented

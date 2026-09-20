@@ -34,14 +34,16 @@ function appFor(database: Record<string, unknown>) {
 	return app;
 }
 
-describe("section transitional aliases (Station rename bridge, standard section 7)", () => {
-	it("POST /stations accepts stationCode and emits Deprecation+Sunset with canonical Location", async () => {
+	describe("section transitional aliases (Station rename bridge, standard section 7)", () => {
+it("POST /stations accepts stationCode and emits Deprecation+Sunset with canonical Location", async () => {
 		const section = { id: "s-1", sectionCode: "SEC-1", name: "S1" };
 		const database = new Proxy(new PrismaClient(), {
 			get(_t, property) {
 				switch (property) {
 					case "stage": return { findUnique: async () => ({ id: "stage-1" }) };
-					case "section": return { create: async () => section };
+					case "section": return { findUnique: async () => null, create: async () => section };
+					case "subStage": return { findMany: async () => [{ id: "sub-1" }] };
+					case "stationStep": return { createMany: async () => ({ count: 1 }) };
 					case "idempotencyRecord": return { findUnique: async () => null, create: async () => ({ id: "i" }), update: async () => ({}) };
 					case "$transaction": return async (work: (tx: CommandTransaction) => Promise<unknown>) => work(database);
 					case "auditRecord": return { create: async () => ({}) };
@@ -68,7 +70,9 @@ describe("section transitional aliases (Station rename bridge, standard section 
 			get(_t, property) {
 				switch (property) {
 					case "stage": return { findUnique: async () => ({ id: "stage-1" }) };
-					case "section": return { create: async () => section };
+					case "section": return { findUnique: async () => null, create: async () => section };
+					case "subStage": return { findMany: async () => [{ id: "sub-1" }] };
+					case "stationStep": return { createMany: async () => ({ count: 1 }) };
 					case "idempotencyRecord": return { findUnique: async () => null, create: async () => ({ id: "i" }), update: async () => ({}) };
 					case "$transaction": return async (work: (tx: CommandTransaction) => Promise<unknown>) => work(database);
 					case "auditRecord": return { create: async () => ({}) };
