@@ -828,7 +828,7 @@ describe("canonical PATS domain read contract", () => {
 
 	it("returns a station directory from server persistence", async () => {
 		const app = appFor(
-			{ section: { findMany: async () => [{ id: "station-1", name: "Station 1", stageId: "stage-1", displayOrder: 0, sectionCode: "ST-01" }] } },
+			{ section: { findMany: async () => [{ id: "station-1", name: "Station 1", stageId: "stage-1", displayOrder: 0, sectionCode: "ST-01" }], count: async () => 1 } },
 			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
 		);
 
