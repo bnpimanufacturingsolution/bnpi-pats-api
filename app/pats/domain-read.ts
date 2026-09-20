@@ -1,5 +1,5 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
-import type { PrismaClient as PatsPrismaClient } from "../../generated/pats-client";
+import { Prisma, type PrismaClient as PatsPrismaClient } from "../../generated/pats-client";
 import { buildOffsetPage, parseOffsetPagination } from "../canonical/collection";
 import { actorId, CommandProblem, sendCommandProblem } from "./command-support";
 import { parseBatchResolveCode, resolveBatchByCode } from "./batch-resolve";
@@ -22,6 +22,7 @@ function applyLegacyStationHeaders(req: Request, res: Response): void {
 
 type DomainReadDatabase = Pick<
 	PatsPrismaClient,
+	| "$queryRaw"
 	| "project"
 	| "workflowGroup"
 	| "stage"
@@ -46,6 +47,7 @@ type DomainReadDatabase = Pick<
 	| "planDemandAllocation"
 	| "lot"
 	| "part"
+	| "section"
 >;
 
 const PROBLEM_TYPE = {
@@ -479,18 +481,28 @@ export function domainReadRouter(
 			const requestQuery = query(req);
 			const searchRaw = requestQuery.search;
 			const searchText = (Array.isArray(searchRaw) ? searchRaw[0] : searchRaw)?.toString().trim() ?? "";
-			const stations = await database.section.findMany({
-				where: searchText
-					? {
-							OR: [
-								{ name: { contains: searchText, mode: "insensitive" as const } },
-								{ sectionCode: { contains: searchText, mode: "insensitive" as const } },
-							],
-						}
-					: undefined,
-				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
-				include: { boundSteps: true },
-			});
+			let stations;
+			if (searchText.length >= 3) {
+				stations = await database.$queryRaw<{ id: string; sectionCode: string; name: string; displayOrder: number; isEnabled: boolean; parentSectionId: string | null; stageId: string | null }[]>(Prisma.sql`
+					SELECT s."id", s."sectionCode", s."name", s."displayOrder", s."isEnabled", s."parentSectionId", s."stageId"
+					FROM "Section" s
+					WHERE s."name" % ${searchText} OR s."sectionCode" % ${searchText}
+					ORDER BY s."name" <-> ${searchText}, s."displayOrder" ASC, s."id" ASC
+				`);
+			} else {
+				stations = await database.section.findMany({
+					where: searchText
+						? {
+								OR: [
+									{ name: { contains: searchText, mode: "insensitive" as const } },
+									{ sectionCode: { contains: searchText, mode: "insensitive" as const } },
+								],
+						  }
+						: undefined,
+					orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+					include: { boundSteps: true },
+				});
+			}
 			applyLegacyStationHeaders(req, res);
 			res.setHeader("Cache-Control", "no-store").json({ data: stations.map((s) => ({ ...s, stationCode: s.sectionCode })) });
 		} catch {
@@ -840,27 +852,40 @@ export function domainReadRouter(
 				: requestQuery.subStageId;
 			const searchRaw = requestQuery.search;
 			const searchText = (Array.isArray(searchRaw) ? searchRaw[0] : searchRaw)?.toString().trim() ?? "";
-			const processes = await database.workProcess.findMany({
-				where: {
-					isEnabled: true,
-					...(subStageId ? { subStageId } : {}),
-					...(searchText
-						? {
-								OR: [
-									{ name: { contains: searchText, mode: "insensitive" as const } },
-									{ subStage: { name: { contains: searchText, mode: "insensitive" as const } } },
-								],
-						  }
-						: {}),
-				},
-				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
-				include: { subStage: { select: { id: true, name: true } } },
-			});
+			let processes;
+			if (searchText.length >= 3) {
+				processes = await database.$queryRaw<{ id: string; subStageId: string; subStageName: string; name: string; displayOrder: number; isEnabled: boolean; sectionId: string | null; parentProcessId: string | null }[]>(Prisma.sql`
+					SELECT wp."id", wp."subStageId", subStage."name" AS "subStageName", wp."name", wp."displayOrder", wp."isEnabled", wp."sectionId", wp."parentProcessId"
+					FROM "WorkProcess" wp
+					LEFT JOIN "SubStage" subStage ON wp."subStageId" = subStage."id"
+					WHERE wp."isEnabled" = true
+					${subStageId ? Prisma.sql`AND wp."subStageId" = ${subStageId}` : Prisma.sql``}
+					AND (wp."name" % ${searchText} OR subStage."name" % ${searchText})
+					ORDER BY wp."displayOrder" ASC, wp."id" ASC, wp."name" <-> ${searchText}
+				`);
+			} else {
+				processes = await database.workProcess.findMany({
+					where: {
+						isEnabled: true,
+						...(subStageId ? { subStageId } : {}),
+						...(searchText
+							? {
+									OR: [
+										{ name: { contains: searchText, mode: "insensitive" as const } },
+										{ subStage: { name: { contains: searchText, mode: "insensitive" as const } } },
+									],
+							  }
+							: {}),
+					},
+					orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+					include: { subStage: { select: { id: true, name: true } } },
+				});
+			}
 			res.setHeader("Cache-Control", "no-store").json({
 				data: processes.map((process) => ({
 					id: process.id,
 					subStageId: process.subStageId,
-					subStageName: process.subStage.name,
+					subStageName: "subStage" in process ? process.subStage.name : process.subStageName,
 					name: process.name,
 					displayOrder: process.displayOrder,
 					isEnabled: process.isEnabled,
