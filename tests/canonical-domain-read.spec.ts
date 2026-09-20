@@ -900,7 +900,10 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.status).to.equal(200);
 		expect(receivedWhere).to.deep.equal({
 			isEnabled: true,
-			name: { contains: "spray", mode: "insensitive" },
+			OR: [
+				{ name: { contains: "spray", mode: "insensitive" } },
+				{ subStage: { name: { contains: "spray", mode: "insensitive" } } },
+			],
 		});
 		expect(response.body.data).to.deep.equal([{
 			id: "proc-1",

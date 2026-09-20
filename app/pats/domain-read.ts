@@ -844,7 +844,14 @@ export function domainReadRouter(
 				where: {
 					isEnabled: true,
 					...(subStageId ? { subStageId } : {}),
-					...(searchText ? { name: { contains: searchText, mode: "insensitive" as const } } : {}),
+					...(searchText
+						? {
+								OR: [
+									{ name: { contains: searchText, mode: "insensitive" as const } },
+									{ subStage: { name: { contains: searchText, mode: "insensitive" as const } } },
+								],
+						  }
+						: {}),
 				},
 				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
 				include: { subStage: { select: { id: true, name: true } } },
