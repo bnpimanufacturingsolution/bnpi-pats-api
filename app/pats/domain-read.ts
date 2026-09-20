@@ -476,7 +476,21 @@ export function domainReadRouter(
 
 	router.get(["/sections", "/stations"], requireCapability("execution.read"), async (req, res) => {
 		try {
-			const stations = await database.section.findMany({ orderBy: [{ displayOrder: "asc" }, { id: "asc" }], include: { boundSteps: true } });
+			const requestQuery = query(req);
+			const searchRaw = requestQuery.search;
+			const searchText = (Array.isArray(searchRaw) ? searchRaw[0] : searchRaw)?.toString().trim() ?? "";
+			const stations = await database.section.findMany({
+				where: searchText
+					? {
+							OR: [
+								{ name: { contains: searchText, mode: "insensitive" as const } },
+								{ sectionCode: { contains: searchText, mode: "insensitive" as const } },
+							],
+						}
+					: undefined,
+				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+				include: { boundSteps: true },
+			});
 			applyLegacyStationHeaders(req, res);
 			res.setHeader("Cache-Control", "no-store").json({ data: stations.map((s) => ({ ...s, stationCode: s.sectionCode })) });
 		} catch {
@@ -816,7 +830,7 @@ export function domainReadRouter(
 	router.get("/work-processes", requireCapability("execution.read"), async (req, res) => {
 		try {
 			const requestQuery = query(req);
-			const allowedKeys = new Set(["subStageId"]);
+			const allowedKeys = new Set(["subStageId", "search"]);
 			if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
 				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The work-process query is invalid.");
 				return;
@@ -824,10 +838,13 @@ export function domainReadRouter(
 			const subStageId = Array.isArray(requestQuery.subStageId)
 				? requestQuery.subStageId[0]
 				: requestQuery.subStageId;
+			const searchRaw = requestQuery.search;
+			const searchText = (Array.isArray(searchRaw) ? searchRaw[0] : searchRaw)?.toString().trim() ?? "";
 			const processes = await database.workProcess.findMany({
 				where: {
 					isEnabled: true,
 					...(subStageId ? { subStageId } : {}),
+					...(searchText ? { name: { contains: searchText, mode: "insensitive" as const } } : {}),
 				},
 				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
 				include: { subStage: { select: { id: true, name: true } } },
@@ -840,6 +857,8 @@ export function domainReadRouter(
 					name: process.name,
 					displayOrder: process.displayOrder,
 					isEnabled: process.isEnabled,
+					sectionId: process.sectionId,
+					parentProcessId: process.parentProcessId,
 				})),
 			});
 		} catch {
