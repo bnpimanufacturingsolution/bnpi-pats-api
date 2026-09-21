@@ -120,7 +120,7 @@ it("POST /stations accepts stationCode and emits Deprecation+Sunset with canonic
 		const database = new Proxy(new PrismaClient(), {
 			get(_t, property) {
 				if (property === "section") {
-					return { findMany: async () => [{ id: "s-1", sectionCode: "SEC-1", name: "S1", boundSteps: [] }] };
+					return { findMany: async () => [{ id: "s-1", sectionCode: "SEC-1", name: "S1", boundSteps: [] }], count: async () => 1 };
 				}
 				throw new Error(`unexpected ${String(property)}`);
 			},

@@ -38,6 +38,7 @@ describe("section identity mounting regression", () => {
 				switch (property) {
 					case "section": return {
 						findMany: async () => [section],
+						count: async () => 1,
 						update: async ({ where, data }: { where: { id: string }; data: { displayOrder: number } }) => {
 							expect(where.id).to.equal(section.id);
 							section.displayOrder = data.displayOrder;
@@ -142,9 +143,9 @@ describe("section identity mounting regression", () => {
 					.set("Authorization", "Bearer section-token").expect(200);
 				expect(response.body.data).to.have.length(1);
 				expect(response.body.data[0]).to.include({ id: "section-1", sectionCode: "SEC-01" });
-				expect(calls.assignments).to.equal(1);
-				expect(calls.persistence).to.deep.equal(["section"]);
-			});
+			expect(calls.assignments).to.equal(1);
+			expect(calls.persistence).to.deep.equal(["section", "section"]);
+		});
 		}
 		if (mount !== "read-only") {
 			it(`${mount}: allows an admin to reorder sections with the resolved audit actor`, async () => {
