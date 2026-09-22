@@ -193,7 +193,7 @@ describe("canonical PATS domain read contract", () => {
 							batchId: "batch-1",
 							stageId: "stage-assembly",
 							subStageId: null,
-							stationId: "station-qc",
+							sectionId: "station-qc",
 							inspectedQuantity: "25",
 							quantityUom: "PCS",
 							status: "OPEN",
@@ -391,11 +391,11 @@ describe("canonical PATS domain read contract", () => {
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
-			.get("/api/v1/stations/station-injection/history")
+			.get("/api/v1/sections/section-injection/history")
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
-		expect(response.body.station).to.deep.include({ id: "station-injection", stationCode: "ST-INJ-01", stageId: "stage-injection" });
+		expect(response.body.section).to.deep.include({ id: "station-injection", sectionCode: "ST-INJ-01", stageId: "stage-injection" });
 		expect(response.body.events[0]).to.deep.include({ batchId: "batch-1", batchCode: "BATCH-001", stepName: "Injection", actor: "Operator One" });
 		expect(response.body.openViolations[0]).to.deep.include({ batchCode: "BATCH-001", lotCode: "LOT-001", partCode: "PART-001", partName: "Main part", resolved: false });
 		expect(response.body.openViolations[0].attemptedStep).to.deep.equal({ stageId: "stage-injection", subStageId: null, stepName: "Injection" });
@@ -475,12 +475,12 @@ describe("canonical PATS domain read contract", () => {
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
-			.get("/api/v1/stations/station-deco-fs/support")
+			.get("/api/v1/sections/section-deco-fs/support")
 			.query({ date: day })
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
-		expect(response.body.stationId).to.equal("station-deco-fs");
+		expect(response.body.sectionId).to.equal("station-deco-fs");
 		expect(response.body.date).to.equal(day);
 		expect(response.body.todayOutput).to.deep.equal({
 			quantity: 80,
@@ -508,7 +508,7 @@ describe("canonical PATS domain read contract", () => {
 		]);
 		expect(response.body.staff).to.equal(null);
 		expect(response.body.expectedOutput).to.equal(null);
-		expect(printWhere).to.include({ stationId: "station-deco-fs", sequence: 1 });
+		expect(printWhere).to.include({ sectionId: "station-deco-fs", sequence: 1 });
 		expect(printSelect).to.deep.equal({ batchId: true, quantity: true });
 		expect(printSelect).to.not.have.property("batch");
 		expect(positionWhere).to.deep.equal({
@@ -542,7 +542,7 @@ describe("canonical PATS domain read contract", () => {
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
-			.get("/api/v1/stations/station-deco-fs/support")
+			.get("/api/v1/sections/section-deco-fs/support")
 			.query({ date: "2026-08-10" })
 			.set("Authorization", "Bearer read-contract-token");
 
@@ -561,7 +561,7 @@ describe("canonical PATS domain read contract", () => {
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
-			.get("/api/v1/stations/station-x/support")
+			.get("/api/v1/sections/section-x/support")
 			.query({ date: "10-08-2026" })
 			.set("Authorization", "Bearer read-contract-token");
 
@@ -741,7 +741,7 @@ describe("canonical PATS domain read contract", () => {
 							{
 								id: "pj-1",
 								batchId: "batch-1",
-								stationId: "station-inj-01",
+								sectionId: "station-inj-01",
 								sequence: 1,
 								occurredAt: new Date("2026-08-10T12:00:00.000Z"),
 							},
@@ -773,7 +773,7 @@ describe("canonical PATS domain read contract", () => {
 							{
 								id: "pj-2",
 								batchId: "batch-1",
-								stationId: "station-inj-01",
+								sectionId: "station-inj-01",
 								sequence: 1,
 								occurredAt: new Date("2026-08-10T13:00:00.000Z"),
 							},

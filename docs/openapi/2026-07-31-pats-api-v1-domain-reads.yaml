@@ -85,6 +85,45 @@ paths:
       tags: [PATS Configuration]
       x-required-capability: execution.read
       responses: { '200': { $ref: '#/components/responses/CollectionRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
+  /lines:
+    get:
+      operationId: lineCollectionGet
+      summary: Read station-screen line instances scoped to the caller
+      description: >
+        1 line = 1 station screen. Admin (operations.manage) sees all lines; every other
+        subject sees only lines where they are the active leader, the assigned leader, or
+        hold an ACTIVE operator assignment. This collection is the login-landing source:
+        one allowed line lands directly, several show the picker.
+      tags: [PATS Configuration]
+      x-required-capability: execution.read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - { name: section_id, in: query, schema: { type: string, minLength: 1 } }
+        - { name: process_id, in: query, schema: { type: string, minLength: 1 } }
+        - { name: include_disabled, in: query, schema: { type: boolean, default: false } }
+      responses: { '200': { $ref: '#/components/responses/PaginatedRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
+  /lines/{lineId}/attention:
+    get:
+      operationId: lineAttentionGet
+      summary: Read the leader switcher attention flags for a line
+      description: >
+        Red-dot evidence (L-12): openViolations counts OPEN routing violations at the line's
+        sub-stage, stuckWip counts batch positions parked there longer than 8 hours, and
+        unfilledHour reports whether today has a daily-sheet row for the line's work process.
+        Non-admin callers must lead or run the line.
+      tags: [PATS Configuration]
+      x-required-capability: execution.read
+      parameters:
+        - name: lineId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200': { $ref: '#/components/responses/ResourceRead' }
+        '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
+        '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
+        '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' }
   /production-plans:
     get:
       operationId: productionPlanCollectionGet
@@ -189,6 +228,22 @@ paths:
                     items: { $ref: '#/components/schemas/QualityInspection' }
         '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
         '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' }
+  /subjects:
+    get:
+      operationId: subjectCollectionGet
+      summary: Read the subject directory for leader/operator pickers
+      description: >
+        Admin-only identity read (identity.read) backing the line-screen management
+        pickers: assigned/active leader selection and operator assignment. Returns
+        opaque subject ids plus display/email snapshots; never provider identifiers.
+      tags: [PATS Configuration]
+      x-required-capability: identity.read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - { name: search, in: query, schema: { type: string, minLength: 1 } }
+        - { name: status, in: query, schema: { type: string, enum: [ACTIVE, DISABLED] } }
+      responses: { '200': { $ref: '#/components/responses/PaginatedRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
   /dashboard-summaries:
     get:
       operationId: dashboardSummaryGet

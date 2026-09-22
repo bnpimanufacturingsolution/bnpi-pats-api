@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
 	CanonicalEvidenceStatus,
 	CatalogLifecycleStatus,
+	Prisma,
 	PrismaClient as PatsPrismaClient,
 	ProductSourceStatus,
 } from "../../generated/pats-client";
@@ -18,7 +19,7 @@ import {
 
 type CatalogDatabase = Pick<
 	PatsPrismaClient,
-	"product" | "model" | "modelPart" | "sourceEvidence" | "canonicalEvidenceLink"
+	"product" | "model" | "modelPart" | "sourceEvidence" | "canonicalEvidenceLink" | "stage" | "subStage"
 >;
 
 const evidenceStatuses = [
@@ -78,20 +79,40 @@ const modelPatchSchema = z
 	.strict()
 	.refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
 
+// Per-step planned cycle time map, keyed `stageId::subStageId` (empty subStageId
+// when stage-wide) — the same key shape route steps use. Never queried by value,
+// only read-then-computed, so a Json map is the honest store (cf. routingSteps).
+const plannedCycleTimesSchema = z
+	.record(z.string().trim().min(1).max(220), z.number().int().min(1).max(86400))
+	.nullable()
+	.optional()
+	.refine(
+		(value) => value === undefined || value === null || Object.keys(value).length <= 100,
+		"At most 100 step cycle times per part.",
+	);
+
 const modelPartCreateSchema = z
 	.object({
 		modelId: z.string().trim().min(1).max(100),
 		partCode: z.string().trim().min(1).max(120),
 		partName: z.string().trim().min(1).max(240),
+		plannedCycleTimes: plannedCycleTimesSchema,
 		evidenceStatus: evidenceStatusSchema.optional(),
 		sourceEvidenceIds: sourceEvidenceIdsSchema.optional(),
 	})
 	.strict();
 
+const routeStepSchema = z.object({
+	stageId: z.string().trim().min(1).max(100),
+	subStageId: z.string().trim().min(1).max(100).nullable(),
+});
+
 const modelPartPatchSchema = z
 	.object({
 		partCode: z.string().trim().min(1).max(120).optional(),
 		partName: z.string().trim().min(1).max(240).optional(),
+		plannedCycleTimes: plannedCycleTimesSchema,
+		routingSteps: z.array(routeStepSchema).max(50).optional(),
 		evidenceStatus: evidenceStatusSchema.optional(),
 	})
 	.strict()
@@ -541,6 +562,7 @@ export function catalogFoundationRouter(
 								modelId: body.modelId,
 								partCode: body.partCode,
 								partName: body.partName,
+								plannedCycleTimes: body.plannedCycleTimes ?? Prisma.JsonNull,
 								routingSteps: [],
 								lifecycleStatus: CatalogLifecycleStatus.DRAFT,
 								evidenceStatus: evidenceStatus(body.evidenceStatus),
@@ -712,12 +734,19 @@ export function catalogFoundationRouter(
 			if (!current) throw notFound("The requested catalog model part was not found.");
 			if (current.lifecycleStatus !== CatalogLifecycleStatus.DRAFT) throw publishedResource();
 			if (current.rowVersion !== expectedVersion) throw staleVersion();
+			if (body.routingSteps !== undefined) {
+				await assertRouteStepsExist(database, body.routingSteps);
+			}
 
 			const modelPart = await database.modelPart.update({
 				where: { id: current.id },
 				data: {
 					...(body.partCode === undefined ? {} : { partCode: body.partCode }),
 					...(body.partName === undefined ? {} : { partName: body.partName }),
+					...(body.plannedCycleTimes === undefined
+						? {}
+						: { plannedCycleTimes: body.plannedCycleTimes ?? Prisma.JsonNull }),
+					...(body.routingSteps === undefined ? {} : { routingSteps: body.routingSteps }),
 					...(body.evidenceStatus === undefined
 						? {}
 						: { evidenceStatus: evidenceStatus(body.evidenceStatus) }),
@@ -829,12 +858,77 @@ function toModelResource(
 	};
 }
 
+/** Coerce a stored Json CT map to the wire shape; anything else is honest null. */
+function ctMapOrNull(value: unknown): Record<string, number> | null {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+	const entries = Object.entries(value as Record<string, unknown>);
+	if (entries.length === 0) return null;
+	const out: Record<string, number> = {};
+	for (const [key, entry] of entries) {
+		if (typeof entry !== "number" || !Number.isInteger(entry) || entry < 1 || entry > 86400) {
+			return null;
+		}
+		out[key] = entry;
+	}
+	return out;
+}
+
+/** Reject route steps that name stages (or sub-stages) outside the catalog. */
+async function assertRouteStepsExist(
+	database: CatalogDatabase,
+	steps: Array<{ stageId: string; subStageId: string | null }>,
+): Promise<void> {
+	const stageIds = [...new Set(steps.map((step) => step.stageId))];
+	const subStageIds = [
+		...new Set(
+			steps.map((step) => step.subStageId).filter((id): id is string => id !== null),
+		),
+	];
+	const [stages, subStages] = await Promise.all([
+		stageIds.length > 0
+			? database.stage.findMany({ where: { id: { in: stageIds } }, select: { id: true } })
+			: [],
+		subStageIds.length > 0
+			? database.subStage.findMany({
+					where: { id: { in: subStageIds } },
+					select: { id: true, eligibleStages: { select: { stageId: true } } },
+				})
+			: [],
+	]);
+	const stageSet = new Set(stages.map((stage) => stage.id));
+	const subMap = new Map(
+		subStages.map((sub) => [sub.id, new Set(sub.eligibleStages.map((e) => e.stageId))]),
+	);
+	for (const step of steps) {
+		if (!stageSet.has(step.stageId)) {
+			throw new CatalogProblem(
+				422,
+				"urn:bandai:pats:problem:validation-error",
+				"Validation Failed",
+				`Unknown stage ${step.stageId} in route steps.`,
+			);
+		}
+		if (step.subStageId !== null) {
+			const eligible = subMap.get(step.subStageId);
+			if (!eligible || !eligible.has(step.stageId)) {
+				throw new CatalogProblem(
+					422,
+					"urn:bandai:pats:problem:validation-error",
+					"Validation Failed",
+					`Sub-stage ${step.subStageId} is not eligible under stage ${step.stageId}.`,
+				);
+			}
+		}
+	}
+}
+
 function toModelPartResource(
 	modelPart: {
 		id: string;
 		modelId: string;
 		partCode: string;
 		partName: string;
+		plannedCycleTimes: unknown;
 		lifecycleStatus: CatalogLifecycleStatus;
 		evidenceStatus: CanonicalEvidenceStatus;
 		rowVersion: number;
@@ -847,6 +941,7 @@ function toModelPartResource(
 		modelId: modelPart.modelId,
 		partCode: modelPart.partCode,
 		partName: modelPart.partName,
+		plannedCycleTimes: ctMapOrNull(modelPart.plannedCycleTimes),
 		lifecycleStatus: modelPart.lifecycleStatus,
 		evidenceStatus: modelPart.evidenceStatus,
 		provenance: { sourceEvidenceCount },

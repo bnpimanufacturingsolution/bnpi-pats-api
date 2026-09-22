@@ -86,6 +86,38 @@ function atOffset({ days = 0, hours = 0, minutes = 0 } = {}) {
 	return new Date(seedClock.getTime() + ((days * 24 + hours) * 60 + minutes) * 60_000);
 }
 
+/**
+ * Planned cycle-time seed assumptions, keyed per route step
+ * (`stageId::subStageId`, empty subStageId when stage-wide).
+ * SEED ASSUMPTION (user to correct with floor quotations): tampo is quick,
+ * spray is slow, molding/capsule sit between; paint consumables carry no CT.
+ * Paints (PN-*) stay null — honest absence, not zero.
+ * Stage ids resolve mid-seed, so catalog rows seed null and the CT pass below
+ * (once stages exist) fills the maps; run parts snapshot inline (stages in
+ * scope there).
+ */
+function plannedCtMapForPartCode(partCode, ids) {
+	if (typeof partCode !== "string") return null;
+	if (partCode.startsWith("PN-")) return null;
+	if (partCode === "C002-01-42") {
+		return ids?.warehouse && ids?.packing ? { [`${ids.warehouse}::${ids.packing}`]: 20 } : null;
+	}
+	if (partCode.endsWith("ST")) {
+		return ids?.decoration && ids?.tampo ? { [`${ids.decoration}::${ids.tampo}`]: 15 } : null;
+	}
+	if (partCode.endsWith("S")) {
+		if (!ids?.decoration || !ids?.fullSpray || !ids?.lineSpray) return null;
+		return {
+			[`${ids.decoration}::${ids.fullSpray}`]: 40,
+			[`${ids.decoration}::${ids.lineSpray}`]: 40,
+		};
+	}
+	if (/^B251-01-\d+$/.test(partCode)) {
+		return ids?.injection ? { [`${ids.injection}::`]: 25 } : null;
+	}
+	return null;
+}
+
 /** Hourly grid matching app monitoring encode (10 shift slots). */
 function defaultDaySlots(actuals = []) {
 	const labels = ["9:00", "10:00", "11:00", "12:00", "1:00", "2:00", "3:00", "4:00", "5:00", "6:00"];
@@ -429,32 +461,34 @@ async function seedProfile(tx) {
 		for (const [partCode, partName] of model.parts) {
 			const partId = stableId(`model-part-${partCode}`);
 			partIds[partCode] = partId;
-			await tx.modelPart.upsert({
-				where: { modelId_partCode: { modelId, partCode } },
-				update: {
-					partName,
-					lifecycleStatus: "PUBLISHED",
-					evidenceStatus: "PROVISIONAL",
-					routingSteps: [],
-				},
-				create: {
-					id: partId,
-					modelId,
-					partCode,
-					partName,
-					lifecycleStatus: "PUBLISHED",
-					evidenceStatus: "PROVISIONAL",
-					routingSteps: [],
-				},
-			});
-			// Resolve actual id when an older row already owned the unique key.
-			const resolved = await tx.modelPart.findUnique({
-				where: { modelId_partCode: { modelId, partCode } },
-				select: { id: true },
-			});
-			if (resolved) partIds[partCode] = resolved.id;
-		}
+		await tx.modelPart.upsert({
+			where: { modelId_partCode: { modelId, partCode } },
+			update: {
+				partName,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+				routingSteps: [],
+				plannedCycleTimes: null,
+			},
+			create: {
+				id: partId,
+				modelId,
+				partCode,
+				partName,
+				lifecycleStatus: "PUBLISHED",
+				evidenceStatus: "PROVISIONAL",
+				routingSteps: [],
+				plannedCycleTimes: null,
+			},
+		});
+		// Resolve actual id when an older row already owned the unique key.
+		const resolved = await tx.modelPart.findUnique({
+			where: { modelId_partCode: { modelId, partCode } },
+			select: { id: true },
+		});
+		if (resolved) partIds[partCode] = resolved.id;
 	}
+}
 
 	const injPartCount = Object.keys(partIds).length;
 	/** @type {Record<string, string>} modelNumber -> capsule ModelPart id */
@@ -477,6 +511,7 @@ async function seedProfile(tx) {
 				lifecycleStatus: "PUBLISHED",
 				evidenceStatus: "PROVISIONAL",
 				routingSteps: [],
+				plannedCycleTimes: null,
 			},
 			create: {
 				id: partId,
@@ -486,6 +521,7 @@ async function seedProfile(tx) {
 				lifecycleStatus: "PUBLISHED",
 				evidenceStatus: "PROVISIONAL",
 				routingSteps: [],
+				plannedCycleTimes: null,
 			},
 		});
 		const resolved = await txClient.modelPart.findUnique({
@@ -978,7 +1014,7 @@ async function seedProfile(tx) {
 		});
 	}
 
-	for (const [id, stationId, stageId, subStageId] of [
+	for (const [id, sectionId, stageId, subStageId] of [
 		// Injection keeps the stage-wide bound step (station history filters match
 		// null-rotor events) and gains a sub-stage-bound step so the Monitoring
 		// desk bridge can resolve its work-process against a non-null subStageId.
@@ -997,9 +1033,37 @@ async function seedProfile(tx) {
 	]) {
 		await tx.stationStep.upsert({
 			where: { id },
-			update: { stationId, stageId, subStageId },
-			create: { id, stationId, stageId, subStageId },
+			update: { sectionId, stageId, subStageId },
+			create: { id, sectionId, stageId, subStageId },
 		});
+	}
+
+	// Planned cycle-time master pass (REQ-CT-1 S1): per-step maps on catalog
+	// ModelParts, now that stage ids have resolved. Paints stay null.
+	// ctStepIds stays in scope: run-part snapshots below reuse it.
+	const ctStepIds = {
+		injection: injectionStageId,
+		decoration: decorationStageId,
+		tampo: subTampoId,
+		fullSpray: subFullSprayId,
+		lineSpray: subLineSprayId,
+		warehouse: warehouseStageId,
+		packing: subMainPackingId,
+	};
+	{
+		const capsuleCode = CLIENT_B251.sharedCapsule.partCode;
+		for (const [partCode, modelPartId] of [
+			...Object.entries(partIds),
+			...Object.entries(decoPartIds),
+			...Object.values(capsulePartIds).map((id) => [capsuleCode, id]),
+		]) {
+			const map = plannedCtMapForPartCode(partCode, ctStepIds);
+			if (!map) continue;
+			await tx.modelPart.update({
+				where: { id: modelPartId },
+				data: { plannedCycleTimes: map },
+			});
+		}
 	}
 
 	// Work processes under sub-stages (catalog leaf; not stations). Bridge names match current SubStages.
@@ -1075,10 +1139,72 @@ async function seedProfile(tx) {
 		});
 	}
 
+	// Station-screen lines (1 line = 1 screen): one default line per seeded
+	// leaf WorkProcess (L-3 default). Leaders: line-leader subject assigned and
+	// active on every seeded line; admin flips active for cover at runtime.
+	const lineCodeByProcessId = {
+		[processInjMachineOpId]: "INJ-MO-01",
+		[processInjGateCutId]: "INJ-GC-01",
+		[processInjOfflineOpId]: "INJ-OO-01",
+		[processInjIQCId]: "INJ-IQC-01",
+		[processInjMHId]: "INJ-MH-01",
+		[processFsManualId]: "DEC-FS-MS-01",
+		[processFsDrumId]: "DEC-FS-DS-01",
+		[processLsMaskId]: "DEC-LS-01",
+		[processTampoId]: "DEC-TP-01",
+		[processMimakiId]: "DEC-MK-01",
+		[processAsmStagingId]: "ASM-STG-01",
+		[processAsmSubId]: "ASM-SA-01",
+		[processAsmMainId]: "ASM-MA-01",
+		[processAsmCapId]: "ASM-CAP-01",
+		[processAsmAstId]: "ASM-AST-01",
+		[processMainPackingId]: "WH-MP-01",
+	};
+	const seededLines = await tx.workProcess.findMany({ where: { isEnabled: true } });
+	for (const [index, process] of seededLines.sort((a, b) => a.displayOrder - b.displayOrder).entries()) {
+		const lineCode = lineCodeByProcessId[process.id] ?? `${process.name.toUpperCase().replaceAll(/[^A-Z0-9]+/g, "-").slice(0, 24)}-01`;
+		await tx.line.upsert({
+			where: { lineCode },
+			update: {
+				sectionId: process.sectionId ?? injectionSectionId,
+				processId: process.id,
+				assignedLeaderId: lineLeader.id,
+				activeLeaderId: lineLeader.id,
+				displayOrder: index,
+				isEnabled: true,
+			},
+			create: {
+				id: stableId(`line-${lineCode}`),
+				sectionId: process.sectionId ?? injectionSectionId,
+				processId: process.id,
+				lineCode,
+				label: `${process.name} Line 01`,
+				assignedLeaderId: lineLeader.id,
+				activeLeaderId: lineLeader.id,
+				displayOrder: index,
+				isEnabled: true,
+			},
+		});
+	}
+
+	// Operator-on-line fixture: joshua.reyes runs the Manual Spray line (ACTIVE).
+	const manualSprayLineId = stableId("line-DEC-FS-MS-01");
+	await tx.lineOperatorAssignment.upsert({
+		where: { id: stableId("line-op-joshua-dec-fs-ms-01") },
+		update: { status: "ACTIVE", endedAt: null },
+		create: {
+			id: stableId("line-op-joshua-dec-fs-ms-01"),
+			lineId: manualSprayLineId,
+			subjectId: operator.id,
+			status: "ACTIVE",
+			actorSubjectId: lineLeader.id,
+		},
+	});
+
 	// Quality Inspection is Journey D. Remount leftover Quality Check hops (additive — no deletes).
 	await tx.qualityInspection.updateMany({
-		where: { OR: [{ subStageId: retiredQualityCheckSubId }, { stationId: retiredQualityCheckSectionId }] },
-		data: { subStageId: subSubAssemblyId, stationId: assemblySubAssemblySectionId },
+		where: { OR: [{ subStageId: retiredQualityCheckSubId }, { sectionId: retiredQualityCheckSectionId }] },
+		data: { subStageId: subSubAssemblyId, sectionId: assemblySubAssemblySectionId },
 	});
 	await tx.batch.updateMany({
 		where: { currentSubStageId: retiredQualityCheckSubId },
@@ -1109,8 +1235,8 @@ async function seedProfile(tx) {
 		data: { isEnabled: false },
 	});
 	await tx.booth.updateMany({
-		where: { OR: [{ stationId: retiredQualityCheckSectionId }, { subStageId: retiredQualityCheckSubId }] },
-		data: { stationId: assemblySubAssemblySectionId, subStageId: subSubAssemblyId },
+		where: { OR: [{ sectionId: retiredQualityCheckSectionId }, { subStageId: retiredQualityCheckSubId }] },
+		data: { sectionId: assemblySubAssemblySectionId, subStageId: subSubAssemblyId },
 	});
 	await tx.section.updateMany({
 		where: { id: retiredQualityCheckSectionId },
@@ -1134,7 +1260,7 @@ async function seedProfile(tx) {
 				workspaceId: "PATS",
 				boothCode: code(boothCode),
 				label,
-				stationId: decorationSectionId,
+				sectionId: decorationSectionId,
 				stageId: decorationStageId,
 				subStageId: subFullSprayId,
 				workProcessId: processFsManualId,
@@ -1146,7 +1272,7 @@ async function seedProfile(tx) {
 				workspaceId: "PATS",
 				boothCode: code(boothCode),
 				label,
-				stationId: decorationSectionId,
+				sectionId: decorationSectionId,
 				stageId: decorationStageId,
 				subStageId: subFullSprayId,
 				workProcessId: processFsManualId,
@@ -1195,7 +1321,7 @@ async function seedProfile(tx) {
 		where: { id: projectId },
 		update: {
 			workspaceId: "PATS",
-			projectCode: code("PLAN-B251-JUL"),
+			projectCode: code("PRJ-B251-JUL"),
 			name: `${CLIENT_B251.productName} — July production`,
 			requiredProductionQuantity: planQty,
 			status: "RELEASED",
@@ -1206,7 +1332,7 @@ async function seedProfile(tx) {
 		create: {
 			id: projectId,
 			workspaceId: "PATS",
-			projectCode: code("PLAN-B251-JUL"),
+			projectCode: code("PRJ-B251-JUL"),
 			name: `${CLIENT_B251.productName} — July production`,
 			requiredProductionQuantity: planQty,
 			productId: productB251Id,
@@ -1300,56 +1426,60 @@ async function seedProfile(tx) {
 		for (const [partCode, partName] of model.parts) {
 			const id = stableId(`plan-part-${partCode}`);
 			planPartIds[partCode] = id;
-			await tx.part.upsert({
-				where: { id },
-				update: {
-					projectId,
-					partCode,
-					partName,
-					sourceModelId: modelIds[model.modelNumber],
-					sourceModelPartId: partIds[partCode],
-					lifecycleStatus: "PUBLISHED",
-					variancePercentThreshold: 0.05,
-				},
-				create: {
-					id,
-					projectId,
-					partCode,
-					partName,
-					sourceModelId: modelIds[model.modelNumber],
-					sourceModelPartId: partIds[partCode],
-					lifecycleStatus: "PUBLISHED",
-					variancePercentThreshold: 0.05,
-				},
-			});
-		}
-		for (const deco of CLIENT_B251.decoPartsByModel[model.modelNumber] ?? []) {
-			if (!decoPartIds[deco.partCode]) continue;
-			const id = stableId(`plan-part-deco-${deco.partCode}`);
-			planPartIds[deco.partCode] = id;
-			await tx.part.upsert({
-				where: { id },
-				update: {
-					projectId,
-					partCode: deco.partCode,
-					partName: decoPartDisplayName(deco),
-					sourceModelId: modelIds[model.modelNumber],
-					sourceModelPartId: decoPartIds[deco.partCode],
-					lifecycleStatus: "PUBLISHED",
-					variancePercentThreshold: 0.05,
-				},
-				create: {
-					id,
-					projectId,
-					partCode: deco.partCode,
-					partName: decoPartDisplayName(deco),
-					sourceModelId: modelIds[model.modelNumber],
-					sourceModelPartId: decoPartIds[deco.partCode],
-					lifecycleStatus: "PUBLISHED",
-					variancePercentThreshold: 0.05,
-				},
-			});
-		}
+		await tx.part.upsert({
+			where: { id },
+			update: {
+				projectId,
+				partCode,
+				partName,
+				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
+				sourceModelId: modelIds[model.modelNumber],
+				sourceModelPartId: partIds[partCode],
+				lifecycleStatus: "PUBLISHED",
+				variancePercentThreshold: 0.05,
+			},
+			create: {
+				id,
+				projectId,
+				partCode,
+				partName,
+				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
+				sourceModelId: modelIds[model.modelNumber],
+				sourceModelPartId: partIds[partCode],
+				lifecycleStatus: "PUBLISHED",
+				variancePercentThreshold: 0.05,
+			},
+		});
+	}
+	for (const deco of CLIENT_B251.decoPartsByModel[model.modelNumber] ?? []) {
+		if (!decoPartIds[deco.partCode]) continue;
+		const id = stableId(`plan-part-deco-${deco.partCode}`);
+		planPartIds[deco.partCode] = id;
+		await tx.part.upsert({
+			where: { id },
+			update: {
+				projectId,
+				partCode: deco.partCode,
+				partName: decoPartDisplayName(deco),
+				plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
+				sourceModelId: modelIds[model.modelNumber],
+				sourceModelPartId: decoPartIds[deco.partCode],
+				lifecycleStatus: "PUBLISHED",
+				variancePercentThreshold: 0.05,
+			},
+			create: {
+				id,
+				projectId,
+				partCode: deco.partCode,
+				partName: decoPartDisplayName(deco),
+				plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
+				sourceModelId: modelIds[model.modelNumber],
+				sourceModelPartId: decoPartIds[deco.partCode],
+				lifecycleStatus: "PUBLISHED",
+				variancePercentThreshold: 0.05,
+			},
+		});
+	}
 	}
 	// One plan-level capsule part (packaging), sourced from model 01 attachment
 	{
@@ -1362,6 +1492,7 @@ async function seedProfile(tx) {
 				projectId,
 				partCode,
 				partName: CLIENT_B251.sharedCapsule.partName,
+				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 				sourceModelId: modelIds["01"],
 				sourceModelPartId: capsulePartIds["01"],
 				lifecycleStatus: "PUBLISHED",
@@ -1372,6 +1503,7 @@ async function seedProfile(tx) {
 				projectId,
 				partCode,
 				partName: CLIENT_B251.sharedCapsule.partName,
+				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 				sourceModelId: modelIds["01"],
 				sourceModelPartId: capsulePartIds["01"],
 				lifecycleStatus: "PUBLISHED",
@@ -1636,6 +1768,470 @@ async function seedProfile(tx) {
 		});
 	}
 
+	// ── Story projects: the B251 line arc (10 projects deep) ────────────────
+	// July (above) is the full-depth anchor. These nine tell the rest of the
+	// story across statuses: replenishment → seasonal planning → model pushes →
+	// trial pause → completions → retro + forecast. Depth is graduated on purpose:
+	// August carries lots/batches/prints (desk realism); drafts carry plans only;
+	// completions carry closed lots/batches (history). QC/print history stays
+	// exclusive to July (below) to bound seed complexity.
+	// [key, projectCode, name, status, released?, {model: trays}]
+	const storyProjects = [
+		["aug", "PRJ-B251-AUG", "B251 August replenishment", "RELEASED", true, { "01": 3, "02": 2, "03": 2 }],
+		["sep", "PRJ-B251-SEP", "B251 September seasonal launch", "DRAFT", false, { "01": 4, "02": 3, "03": 2, "04": 2, "05": 2, "06": 2 }],
+		["m02", "PRJ-B251-M02", "B251 Cheese Hotdog push", "RELEASED", true, { "02": 5 }],
+		["m03", "PRJ-B251-M03", "B251 Tacos run", "RELEASED", true, { "03": 4 }],
+		["m04", "PRJ-B251-M04", "B251 Potato Wedge trial", "PAUSED", false, { "04": 2 }],
+		["m05", "PRJ-B251-M05", "B251 Cola / Ice Coffee completed", "COMPLETED", true, { "05": 3 }],
+		["m06", "PRJ-B251-M06", "B251 Tray buffer", "READY", false, { "06": 3 }],
+		["jun", "PRJ-B251-JUN", "B251 June pilot (retro)", "COMPLETED", true, { "01": 2 }],
+		["oct", "PRJ-B251-OCT", "B251 October forecast", "DRAFT", false, { "01": 2, "02": 2 }],
+	];
+	// Lots per story project: [lotSuffix, lotCode, lotName, modelNumber, trays, lotStatus]
+	const storyLots = {
+		aug: [
+			["aug1", "LOT-B251-11", "B251 August replenishment — Lot 01", "01", 3, "ACTIVE"],
+			["aug2", "LOT-B251-12", "B251 August replenishment — Lot 02", "02", 2, "ACTIVE"],
+		],
+		sep: [["sep1", "LOT-B251-13", "B251 September seasonal — Lot 01", "01", 4, "PLANNED"]],
+		m02: [["m02a", "LOT-B251-14", "B251 Cheese Hotdog — Lot 01", "02", 5, "ACTIVE"]],
+		m03: [["m03a", "LOT-B251-15", "B251 Tacos — Lot 01", "03", 4, "ACTIVE"]],
+		m04: [["m04a", "LOT-B251-16", "B251 Potato Wedge — Lot 01", "04", 2, "PLANNED"]],
+		m05: [["m05a", "LOT-B251-17", "B251 Cola / Ice Coffee — Lot 01", "05", 3, "COMPLETED"]],
+		m06: [["m06a", "LOT-B251-18", "B251 Tray — Lot 01", "06", 3, "PLANNED"]],
+		jun: [["jun1", "LOT-B251-19", "B251 June pilot — Lot 01", "01", 2, "COMPLETED"]],
+		oct: [],
+	};
+	// Batches per story project: [batchSuffix, batchCode, lotSuffix, partCode, stage, sub, status]
+	// ("-" subStage = null.)
+	const storyBatches = {
+		aug: [
+			["augb1", "BNI-2608-001", "aug1", "B251-01-01", "inj", "-", "ACTIVE"],
+			["augb2", "BNI-2608-002", "aug1", "B251-01-01ST", "dec", "fs", "ACTIVE"],
+			["augb3", "BNI-2608-003", "aug2", "B251-01-08", "inj", "-", "ACTIVE"],
+			["augb4", "BNI-2608-004", "aug2", "B251-01-10", "dec", "ls", "ACTIVE"],
+		],
+		m02: [
+			["m02b1", "BNI-2608-101", "m02a", "B251-01-08", "inj", "-", "ACTIVE"],
+			["m02b2", "BNI-2608-102", "m02a", "B251-01-10", "asm", "sub", "ACTIVE"],
+		],
+		m03: [
+			["m03b1", "BNI-2608-201", "m03a", "B251-01-11", "inj", "-", "ACTIVE"],
+			["m03b2", "BNI-2608-202", "m03a", "B251-01-12", "asm", "ast", "ACTIVE"],
+		],
+		m05: [
+			["m05b1", "BNI-2608-301", "m05a", "B251-01-22", "inj", "-", "CLOSED"],
+			["m05b2", "BNI-2608-302", "m05a", "B251-01-20", "dec", "fs", "CLOSED"],
+		],
+		jun: [
+			["junb1", "BNI-2606-001", "jun1", "B251-01-01", "inj", "-", "CLOSED"],
+			["junb2", "BNI-2606-002", "jun1", "B251-01-02", "inj", "-", "CLOSED"],
+		],
+		sep: [],
+		m04: [],
+		m06: [],
+		oct: [],
+	};
+	const storyStage = {
+		inj: injectionStageId,
+		dec: decorationStageId,
+		asm: assemblyStageId,
+		wh: warehouseStageId,
+	};
+	const storySubStage = {
+		fs: subFullSprayId,
+		ls: subLineSprayId,
+		tp: subTampoId,
+		sub: subSubAssemblyId,
+		ast: subAssortmentId,
+		pack: subMainPackingId,
+	};
+	for (const [projKey, projectCode, name, status, released, modelTrays] of storyProjects) {
+		const storyProjectId = stableId(`production-plan-${projKey}`);
+		const storyPartsListId = stableId(`parts-list-${projKey}-v1`);
+		const storyPlanPartIds = {};
+		const storyLotIds = {};
+		const storyAllocIds = {};
+		const storyQty = Object.values(modelTrays).reduce((sum, trays) => sum + trays * tray, 0);
+
+		await tx.project.upsert({
+			where: { id: storyProjectId },
+			update: {
+				workspaceId: "PATS",
+				projectCode: code(projectCode),
+				name,
+				requiredProductionQuantity: storyQty,
+				status,
+				...(released ? { releasedAt: seedClock, releasedBySubjectId: planner.id } : {}),
+				productId: productB251Id,
+			},
+			create: {
+				id: storyProjectId,
+				workspaceId: "PATS",
+				projectCode: code(projectCode),
+				name,
+				requiredProductionQuantity: storyQty,
+				productId: productB251Id,
+				status,
+				...(released ? { releasedAt: seedClock, releasedBySubjectId: planner.id } : {}),
+				createdAt: seedClock,
+			},
+		});
+		await tx.productSpecification.upsert({
+			where: { projectId: storyProjectId },
+			update: {
+				skuCode: code("B251-SKU"),
+				productName: CLIENT_B251.productName,
+				trayQuantityStandard: CLIENT_B251.trayQuantityStandard,
+				sourceRevisionRef: CLIENT_B251.revision,
+			},
+			create: {
+				id: stableId(`product-spec-${projKey}`),
+				projectId: storyProjectId,
+				skuCode: code("B251-SKU"),
+				productName: CLIENT_B251.productName,
+				trayQuantityStandard: CLIENT_B251.trayQuantityStandard,
+				sourceRevisionRef: CLIENT_B251.revision,
+				createdAt: seedClock,
+			},
+		});
+		for (const [modelNumber, trays] of Object.entries(modelTrays)) {
+			const qty = trays * tray;
+			await tx.projectModelAllocation.upsert({
+				where: { projectId_modelId: { projectId: storyProjectId, modelId: modelIds[modelNumber] } },
+				update: {
+					plannedQuantity: qty,
+					quantityMagnitude: `${qty}.000000`,
+					quantityUom: "piece",
+					lifecycleStatus: "COMMITTED",
+				},
+				create: {
+					id: stableId(`pma-${projKey}-${modelNumber}`),
+					projectId: storyProjectId,
+					modelId: modelIds[modelNumber],
+					plannedQuantity: qty,
+					quantityMagnitude: `${qty}.000000`,
+					quantityUom: "piece",
+					lifecycleStatus: "COMMITTED",
+				},
+			});
+		}
+		// Snapshot run parts (CT included) for this project's models.
+		const storyModels = Object.keys(modelTrays);
+		for (const modelNumber of storyModels) {
+			const model = CLIENT_B251.models.find((m) => m.modelNumber === modelNumber);
+			for (const [partCode, partName] of model.parts) {
+				const id = stableId(`plan-part-${projKey}-${partCode}`);
+				storyPlanPartIds[partCode] = id;
+				await tx.part.upsert({
+					where: { id },
+					update: {
+						projectId: storyProjectId,
+						partCode,
+						partName,
+						plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
+						sourceModelId: modelIds[modelNumber],
+						sourceModelPartId: partIds[partCode],
+						lifecycleStatus: "PUBLISHED",
+						variancePercentThreshold: 0.05,
+					},
+					create: {
+						id,
+						projectId: storyProjectId,
+						partCode,
+						partName,
+						plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
+						sourceModelId: modelIds[modelNumber],
+						sourceModelPartId: partIds[partCode],
+						lifecycleStatus: "PUBLISHED",
+						variancePercentThreshold: 0.05,
+					},
+				});
+			}
+			for (const deco of CLIENT_B251.decoPartsByModel[modelNumber] ?? []) {
+				if (!decoPartIds[deco.partCode]) continue;
+				const id = stableId(`plan-part-${projKey}-deco-${deco.partCode}`);
+				storyPlanPartIds[deco.partCode] = id;
+				await tx.part.upsert({
+					where: { id },
+					update: {
+						projectId: storyProjectId,
+						partCode: deco.partCode,
+						partName: decoPartDisplayName(deco),
+						plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
+						sourceModelId: modelIds[modelNumber],
+						sourceModelPartId: decoPartIds[deco.partCode],
+						lifecycleStatus: "PUBLISHED",
+						variancePercentThreshold: 0.05,
+					},
+					create: {
+						id,
+						projectId: storyProjectId,
+						partCode: deco.partCode,
+						partName: decoPartDisplayName(deco),
+						plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
+						sourceModelId: modelIds[modelNumber],
+						sourceModelPartId: decoPartIds[deco.partCode],
+						lifecycleStatus: "PUBLISHED",
+						variancePercentThreshold: 0.05,
+					},
+				});
+			}
+		}
+		if (storyModels.includes("01")) {
+			const partCode = CLIENT_B251.sharedCapsule.partCode;
+			const id = stableId(`plan-part-${projKey}-capsule-${partCode}`);
+			storyPlanPartIds[partCode] = id;
+			await tx.part.upsert({
+				where: { id },
+				update: {
+					projectId: storyProjectId,
+					partCode,
+					partName: CLIENT_B251.sharedCapsule.partName,
+					plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
+					sourceModelId: modelIds["01"],
+					sourceModelPartId: capsulePartIds["01"],
+					lifecycleStatus: "PUBLISHED",
+					variancePercentThreshold: 0.05,
+				},
+				create: {
+					id,
+					projectId: storyProjectId,
+					partCode,
+					partName: CLIENT_B251.sharedCapsule.partName,
+					plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
+					sourceModelId: modelIds["01"],
+					sourceModelPartId: capsulePartIds["01"],
+					lifecycleStatus: "PUBLISHED",
+					variancePercentThreshold: 0.05,
+				},
+			});
+		}
+		await tx.partsList.upsert({
+			where: { id: storyPartsListId },
+			update: {
+				projectId: storyProjectId,
+				version: 1,
+				status: "PUBLISHED",
+				sourceRevisionRef: CLIENT_B251.revision,
+				publishedAt: seedClock,
+			},
+			create: {
+				id: storyPartsListId,
+				projectId: storyProjectId,
+				version: 1,
+				status: "PUBLISHED",
+				sourceRevisionRef: CLIENT_B251.revision,
+				publishedAt: seedClock,
+				createdAt: seedClock,
+			},
+		});
+		let storyStepOrder = 1;
+		for (const partCode of Object.keys(storyPlanPartIds)) {
+			for (const [stageId, subStageId] of [
+				[injectionStageId, null],
+				[decorationStageId, subFullSprayId],
+				[assemblyStageId, subSubAssemblyId],
+				[warehouseStageId, subMainPackingId],
+			]) {
+				const id = stableId(`route-step-${projKey}-${partCode}-${storyStepOrder}`);
+				await tx.routingStep.upsert({
+					where: { id },
+					update: {
+						partsListId: storyPartsListId,
+						partId: storyPlanPartIds[partCode],
+						stageId,
+						subStageId,
+						stepOrder: storyStepOrder,
+					},
+					create: {
+						id,
+						partsListId: storyPartsListId,
+						partId: storyPlanPartIds[partCode],
+						stageId,
+						subStageId,
+						stepOrder: storyStepOrder,
+					},
+				});
+				storyStepOrder += 1;
+			}
+		}
+		for (const [lotSuffix, lotCode, lotName, modelNumber, trays, lotStatus] of storyLots[projKey] ?? []) {
+			const qty = trays * tray;
+			const lotId = stableId(`lot-${projKey}-${lotSuffix}`);
+			storyLotIds[lotSuffix] = lotId;
+			const firstPart = CLIENT_B251.models.find((m) => m.modelNumber === modelNumber).parts[0];
+			await tx.lot.upsert({
+				where: { id: lotId },
+				update: {
+					projectId: storyProjectId,
+					lotCode: code(lotCode),
+					lotName,
+					partsListId: storyPartsListId,
+					partsListVersion: 1,
+					partId: storyPlanPartIds[firstPart[0]],
+					partName: firstPart[1],
+					requiredProductionQuantity: qty,
+					status: lotStatus,
+					quantityMagnitude: `${qty}.000000`,
+					quantityUom: "piece",
+					labelPackSize: CLIENT_B251.trayQuantityStandard,
+					createdAtStage: "Planning",
+				},
+				create: {
+					id: lotId,
+					projectId: storyProjectId,
+					lotCode: code(lotCode),
+					lotName,
+					partsListId: storyPartsListId,
+					partsListVersion: 1,
+					partId: storyPlanPartIds[firstPart[0]],
+					partName: firstPart[1],
+					requiredProductionQuantity: qty,
+					status: lotStatus,
+					quantityMagnitude: `${qty}.000000`,
+					quantityUom: "piece",
+					labelPackSize: CLIENT_B251.trayQuantityStandard,
+					createdAtStage: "Planning",
+					createdAt: seedClock,
+				},
+			});
+			const lotModel = CLIENT_B251.models.find((m) => m.modelNumber === modelNumber);
+			const lotPartCodes = [
+				...lotModel.parts.map(([c]) => c),
+				...(CLIENT_B251.decoPartsByModel[modelNumber] ?? [])
+					.map((deco) => deco.partCode)
+					.filter((c) => storyPlanPartIds[c] !== undefined),
+				...(modelNumber === "01" && storyPlanPartIds[CLIENT_B251.sharedCapsule.partCode] !== undefined
+					? [CLIENT_B251.sharedCapsule.partCode]
+					: []),
+			];
+			for (const partCode of lotPartCodes) {
+				const allocId = stableId(`alloc-${projKey}-${lotSuffix}-${partCode}`);
+				storyAllocIds[`${lotSuffix}:${partCode}`] = allocId;
+				await tx.lotPartAllocation.upsert({
+					where: { lotId_partId: { lotId, partId: storyPlanPartIds[partCode] } },
+					update: {
+						quantityMagnitude: `${qty}.000000`,
+						quantityUom: "piece",
+						usageBasis: "1 per product",
+						status: "COMMITTED",
+					},
+					create: {
+						id: allocId,
+						lotId,
+						partId: storyPlanPartIds[partCode],
+						quantityMagnitude: `${qty}.000000`,
+						quantityUom: "piece",
+						usageBasis: "1 per product",
+						status: "COMMITTED",
+						createdAt: seedClock,
+					},
+				});
+			}
+		}
+		for (const [batchSuffix, batchCode, lotSuffix, partCode, stageKey, subKey, batchStatus] of storyBatches[projKey] ?? []) {
+			const id = stableId(`batch-${projKey}-${batchSuffix}`);
+			const stageId = storyStage[stageKey];
+			const subStageId = subKey === "-" ? null : (storySubStage[subKey] ?? null);
+			const lotId = storyLotIds[lotSuffix];
+			const allocId = storyAllocIds[`${lotSuffix}:${partCode}`];
+			await tx.batch.upsert({
+				where: { id },
+				update: {
+					batchCode: code(batchCode),
+					barcodeValue: code(batchCode),
+					lotId,
+					plannedQuantity: tray,
+					labelPackSize: CLIENT_B251.trayQuantityStandard,
+					currentStageId: stageId,
+					currentSubStageId: subStageId,
+					status: batchStatus,
+					createdBySubjectId: operator.id,
+				},
+				create: {
+					id,
+					batchCode: code(batchCode),
+					barcodeValue: code(batchCode),
+					lotId,
+					plannedQuantity: tray,
+					labelPackSize: CLIENT_B251.trayQuantityStandard,
+					currentStageId: stageId,
+					currentSubStageId: subStageId,
+					status: batchStatus,
+					createdBySubjectId: operator.id,
+					createdAt: seedClock,
+				},
+			});
+			await tx.batchPartLine.upsert({
+				where: { batchId_partId: { batchId: id, partId: storyPlanPartIds[partCode] } },
+				update: {
+					quantity: tray,
+					lotPartAllocationId: allocId,
+					quantityMagnitude: `${tray}.000000`,
+					quantityUom: "piece",
+				},
+				create: {
+					batchId: id,
+					partId: storyPlanPartIds[partCode],
+					quantity: tray,
+					lotPartAllocationId: allocId,
+					quantityMagnitude: `${tray}.000000`,
+					quantityUom: "piece",
+				},
+			});
+		}
+	}
+	// August first-prints (desk realism for the replenishment story).
+	{
+		const augBatchId = stableId("batch-aug-augb1");
+		for (const [seq, qty, dueOffset, idSuffix] of [[1, 240, -90, "a1"], [2, 240, -30, "a2"]]) {
+			const printJobId = stableId(`print-job-aug-${idSuffix}`);
+			await tx.printJob.upsert({
+				where: { id: printJobId },
+				update: {
+					batchId: augBatchId,
+					sectionId: injectionSectionId,
+					fromStageId: injectionStageId,
+					fromSubStageId: null,
+					toStageId: decorationStageId,
+					toSubStageId: null,
+					barcodeValue: code("BNI-2608-001"),
+					quantity: qty,
+					sequence: seq,
+					language: "EN",
+					reprintOf: null,
+					renderedPayload: `{"sequence":${seq},"label":"BNI-2608-001-${seq}"}`,
+					status: "SENT",
+					failureReason: null,
+					actor: "aila.torres",
+					actorSubjectId: lineLeader.id,
+					occurredAt: atOffset({ minutes: dueOffset }),
+				},
+				create: {
+					id: printJobId,
+					batchId: augBatchId,
+					sectionId: injectionSectionId,
+					fromStageId: injectionStageId,
+					fromSubStageId: null,
+					toStageId: decorationStageId,
+					toSubStageId: null,
+					barcodeValue: code("BNI-2608-001"),
+					quantity: qty,
+					sequence: seq,
+					language: "EN",
+					reprintOf: null,
+					renderedPayload: `{"sequence":${seq},"label":"BNI-2608-001-${seq}"}`,
+					status: "SENT",
+					failureReason: null,
+					actor: "aila.torres",
+					actorSubjectId: lineLeader.id,
+					occurredAt: atOffset({ minutes: dueOffset }),
+				},
+			});
+		}
+	}
+
 	// Outputs-ledger evidence: first-print injection rows so the desk carryover
 	// cue and Outputs ledger render non-empty for aila.torres. Sequence 1–2
 	// keep the next live print (count+1) continuous. Same-day so reconciliation
@@ -1650,7 +2246,7 @@ async function seedProfile(tx) {
 			where: { id: printJobId },
 			update: {
 				batchId: fwInjBatchId,
-				stationId: injectionSectionId,
+				sectionId: injectionSectionId,
 				fromStageId: injectionStageId,
 				fromSubStageId: null,
 				toStageId: decorationStageId,
@@ -1670,7 +2266,7 @@ async function seedProfile(tx) {
 			create: {
 				id: printJobId,
 				batchId: fwInjBatchId,
-				stationId: injectionSectionId,
+				sectionId: injectionSectionId,
 				fromStageId: injectionStageId,
 				fromSubStageId: null,
 				toStageId: decorationStageId,
@@ -1890,7 +2486,7 @@ async function seedProfile(tx) {
 				batchId: batchIds[batchKey],
 				stageId,
 				subStageId,
-				stationId: stageId === decorationStageId ? decorationSectionId : assemblySubAssemblySectionId,
+				sectionId: stageId === decorationStageId ? decorationSectionId : assemblySubAssemblySectionId,
 				inspectedQuantity: `${qty}.000000`,
 				quantityUom: "piece",
 				status,
@@ -1909,7 +2505,7 @@ async function seedProfile(tx) {
 				batchId: batchIds[batchKey],
 				stageId,
 				subStageId,
-				stationId: stageId === decorationStageId ? decorationSectionId : assemblySubAssemblySectionId,
+				sectionId: stageId === decorationStageId ? decorationSectionId : assemblySubAssemblySectionId,
 				inspectedQuantity: `${qty}.000000`,
 				quantityUom: "piece",
 				status,
@@ -1941,7 +2537,7 @@ async function seedProfile(tx) {
 				batchId: batchIds[batchKey],
 				stageId,
 				subStageId,
-				stationId:
+				sectionId:
 					stageId === warehouseStageId
 						? warehouseSectionId
 						: stageId === decorationStageId
@@ -1965,7 +2561,7 @@ async function seedProfile(tx) {
 				batchId: batchIds[batchKey],
 				stageId,
 				subStageId,
-				stationId:
+				sectionId:
 					stageId === warehouseStageId
 						? warehouseSectionId
 						: stageId === decorationStageId
@@ -2322,9 +2918,11 @@ async function seedProfile(tx) {
 		capsuleAttachments: capsuleAttachmentCount,
 		catalogModelParts: injPartCount + decoPartCount + paintPartCount + capsuleAttachmentCount,
 		planParts: Object.keys(planPartIds).length,
-		plans: 1,
-		lots: lotDefs.length,
-		batches: batchDefs.length,
+		plans: 1 + storyProjects.length,
+		lots: lotDefs.length + Object.values(storyLots).reduce((sum, lots) => sum + lots.length, 0),
+		batches:
+			batchDefs.length +
+			Object.values(storyBatches).reduce((sum, batches) => sum + batches.length, 0),
 		stations: 11,
 		workProcesses: 16,
 		booths: 2,

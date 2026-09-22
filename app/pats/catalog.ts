@@ -208,6 +208,7 @@ export function catalogController(
 								}
 							: {}),
 						routingSteps: normalizeRoutingSteps(part.routingSteps),
+						plannedCycleTimes: normalizeCycleTimeMap(part.plannedCycleTimes),
 					})),
 				};
 			}));
@@ -288,6 +289,21 @@ function normalizeRoutingSteps(value: unknown): Array<{ stageId: string; subStag
 			subStageId: typeof step.subStageId === "string" ? step.subStageId : null,
 		}];
 	});
+}
+
+function normalizeCycleTimeMap(value: unknown): Record<string, number> | null {
+	if (!isRecord(value)) return null;
+	const entries = Object.entries(value);
+	if (entries.length === 0) return null;
+	const out: Record<string, number> = {};
+	for (const [key, entry] of entries) {
+		if (key.length === 0 || key.length > 220) return null;
+		if (typeof entry !== "number" || !Number.isInteger(entry) || entry < 1 || entry > 86400) {
+			return null;
+		}
+		out[key] = entry;
+	}
+	return out;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

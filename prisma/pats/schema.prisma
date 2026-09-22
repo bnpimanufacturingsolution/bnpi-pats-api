@@ -245,6 +245,11 @@ model ModelPart {
   // Ordered catalog-level StageStepRef[] template. Promotion into a versioned PartsList is
   // intentionally application-controlled until the template contract is confirmed.
   routingSteps    Json
+  // Planned/required cycle time, seconds, keyed per route step
+  // (`stageId::subStageId`, empty subStageId when stage-wide). Null = unset
+  // (honest absence, never zero-filled). Master default consumed by projects;
+  // runs snapshot it onto Part at creation.
+  plannedCycleTimes Json?
   projectParts    Part[]                  @relation("ModelPartProjectParts")
   bomLines        BomLine[]
 
@@ -529,6 +534,12 @@ model Part {
   // application falls back to the system default (5%) when both are null.
   variancePercentThreshold Float?
   varianceAbsoluteFloor    Int?
+  // Planned/required cycle time snapshot, seconds per route step — copied from
+  // the catalog ModelPart at project creation (runs freeze master values,
+  // like parts-list versioning).
+  plannedCycleTimes Json?
+  // Finalization edit; null = use the snapshot above (master fallback chain).
+  plannedCycleTimesOverride Json?
   lifecycleStatus          CatalogLifecycleStatus @default(DRAFT)
   rowVersion               Int                    @default(1)
   routingSteps             RoutingStep[]
@@ -776,6 +787,7 @@ model Section {
   printerAgent          String?
   boundSteps            StationStep[]
   booths                Booth[]
+  lines                 Line[]
   printJobs             PrintJob[]
 
   @@index([workspaceId])
@@ -791,8 +803,8 @@ enum PrintJobStatus {
 model PrintJob {
   id               String         @id @default(uuid())
   batchId          String
-  stationId        String
-  station          Section        @relation(fields: [stationId], references: [id])
+  sectionId        String
+  section          Section        @relation(fields: [sectionId], references: [id])
   fromStageId      String
   fromSubStageId   String?
   toStageId        String?
@@ -810,7 +822,7 @@ model PrintJob {
   occurredAt       DateTime       @default(now())
 
   @@index([batchId, occurredAt])
-  @@index([stationId, occurredAt])
+  @@index([sectionId, occurredAt])
 }
 
 /// Catalog work process under a SubStage (routing/CT/filter grain). Not a device mount.
@@ -827,6 +839,7 @@ model WorkProcess {
   isEnabled       Boolean       @default(true)
   isSystemSeed    Boolean       @default(false)
   booths          Booth[]
+  lines           Line[]
   dailySheets     MonitoringDailySheet[]
   stationBoards   MonitoringStationBoard[]
 
@@ -836,14 +849,63 @@ model WorkProcess {
   @@index([parentProcessId])
 }
 
+/// Station-screen line instance (1 line = 1 screen). Leaf-owned: hangs under a
+/// leaf WorkProcess; parent counts roll up. Identity is place, not person.
+model Line {
+  id               String   @id @default(uuid())
+  sectionId        String
+  section          Section  @relation(fields: [sectionId], references: [id])
+  processId        String
+  workProcess      WorkProcess @relation(fields: [processId], references: [id])
+  lineCode         String   @unique
+  label            String?
+  assignedLeaderId String
+  assignedLeader   Subject  @relation("LineAssignedLeader", fields: [assignedLeaderId], references: [id])
+  activeLeaderId   String?
+  activeLeader     Subject? @relation("LineActiveLeader", fields: [activeLeaderId], references: [id])
+  displayOrder     Int
+  isEnabled        Boolean  @default(true)
+  operatorAssignments LineOperatorAssignment[]
+  rowVersion       Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([sectionId])
+  @@index([processId])
+  @@index([activeLeaderId])
+}
+
+enum LineOperatorAssignmentStatus {
+  ACTIVE
+  ENDED
+}
+
+/// Operator-on-line assignment (single-line invariant). Ending a row creates
+/// ENDED evidence; rows are never rewritten except to end them.
+model LineOperatorAssignment {
+  id             String                     @id @default(uuid())
+  lineId         String
+  line           Line                       @relation(fields: [lineId], references: [id])
+  subjectId      String
+  subject        Subject                    @relation("LineOperatorAssignmentSubject", fields: [subjectId], references: [id])
+  reason         String?
+  status         LineOperatorAssignmentStatus @default(ACTIVE)
+  actorSubjectId String
+  startedAt      DateTime                   @default(now())
+  endedAt        DateTime?
+
+  @@index([subjectId, status])
+  @@index([lineId, status])
+}
+
 /// Physical floor capacity cell. Many booths may share one Station PC (1:N).
 model Booth {
   id             String       @id @default(uuid())
   workspaceId    String
   boothCode      String
   label          String?
-  stationId      String?
-  station        Section?     @relation(fields: [stationId], references: [id])
+  sectionId      String?
+  section        Section?     @relation(fields: [sectionId], references: [id])
   stageId        String
   subStageId     String?
   workProcessId  String?
@@ -853,7 +915,7 @@ model Booth {
   stationBoards  MonitoringStationBoard[]
 
   @@unique([workspaceId, boothCode])
-  @@index([stationId])
+  @@index([sectionId])
   @@index([stageId, subStageId])
 }
 
@@ -914,8 +976,8 @@ model MonitoringStationBoard {
 }
 
 model StationStep {
-  stationId  String
-  station    Section   @relation(fields: [stationId], references: [id])
+  sectionId  String
+  section    Section   @relation(fields: [sectionId], references: [id])
   stageId    String
   stage      Stage     @relation(fields: [stageId], references: [id])
   subStageId String?
@@ -923,7 +985,7 @@ model StationStep {
   // Composite id needs a non-null member for subStageId-null base steps.
   id         String    @id @default(uuid())
 
-  @@unique([stationId, stageId, subStageId])
+  @@unique([sectionId, stageId, subStageId])
 }
 
 model WorkInstruction {
@@ -1027,7 +1089,7 @@ model QualityInspection {
   batch                Batch                   @relation(fields: [batchId], references: [id])
   stageId              String
   subStageId           String?
-  stationId            String?
+  sectionId            String?
   inspectedQuantity    Decimal?                @db.Decimal(18, 6)
   quantityUom          String?
   status               QualityInspectionStatus @default(OPEN)
@@ -1186,6 +1248,9 @@ model Subject {
   createdBatches              Batch[]                @relation("BatchCreator")
   auditRecords                AuditRecord[]          @relation("AuditActor")
   idempotencyRecords          IdempotencyRecord[]
+  assignedLines               Line[]                 @relation("LineAssignedLeader")
+  activeLines                 Line[]                 @relation("LineActiveLeader")
+  lineOperatorAssignments     LineOperatorAssignment[] @relation("LineOperatorAssignmentSubject")
 
   @@unique([provider, issuer, providerSubject])
   @@index([status])
