@@ -1,5 +1,7 @@
 import { z } from "zod";
-import "dotenv/config";
+import dotenv from "dotenv";
+
+dotenv.config({ override: true });
 
 const envSchema = z.object({
 	// Server
@@ -11,7 +13,9 @@ const envSchema = z.object({
 	BETTER_STACK_HOST: z.string().optional(),
 
 	// CORS
-	CORS_ORIGINS: z.string().default("http://localhost:5173"),
+	CORS_ORIGINS: z
+		.string()
+		.default("http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174"),
 	CORS_CREDENTIALS: z.enum(["true", "false"]).default("false"),
 
 	// Redis

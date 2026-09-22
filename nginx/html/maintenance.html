@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bandai PATS API - Maintenance</title>
+  <meta name="robots" content="noindex, nofollow">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;color:#e2e8f0;overflow:hidden;position:relative}
+    body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,rgba(0,184,148,0.08) 0%,transparent 50%),radial-gradient(ellipse at 70% 80%,rgba(0,206,201,0.06) 0%,transparent 50%);pointer-events:none}
+    .bg-elements{position:fixed;inset:0;pointer-events:none;z-index:0}.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.4;animation:float 6s ease-in-out infinite}.orb-1{width:300px;height:300px;background:#00b894;top:10%;left:5%;animation-delay:0s}.orb-2{width:200px;height:200px;background:#00cec9;bottom:15%;right:10%;animation-delay:2s}.orb-3{width:150px;height:150px;background:#4a6cf7;top:50%;left:50%;animation-delay:4s}
+    .container{position:relative;z-index:1;text-align:center;max-width:520px;width:100%;animation:fadeIn 0.8s ease-out}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    .logo{width:96px;height:96px;margin:0 auto 28px;background:linear-gradient(135deg,#00b894 0%,#00cec9 100%);border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:800;color:#051a18;box-shadow:0 12px 40px rgba(0,184,148,0.35),0 0 0 1px rgba(0,184,148,0.1),inset 0 1px 0 rgba(255,255,255,0.1);position:relative}
+    .logo::after{content:"";position:absolute;inset:-2px;border-radius:22px;background:linear-gradient(135deg,rgba(0,184,148,0.4),rgba(0,206,201,0.2));z-index:-1;filter:blur(20px);opacity:0.6}
+    h1{font-size:30px;font-weight:700;letter-spacing:-0.02em;margin-bottom:10px;color:#f8fafc;background:linear-gradient(135deg,#f8fafc 0%,#94a3b8 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .subtitle{font-size:15px;color:#64748b;margin-bottom:28px;font-weight:400}
+    .status-badge{display:inline-flex;align-items:center;gap:10px;padding:14px 28px;background:rgba(225,112,85,0.12);border:1px solid rgba(225,112,85,0.25);border-radius:100px;font-size:13px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#fda493;margin-bottom:28px;position:relative;overflow:hidden}
+    .status-badge::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#e17055,#fdcb6e)}
+    .status-dot{width:10px;height:10px;background:#e17055;border-radius:50%;animation:pulse 1.5s ease-in-out infinite;box-shadow:0 0 12px rgba(225,112,85,0.6)}
+    .card{background:rgba(15,23,42,0.7);border:1px solid rgba(148,163,184,0.12);border-radius:16px;padding:28px;margin:28px 0;text-align:left;backdrop-filter:blur(10px);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+    .card-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(148,163,184,0.08);font-size:14px}
+    .card-row:last-child{border-bottom:none;padding-bottom:0}
+    .card-label{color:#64748b;font-weight:500}
+    .card-value{color:#e2e8f0;font-weight:600;font-family:'SF Mono','Fira Code',monospace;font-size:13px}
+    .card-value.warn{color:#fdcb6e}
+    .card-value.error{color:#e17055}
+    .progress-wrapper{margin-top:20px}
+    .progress-bar{height:6px;background:rgba(148,163,184,0.15);border-radius:3px;overflow:hidden}
+    .progress-fill{height:100%;width:0%;background:linear-gradient(90deg,#e17055,#fdcb6e,#00b894);border-radius:3px;animation:progress 30s linear forwards}
+    @keyframes progress{to{width:100%}}
+    .progress-text{font-size:12px;color:#64748b;margin-top:8px;text-align:right}
+    .refresh-btn{width:100%;background:linear-gradient(135deg,#00b894 0%,#00cec9 100%);color:#051a18;border:none;padding:16px 32px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;transition:all 0.2s ease;box-shadow:0 4px 20px rgba(0,184,148,0.35);margin-top:24px;position:relative;overflow:hidden}
+    .refresh-btn::before{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.2),transparent);opacity:0;transition:opacity 0.2s}
+    .refresh-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,184,148,0.5)}
+    .refresh-btn:hover::before{opacity:1}
+    .refresh-btn:active{transform:translateY(0)}
+    .refresh-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+    .refresh-btn .spinner{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(5,26,24,0.3);border-top-color:#051a18;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:10px;vertical-align:middle;display:none}
+    .refresh-btn.loading .btn-text{display:none}
+    .refresh-btn.loading .spinner{display:inline-block}
+    .links{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:24px}
+    .links a{display:flex;align-items:center;gap:6px;color:#64748b;font-size:13px;text-decoration:none;padding:8px 14px;border:1px solid rgba(148,163,184,0.15);border-radius:8px;transition:all 0.2s;background:rgba(15,23,42,0.4)}
+    .links a:hover{color:#00cec9;border-color:rgba(0,206,201,0.3);background:rgba(0,184,148,0.08);transform:translateY(-1px)}
+    .links svg{width:16px;height:16px;flex-shrink:0}
+    .footer{margin-top:32px;padding-top:20px;border-top:1px solid rgba(148,163,184,0.1);font-size:12px;color:#475569}
+    .footer a{color:#64748b;text-decoration:none;margin:0 6px}
+    .footer a:hover{color:#00cec9}
+    @media (max-width:480px){.container{padding:0 8px}h1{font-size:24px}.logo{width:80px;height:80px;font-size:34px}.card{padding:20px}}
+  </style>
+</head>
+<body>
+  <div class="bg-elements">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+  <div class="container">
+    <div class="logo">P</div>
+    <h1>Bandai PATS API</h1>
+    <p class="subtitle">Production Asset Tracking System</p>
+
+    <div class="status-badge">
+      <span class="status-dot"></span>
+      <span>System Maintenance in Progress</span>
+    </div>
+
+    <div class="card">
+      <div class="card-row">
+        <span class="card-label">Domain</span>
+        <span class="card-value">bnpipats.tech</span>
+      </div>
+      <div class="card-row">
+        <span class="card-label">Status</span>
+        <span class="card-value error">Service Unavailable (503)</span>
+      </div>
+      <div class="card-row">
+        <span class="card-label">Detected</span>
+        <span class="card-value" id="startTime"></span>
+      </div>
+      <div class="card-row">
+        <span class="card-label">Estimated Recovery</span>
+        <span class="card-value warn" id="eta"></span>
+      </div>
+    </div>
+
+    <div class="progress-wrapper">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <p class="progress-text">Auto-retry in <span id="countdown">30</span>s...</p>
+    </div>
+
+    <button class="refresh-btn" id="refreshBtn" onclick="checkStatus()">
+      <span class="spinner"></span>
+      <span class="btn-text">Check Status Now</span>
+    </button>
+
+    <div class="links">
+      <a href="https://status.bnpipats.tech" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Status Page
+      </a>
+      <a href="mailto:devops@bandai.com">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Contact Support
+      </a>
+      <a href="https://github.com/bandai-infra/bnpi-pats-api" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+        Repository
+      </a>
+    </div>
+
+    <div class="footer">
+      Bandai PATS API v1.0 &copy; 2026 Bandai Namco
+      <a href="https://bandai.com" target="_blank" rel="noopener">bandai.com</a>
+      <a href="mailto:legal@bandai.com">Legal</a>
+    </div>
+  </div>
+
+  <script>
+    const startTime = new Date();
+    const recoveryTime = new Date(startTime.getTime() + 30 * 60 * 1000);
+
+    document.getElementById('startTime').textContent = startTime.toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+    document.getElementById('eta').textContent = recoveryTime.toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit'
+    });
+
+    let countdown = 30;
+    const countdownEl = document.getElementById('countdown');
+    const progressFill = document.getElementById('progressFill');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const btnText = refreshBtn.querySelector('.btn-text');
+
+    const countdownInterval = setInterval(() => {
+      countdown--;
+      countdownEl.textContent = countdown;
+      progressFill.style.width = `${(30 - countdown) / 30 * 100}%`;
+      if (countdown <= 0) {
+        clearInterval(countdownInterval);
+        checkStatus();
+      }
+    }, 1000);
+
+    async function checkStatus() {
+      refreshBtn.classList.add('loading');
+      refreshBtn.disabled = true;
+      btnText.textContent = 'Checking...';
+
+      try {
+        const res = await fetch('/health', { method: 'GET', cache: 'no-cache' });
+        if (res.ok) {
+          window.location.reload();
+          return;
+        }
+      } catch (e) {
+        // Ignore network errors
+      }
+
+      // Still down - reset countdown
+      refreshBtn.classList.remove('loading');
+      refreshBtn.disabled = false;
+      btnText.textContent = 'Check Status Now';
+      countdown = 30;
+      countdownEl.textContent = countdown;
+      progressFill.style.width = '0%';
+      clearInterval(countdownInterval);
+      setInterval(() => {
+        countdown--;
+        countdownEl.textContent = countdown;
+        progressFill.style.width = `${(30 - countdown) / 30 * 100}%`;
+        if (countdown <= 0) checkStatus();
+      }, 1000);
+    }
+
+    // Auto-check on visibility change (user returns to tab)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) checkStatus();
+    });
+  </script>
+</body>
+</html>

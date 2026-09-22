@@ -96,7 +96,14 @@ function defaultDaySlots(actuals = []) {
 
 /** Calendar day for monitoring encode seed (local “today” so UI lists show data immediately). */
 function monitoringSeedDate() {
-	return new Date().toISOString().slice(0, 10);
+	const now = new Date();
+	const offsetMs = now.getTime() - now.getTimezoneOffset() * 60_000;
+	return new Date(offsetMs).toISOString().slice(0, 10);
+}
+
+/** Deterministic sheet identity used by the Production Desk (`desk-daily:{station}:{process}:{date}`). */
+function deskDailySheetId(stationId, workProcessId, date) {
+	return `desk-daily:${stationId}:${workProcessId}:${date}`;
 }
 
 /**
@@ -942,6 +949,8 @@ async function seedProfile(tx) {
 	const processFullSprayId = stableId("work-process-full-spray");
 	const processMaskSprayId = stableId("work-process-mask-spray");
 	const processTampoId = stableId("work-process-tampo");
+	const processSubAssemblyId = stableId("work-process-sub-assembly");
+	const processAssortmentId = stableId("work-process-assortment");
 	const processMainPackingId = stableId("work-process-main-packing");
 
 	for (const [id, subStageId, name, displayOrder, labelledCycleTimeSec] of [
@@ -949,6 +958,8 @@ async function seedProfile(tx) {
 		[processFullSprayId, subFullSprayId, "Full Spray", 1, 12],
 		[processMaskSprayId, subMaskSprayId, "Mask Spray", 2, 10],
 		[processTampoId, subTampoId, "Tampo", 3, 6],
+		[processSubAssemblyId, subSubAssemblyId, "Sub-Assembly", 1, 10],
+		[processAssortmentId, subAssortmentId, "Assortment", 2, 8],
 		[processMainPackingId, subMainPackingId, "Main Packing", 1, null],
 	]) {
 		await tx.workProcess.upsert({
@@ -1015,10 +1026,14 @@ async function seedProfile(tx) {
 		data: { isEnabled: false },
 	});
 
-	// Physical booths under decoration Full Spray station (1 station : N booths)
-	for (const [id, boothCode, label, displayOrder] of [
-		[stableId("booth-01"), "01", "Booth 01", 1],
-		[stableId("booth-02"), "02", "Booth 02", 2],
+	// Physical booths under Decoration & Assembly stations (1 station : N booths)
+	for (const [id, boothCode, label, stationId, stageId, subStageId, workProcessId, displayOrder] of [
+		[stableId("booth-01"), "01", "Booth 01", decorationStationId, decorationStageId, subFullSprayId, processFullSprayId, 1],
+		[stableId("booth-02"), "02", "Booth 02", decorationStationId, decorationStageId, subFullSprayId, processFullSprayId, 2],
+		[stableId("booth-03"), "03", "Booth 03", decorationMaskStationId, decorationStageId, subMaskSprayId, processMaskSprayId, 1],
+		[stableId("booth-04"), "04", "Booth 04", decorationTampoStationId, decorationStageId, subTampoId, processTampoId, 1],
+		[stableId("booth-05"), "05", "Booth 05", assemblySubAssemblyStationId, assemblyStageId, subSubAssemblyId, processSubAssemblyId, 1],
+		[stableId("booth-06"), "06", "Booth 06", assemblyAssortmentStationId, assemblyStageId, subAssortmentId, processAssortmentId, 1],
 	]) {
 		await tx.booth.upsert({
 			where: { id },
@@ -1026,10 +1041,10 @@ async function seedProfile(tx) {
 				workspaceId: "PATS",
 				boothCode: code(boothCode),
 				label,
-				stationId: decorationStationId,
-				stageId: decorationStageId,
-				subStageId: subFullSprayId,
-				workProcessId: processFullSprayId,
+				stationId,
+				stageId,
+				subStageId,
+				workProcessId,
 				displayOrder,
 				isEnabled: true,
 			},
@@ -1038,10 +1053,10 @@ async function seedProfile(tx) {
 				workspaceId: "PATS",
 				boothCode: code(boothCode),
 				label,
-				stationId: decorationStationId,
-				stageId: decorationStageId,
-				subStageId: subFullSprayId,
-				workProcessId: processFullSprayId,
+				stationId,
+				stageId,
+				subStageId,
+				workProcessId,
 				displayOrder,
 				isEnabled: true,
 			},
@@ -1528,31 +1543,62 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// Outputs-ledger evidence: first-print injection rows so the desk carryover
-	// cue and Outputs ledger render non-empty for demo.lineleader. Sequence 1–2
-	// keep the next live print (count+1) continuous. Same-day so reconciliation
-	// (occurredAt date === sheet production date) counts them as labeled history.
+	// Outputs-ledger evidence: first-print rows so desk carryover cues and
+	// Outputs ledgers render realistic data across all stations.
+	// Sequence 1 entries count towards todayOutput and lotPlan completion.
+	// Primary injection desk bridge batch:
 	const fwInjBatchId = batchIds["batch-fw-inj"];
-	for (const [seq, qty, dueOffset, idSuffix] of [
-		[1, 240, -150, "1"],
-		[2, 120, -40, "2"],
-	]) {
-		const printJobId = stableId(`print-job-inj-demo-${idSuffix}`);
+	const printJobDefs = [
+		// Injection
+		["inj-fw-1", fwInjBatchId, injectionStationId, injectionStageId, null, decorationStageId, null, "BNI-2607-015", 240, 1, null, -150],
+		["inj-fw-2", fwInjBatchId, injectionStationId, injectionStageId, null, decorationStageId, null, "BNI-2607-015", 120, 2, null, -40],
+		["inj-av-1", "batch-av-inj", injectionStationId, injectionStageId, null, decorationStageId, subFullSprayId, "BNI-2607-001", 240, 1, null, -180],
+		["inj-hd-1", "batch-hd-inj", injectionStationId, injectionStageId, null, decorationStageId, subMaskSprayId, "BNI-2607-004", 240, 1, null, -160],
+		["inj-tc-1", "batch-tc-inj", injectionStationId, injectionStageId, null, assemblyStageId, subAssortmentId, "BNI-2607-006", 240, 1, null, -140],
+		["inj-dr-1", "batch-dr-inj", injectionStationId, injectionStageId, null, decorationStageId, subFullSprayId, "BNI-2607-010", 240, 1, null, -130],
+		["inj-tr-1", "batch-tr-inj", injectionStationId, injectionStageId, null, assemblyStageId, subAssortmentId, "BNI-2607-012", 240, 1, null, -110],
+
+		// Decoration · Full Spray
+		["dec-fs-dr-1", "batch-dr-dec", decorationStationId, decorationStageId, subFullSprayId, assemblyStageId, subSubAssemblyId, "BNI-2607-011", 240, 1, null, -90],
+		["dec-fs-av-1", "batch-av-dec", decorationStationId, decorationStageId, subFullSprayId, assemblyStageId, subSubAssemblyId, "BNI-2607-002", 240, 1, null, -150],
+		["dec-fs-dr-2", "batch-dr-dec", decorationStationId, decorationStageId, subFullSprayId, assemblyStageId, subSubAssemblyId, "BNI-2607-011", 240, 2, null, -30],
+
+		// Decoration · Mask Spray
+		["dec-ms-hd-1", "batch-hd-dec", decorationMaskStationId, decorationStageId, subMaskSprayId, assemblyStageId, subSubAssemblyId, "BNI-2607-005", 240, 1, null, -120],
+
+		// Decoration · Tampo
+		["dec-tp-fw-1", "batch-fw-dec", decorationTampoStationId, decorationStageId, subTampoId, assemblyStageId, subSubAssemblyId, "BNI-2607-008", 240, 1, null, -100],
+
+		// Assembly · Sub-Assembly
+		["asm-sub-av-1", "batch-av-qc", assemblySubAssemblyStationId, assemblyStageId, subSubAssemblyId, warehouseStageId, subMainPackingId, "BNI-2607-003", 240, 1, null, -75],
+		["asm-sub-hd-1", "batch-hd-asm", assemblySubAssemblyStationId, assemblyStageId, subSubAssemblyId, warehouseStageId, subMainPackingId, "BNI-2607-014", 240, 1, null, -45],
+
+		// Assembly · Assortment
+		["asm-ast-tc-1", "batch-tc-asm", assemblyAssortmentStationId, assemblyStageId, subAssortmentId, warehouseStageId, subMainPackingId, "BNI-2607-007", 240, 1, null, -60],
+		["asm-ast-tr-1", "batch-tr-asm", assemblyAssortmentStationId, assemblyStageId, subAssortmentId, warehouseStageId, subMainPackingId, "BNI-2607-013", 240, 1, null, -25],
+
+		// Warehouse · Main Packing
+		["wh-pk-av-1", "batch-av-wh", warehouseStationId, warehouseStageId, subMainPackingId, warehouseStageId, null, "BNI-2607-009", 240, 1, null, -15],
+	];
+
+	for (const [key, batchKey, stationId, fromStageId, fromSubStageId, toStageId, toSubStageId, batchBarcode, qty, seq, reprintOf, dueOffset] of printJobDefs) {
+		const printJobId = stableId(`print-job-${key}`);
+		const batchId = batchIds[batchKey] ?? batchKey;
 		await tx.printJob.upsert({
 			where: { id: printJobId },
 			update: {
-				batchId: fwInjBatchId,
-				stationId: injectionStationId,
-				fromStageId: injectionStageId,
-				fromSubStageId: null,
-				toStageId: decorationStageId,
-				toSubStageId: null,
-				barcodeValue: code("BNI-2607-015"),
+				batchId,
+				stationId,
+				fromStageId,
+				fromSubStageId,
+				toStageId,
+				toSubStageId,
+				barcodeValue: code(batchBarcode),
 				quantity: qty,
 				sequence: seq,
 				language: "EN",
-				reprintOf: null,
-				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"DEMO-${seq}"}`,
+				reprintOf,
+				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"${code(batchBarcode)}-${seq}"}`,
 				status: "SENT",
 				failureReason: null,
 				actor: `${profile}.lineleader`,
@@ -1561,18 +1607,18 @@ async function seedProfile(tx) {
 			},
 			create: {
 				id: printJobId,
-				batchId: fwInjBatchId,
-				stationId: injectionStationId,
-				fromStageId: injectionStageId,
-				fromSubStageId: null,
-				toStageId: decorationStageId,
-				toSubStageId: null,
-				barcodeValue: code("BNI-2607-015"),
+				batchId,
+				stationId,
+				fromStageId,
+				fromSubStageId,
+				toStageId,
+				toSubStageId,
+				barcodeValue: code(batchBarcode),
 				quantity: qty,
 				sequence: seq,
-				reprintOf: null,
+				reprintOf,
 				language: "EN",
-				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"DEMO-${seq}"}`,
+				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"${code(batchBarcode)}-${seq}"}`,
 				status: "SENT",
 				actor: `${profile}.lineleader`,
 				actorSubjectId: lineLeader.id,
@@ -1819,10 +1865,14 @@ async function seedProfile(tx) {
 
 	// Completed inspections with decisions for history panel
 	const qcDoneDefs = [
-		["qi-b251-hold", "batch-av-dec", "B251-01-01", "Avocado Burger Upper Bun", tray, decorationStageId, subFullSprayId, "HOLD", "ROUTING_REVIEW", "Batch advanced without full decoration completion evidence.", 0, 6],
-		["qi-b251-pass-wh", "batch-av-wh", "B251-01-01", "Avocado Burger Upper Bun", 240, warehouseStageId, subMainPackingId, "PASSED", "VISUAL_OK", "Pack appearance and label match B251 tray standard.", 2, 4],
-		["qi-b251-fail-hd", "batch-hd-dec", "B251-01-10", "Cheese Hotdog", tray, decorationStageId, subMaskSprayId, "FAILED", "PAINT_DEFECT", "Mask spray miss on Cheese Hotdog body — return to Decoration.", 1, 3],
-		["qi-b251-pass-fw", "batch-fw-dec", "B251-01-15", "Fries", 240, decorationStageId, subTampoId, "PASSED", "TAMPO_OK", "Tampo registration within tolerance for Potato Wedge fries.", 2, 2],
+		["qi-b251-hold", "batch-av-dec", "B251-01-01", "Avocado Burger Upper Bun", tray, decorationStageId, subFullSprayId, "HOLD", "ROUTING_REVIEW", "Batch advanced without full decoration completion evidence.", 0, -3],
+		["qi-b251-pass-wh", "batch-av-wh", "B251-01-01", "Avocado Burger Upper Bun", 240, warehouseStageId, subMainPackingId, "PASSED", "VISUAL_OK", "Pack appearance and label match B251 tray standard.", 0, -1],
+		["qi-b251-fail-hd", "batch-hd-dec", "B251-01-10", "Cheese Hotdog", tray, decorationStageId, subMaskSprayId, "FAILED", "PAINT_DEFECT", "Mask spray miss on Cheese Hotdog body — return to Decoration.", 0, -2],
+		["qi-b251-pass-fw", "batch-fw-dec", "B251-01-15", "Fries", 240, decorationStageId, subTampoId, "PASSED", "TAMPO_OK", "Tampo registration within tolerance for Potato Wedge fries.", 0, -2],
+		["qi-b251-pass-dr", "batch-dr-dec", "B251-01-20", "Ice L", tray, decorationStageId, subFullSprayId, "PASSED", "SPRAY_OK", "Full spray coat uniform and defect-free.", 0, -1],
+		["qi-b251-pass-avqc", "batch-av-qc", "B251-01-04", "Cheese & Patty", tray, assemblyStageId, subSubAssemblyId, "PASSED", "FIT_OK", "Sub-assembly snap-fit within spec.", 0, -1],
+		["qi-b251-pass-tc", "batch-tc-asm", "B251-01-12", "Right Taco", tray, assemblyStageId, subAssortmentId, "PASSED", "ASSORT_OK", "Assortment check verified.", 0, -1],
+		["qi-b251-pass-tr", "batch-tr-asm", "B251-01-23", "Tray", tray, assemblyStageId, subAssortmentId, "PASSED", "TRAY_OK", "Tray packaging complete.", 0, -1],
 	];
 	for (const [key, batchKey, partCode, partName, qty, stageId, subStageId, decision, reasonCode, reasonNote, day, hour] of qcDoneDefs) {
 		const inspectionId = stableId(key);
@@ -1967,23 +2017,22 @@ async function seedProfile(tx) {
 	const booth01Id = stableId("booth-01");
 	const booth02Id = stableId("booth-02");
 
-	const sheetFullSpraySlots = defaultDaySlots([206, 190, 190, 190, 0, 185, 175, null, null, null]);
-	const sheetFullSprayPayload = {
-		id: stableId("mon-sheet-full-spray"),
+	const sheetFullSpraySlots = defaultDaySlots([206, 190, 190, 0, 185, 175, null, null, null, null]);
+	const sheetFullSprayBase = {
 		date: monDate,
 		lineId: "line-main",
-		lineLabel: "Main line",
+		lineLabel: "PATS",
 		processId: processFullSprayId,
 		processName: "Full Spray",
-		lineLeaderName: "DEMO Line Leader",
+		lineLeaderName: `${prefix} Line Leader`,
 		productId: productB251Id,
 		productName: CLIENT_B251.productName,
-		modelId: "01",
-		modelName: "Avocado Burger",
-		partId: planPartIds["B251-01-01"] ?? "part-unknown",
-		partName: "Avocado Burger body",
-		lotId: stableId("lot-avocado"),
-		lotCode: code("LOT-B251-01"),
+		modelId: "05",
+		modelName: "Cola / Ice Coffee",
+		partId: planPartIds["B251-01-20"] ?? planPartIds["B251-01-01"] ?? "part-unknown",
+		partName: "Ice L",
+		lotId: stableId("lot-drink"),
+		lotCode: code("LOT-B251-05"),
 		targetPerShift: 1440,
 		hourlyTarget: 192,
 		operatorNames: "Operator A / Operator B",
@@ -1994,20 +2043,19 @@ async function seedProfile(tx) {
 		updatedAt: new Date().toISOString(),
 	};
 
-	const sheetMaskSlots = defaultDaySlots([170, 180, 0, 165, 160, null, null, null, null, null]);
-	const sheetMaskPayload = {
-		id: stableId("mon-sheet-mask-spray"),
+	const sheetMaskSlots = defaultDaySlots([188, 182, 176, 0, 170, null, null, null, null, null]);
+	const sheetMaskBase = {
 		date: monDate,
 		lineId: "line-main",
-		lineLabel: "Main line",
+		lineLabel: "PATS",
 		processId: processMaskSprayId,
 		processName: "Mask Spray",
-		lineLeaderName: "DEMO Line Leader",
+		lineLeaderName: `${prefix} Line Leader`,
 		productId: productB251Id,
 		productName: CLIENT_B251.productName,
 		modelId: "02",
 		modelName: "Cheese Hotdog",
-		partId: planPartIds["B251-01-02"] ?? "part-unknown",
+		partId: planPartIds["B251-01-10"] ?? planPartIds["B251-01-02"] ?? "part-unknown",
 		partName: "Cheese Hotdog body",
 		lotId: stableId("lot-hotdog"),
 		lotCode: code("LOT-B251-02"),
@@ -2021,7 +2069,165 @@ async function seedProfile(tx) {
 		updatedAt: new Date().toISOString(),
 	};
 
-	for (const payload of [sheetFullSprayPayload, sheetMaskPayload]) {
+	const sheetTampoSlots = defaultDaySlots([165, 158, 155, 0, null, null, null, null, null, null]);
+	const sheetTampoBase = {
+		date: monDate,
+		lineId: "line-main",
+		lineLabel: "PATS",
+		processId: processTampoId,
+		processName: "Tampo",
+		lineLeaderName: `${prefix} Line Leader`,
+		productId: productB251Id,
+		productName: CLIENT_B251.productName,
+		modelId: "04",
+		modelName: "Potato Wedge",
+		partId: planPartIds["B251-01-15"] ?? "part-unknown",
+		partName: "Fries",
+		lotId: stableId("lot-fries"),
+		lotCode: code("LOT-B251-04"),
+		targetPerShift: 1200,
+		hourlyTarget: 160,
+		operatorNames: "Operator D",
+		inputPartsAvailable: 1200,
+		slots: sheetTampoSlots,
+		defectiveQty: 2,
+		status: "draft",
+		updatedAt: new Date().toISOString(),
+	};
+
+	const sheetMoldingSlots = defaultDaySlots([310, 298, 290, 0, 295, 288, null, null, null, null]);
+	const sheetMoldingBase = {
+		date: monDate,
+		lineId: "line-main",
+		lineLabel: "PATS",
+		processId: processMoldingId,
+		processName: "Molding",
+		lineLeaderName: `${prefix} Line Leader`,
+		productId: productB251Id,
+		productName: CLIENT_B251.productName,
+		modelId: "01",
+		modelName: "Avocado Burger",
+		partId: planPartIds["B251-01-01"] ?? "part-unknown",
+		partName: "Avocado Burger Upper Bun",
+		lotId: stableId("lot-avocado"),
+		lotCode: code("LOT-B251-01"),
+		targetPerShift: 2250,
+		hourlyTarget: 300,
+		operatorNames: "Operator E / Operator F",
+		inputPartsAvailable: 2400,
+		slots: sheetMoldingSlots,
+		defectiveQty: 8,
+		status: "draft",
+		updatedAt: new Date().toISOString(),
+	};
+
+	const sheetPackingSlots = defaultDaySlots([240, 240, 240, 0, 240, null, null, null, null, null]);
+	const sheetPackingBase = {
+		date: monDate,
+		lineId: "line-main",
+		lineLabel: "PATS",
+		processId: processMainPackingId,
+		processName: "Main Packing",
+		lineLeaderName: `${prefix} Line Leader`,
+		productId: productB251Id,
+		productName: CLIENT_B251.productName,
+		modelId: "01",
+		modelName: "Avocado Burger",
+		partId: planPartIds["B251-01-01"] ?? "part-unknown",
+		partName: "Avocado Burger Upper Bun",
+		lotId: stableId("lot-avocado"),
+		lotCode: code("LOT-B251-01"),
+		targetPerShift: 1920,
+		hourlyTarget: 240,
+		operatorNames: "Operator G",
+		inputPartsAvailable: 2000,
+		slots: sheetPackingSlots,
+		defectiveQty: 1,
+		status: "draft",
+		updatedAt: new Date().toISOString(),
+	};
+
+	const sheetSubAssemblySlots = defaultDaySlots([210, 205, 195, 0, 200, 190, null, null, null, null]);
+	const sheetSubAssemblyBase = {
+		date: monDate,
+		lineId: "line-main",
+		lineLabel: "PATS",
+		processId: processSubAssemblyId,
+		processName: "Sub-Assembly",
+		lineLeaderName: `${prefix} Line Leader`,
+		productId: productB251Id,
+		productName: CLIENT_B251.productName,
+		modelId: "01",
+		modelName: "Avocado Burger",
+		partId: planPartIds["B251-01-04"] ?? planPartIds["B251-01-01"] ?? "part-unknown",
+		partName: "Cheese & Patty",
+		lotId: stableId("lot-avocado"),
+		lotCode: code("LOT-B251-01"),
+		targetPerShift: 1500,
+		hourlyTarget: 200,
+		operatorNames: "Operator H",
+		inputPartsAvailable: 1500,
+		slots: sheetSubAssemblySlots,
+		defectiveQty: 5,
+		status: "draft",
+		updatedAt: new Date().toISOString(),
+	};
+
+	const sheetAssortmentSlots = defaultDaySlots([225, 218, 220, 0, 215, null, null, null, null, null]);
+	const sheetAssortmentBase = {
+		date: monDate,
+		lineId: "line-main",
+		lineLabel: "PATS",
+		processId: processAssortmentId,
+		processName: "Assortment",
+		lineLeaderName: `${prefix} Line Leader`,
+		productId: productB251Id,
+		productName: CLIENT_B251.productName,
+		modelId: "03",
+		modelName: "Tacos",
+		partId: planPartIds["B251-01-12"] ?? "part-unknown",
+		partName: "Right Taco",
+		lotId: stableId("lot-tacos"),
+		lotCode: code("LOT-B251-03"),
+		targetPerShift: 1650,
+		hourlyTarget: 220,
+		operatorNames: "Operator I",
+		inputPartsAvailable: 1600,
+		slots: sheetAssortmentSlots,
+		defectiveQty: 3,
+		status: "draft",
+		updatedAt: new Date().toISOString(),
+	};
+
+	const monitoringSheetsToSeed = [
+		// Full Spray (primary desk station: both code & id variants + legacy key)
+		{ ...sheetFullSprayBase, id: stableId("mon-sheet-full-spray") },
+		{ ...sheetFullSprayBase, id: deskDailySheetId(code("ST-DEC-FS"), processFullSprayId, monDate) },
+		{ ...sheetFullSprayBase, id: deskDailySheetId(decorationStationId, processFullSprayId, monDate) },
+		// Mask Spray
+		{ ...sheetMaskBase, id: stableId("mon-sheet-mask-spray") },
+		{ ...sheetMaskBase, id: deskDailySheetId(code("ST-DEC-MS"), processMaskSprayId, monDate) },
+		{ ...sheetMaskBase, id: deskDailySheetId(decorationMaskStationId, processMaskSprayId, monDate) },
+		// Tampo
+		{ ...sheetTampoBase, id: deskDailySheetId(code("ST-DEC-TP"), processTampoId, monDate) },
+		{ ...sheetTampoBase, id: deskDailySheetId(decorationTampoStationId, processTampoId, monDate) },
+		// Assembly Sub-Assembly
+		{ ...sheetSubAssemblyBase, id: stableId("mon-sheet-sub-assembly") },
+		{ ...sheetSubAssemblyBase, id: deskDailySheetId(code("ST-ASM-SUB"), processSubAssemblyId, monDate) },
+		{ ...sheetSubAssemblyBase, id: deskDailySheetId(assemblySubAssemblyStationId, processSubAssemblyId, monDate) },
+		// Assembly Assortment
+		{ ...sheetAssortmentBase, id: stableId("mon-sheet-assortment") },
+		{ ...sheetAssortmentBase, id: deskDailySheetId(code("ST-ASM-AST"), processAssortmentId, monDate) },
+		{ ...sheetAssortmentBase, id: deskDailySheetId(assemblyAssortmentStationId, processAssortmentId, monDate) },
+		// Injection Molding
+		{ ...sheetMoldingBase, id: deskDailySheetId(code("ST-INJ-01"), processMoldingId, monDate) },
+		{ ...sheetMoldingBase, id: deskDailySheetId(injectionStationId, processMoldingId, monDate) },
+		// Main Packing
+		{ ...sheetPackingBase, id: deskDailySheetId(code("ST-WH-PK"), processMainPackingId, monDate) },
+		{ ...sheetPackingBase, id: deskDailySheetId(warehouseStationId, processMainPackingId, monDate) },
+	];
+
+	for (const payload of monitoringSheetsToSeed) {
 		await tx.monitoringDailySheet.upsert({
 			where: { id: payload.id },
 			update: {
@@ -2070,116 +2276,135 @@ async function seedProfile(tx) {
 		});
 	}
 
-	const boardSlots = defaultDaySlots([280, 300, 0, 295, 290, 310, null, null, null, null]);
-	const boardPayload = {
-		id: stableId("mon-board-booth-01"),
-		date: monDate,
-		boothId: booth01Id,
-		boothLabel: "Booth 01",
-		operatorName: "Operator A",
-		partId: planPartIds["B251-01-01"] ?? "part-unknown",
-		partName: "Avocado Burger body",
-		lotId: stableId("lot-avocado"),
-		lotCode: code("LOT-B251-01"),
-		productId: productB251Id,
-		productName: CLIENT_B251.productName,
-		modelId: "01",
-		modelName: "Avocado Burger",
-		processId: processFullSprayId,
-		processName: "Full Spray",
-		labelledCycleTimeSec: 12,
-		targetPerHour: 300,
-		targetPerDay: 2250,
-		slots: boardSlots,
-		updatedAt: new Date().toISOString(),
-	};
+	const boothBoardsToSeed = [
+		{
+			id: stableId("mon-board-booth-01"),
+			date: monDate,
+			boothId: stableId("booth-01"),
+			boothLabel: "Booth 01",
+			operatorName: "Operator A",
+			partId: planPartIds["B251-01-01"] ?? "part-unknown",
+			partName: "Avocado Burger body",
+			lotId: stableId("lot-avocado"),
+			lotCode: code("LOT-B251-01"),
+			productId: productB251Id,
+			productName: CLIENT_B251.productName,
+			modelId: "01",
+			modelName: "Avocado Burger",
+			processId: processFullSprayId,
+			processName: "Full Spray",
+			labelledCycleTimeSec: 12,
+			targetPerHour: 300,
+			targetPerDay: 2250,
+			slots: defaultDaySlots([280, 300, 0, 295, 290, 310, null, null, null, null]),
+			updatedAt: new Date().toISOString(),
+		},
+		{
+			id: stableId("mon-board-booth-02"),
+			date: monDate,
+			boothId: stableId("booth-02"),
+			boothLabel: "Booth 02",
+			operatorName: "Operator B",
+			partId: planPartIds["B251-01-01"] ?? "part-unknown",
+			partName: "Avocado Burger body",
+			lotId: stableId("lot-avocado"),
+			lotCode: code("LOT-B251-01"),
+			productId: productB251Id,
+			productName: CLIENT_B251.productName,
+			modelId: "01",
+			modelName: "Avocado Burger",
+			processId: processFullSprayId,
+			processName: "Full Spray",
+			labelledCycleTimeSec: 12,
+			targetPerHour: 280,
+			targetPerDay: 2100,
+			slots: defaultDaySlots([250, 270, 0, 260, null, null, null, null, null, null]),
+			updatedAt: new Date().toISOString(),
+		},
+		{
+			id: stableId("mon-board-booth-03"),
+			date: monDate,
+			boothId: stableId("booth-03"),
+			boothLabel: "Booth 03",
+			operatorName: "Operator C",
+			partId: planPartIds["B251-01-10"] ?? "part-unknown",
+			partName: "Cheese Hotdog body",
+			lotId: stableId("lot-hotdog"),
+			lotCode: code("LOT-B251-02"),
+			productId: productB251Id,
+			productName: CLIENT_B251.productName,
+			modelId: "02",
+			modelName: "Cheese Hotdog",
+			processId: processMaskSprayId,
+			processName: "Mask Spray",
+			labelledCycleTimeSec: 10,
+			targetPerHour: 250,
+			targetPerDay: 1875,
+			slots: defaultDaySlots([240, 250, 0, 245, null, null, null, null, null, null]),
+			updatedAt: new Date().toISOString(),
+		},
+		{
+			id: stableId("mon-board-booth-05"),
+			date: monDate,
+			boothId: stableId("booth-05"),
+			boothLabel: "Booth 05",
+			operatorName: "Operator H",
+			partId: planPartIds["B251-01-04"] ?? "part-unknown",
+			partName: "Cheese & Patty",
+			lotId: stableId("lot-avocado"),
+			lotCode: code("LOT-B251-01"),
+			productId: productB251Id,
+			productName: CLIENT_B251.productName,
+			modelId: "01",
+			modelName: "Avocado Burger",
+			processId: processSubAssemblyId,
+			processName: "Sub-Assembly",
+			labelledCycleTimeSec: 10,
+			targetPerHour: 200,
+			targetPerDay: 1500,
+			slots: defaultDaySlots([210, 205, 195, 0, 200, null, null, null, null, null]),
+			updatedAt: new Date().toISOString(),
+		},
+	];
 
-	await tx.monitoringStationBoard.upsert({
-		where: { id: boardPayload.id },
-		update: {
-			workspaceId: "PATS",
-			productionDate: boardPayload.date,
-			boothId: boardPayload.boothId,
-			workProcessId: boardPayload.processId,
-			boothLabel: boardPayload.boothLabel,
-			processName: boardPayload.processName,
-			partName: boardPayload.partName,
-			lotCode: boardPayload.lotCode,
-			labelledCycleTimeSec: boardPayload.labelledCycleTimeSec,
-			targetPerHour: boardPayload.targetPerHour,
-			targetPerDay: boardPayload.targetPerDay,
-			slotsJson: boardPayload.slots,
-			payloadJson: boardPayload,
-			rowVersion: 1,
-		},
-		create: {
-			id: boardPayload.id,
-			workspaceId: "PATS",
-			productionDate: boardPayload.date,
-			boothId: boardPayload.boothId,
-			workProcessId: boardPayload.processId,
-			boothLabel: boardPayload.boothLabel,
-			processName: boardPayload.processName,
-			partName: boardPayload.partName,
-			lotCode: boardPayload.lotCode,
-			labelledCycleTimeSec: boardPayload.labelledCycleTimeSec,
-			targetPerHour: boardPayload.targetPerHour,
-			targetPerDay: boardPayload.targetPerDay,
-			slotsJson: boardPayload.slots,
-			payloadJson: boardPayload,
-			rowVersion: 1,
-		},
-	});
-
-	// Second booth board (lighter shift) for multi-board station list
-	const board2Slots = defaultDaySlots([250, 270, 0, 260, null, null, null, null, null, null]);
-	const board2Payload = {
-		...boardPayload,
-		id: stableId("mon-board-booth-02"),
-		boothId: booth02Id,
-		boothLabel: "Booth 02",
-		operatorName: "Operator B",
-		slots: board2Slots,
-		targetPerHour: 280,
-		targetPerDay: 2100,
-		updatedAt: new Date().toISOString(),
-	};
-	await tx.monitoringStationBoard.upsert({
-		where: { id: board2Payload.id },
-		update: {
-			workspaceId: "PATS",
-			productionDate: board2Payload.date,
-			boothId: board2Payload.boothId,
-			workProcessId: board2Payload.processId,
-			boothLabel: board2Payload.boothLabel,
-			processName: board2Payload.processName,
-			partName: board2Payload.partName,
-			lotCode: board2Payload.lotCode,
-			labelledCycleTimeSec: board2Payload.labelledCycleTimeSec,
-			targetPerHour: board2Payload.targetPerHour,
-			targetPerDay: board2Payload.targetPerDay,
-			slotsJson: board2Payload.slots,
-			payloadJson: board2Payload,
-			rowVersion: 1,
-		},
-		create: {
-			id: board2Payload.id,
-			workspaceId: "PATS",
-			productionDate: board2Payload.date,
-			boothId: board2Payload.boothId,
-			workProcessId: board2Payload.processId,
-			boothLabel: board2Payload.boothLabel,
-			processName: board2Payload.processName,
-			partName: board2Payload.partName,
-			lotCode: board2Payload.lotCode,
-			labelledCycleTimeSec: board2Payload.labelledCycleTimeSec,
-			targetPerHour: board2Payload.targetPerHour,
-			targetPerDay: board2Payload.targetPerDay,
-			slotsJson: board2Payload.slots,
-			payloadJson: board2Payload,
-			rowVersion: 1,
-		},
-	});
+	for (const boardPayload of boothBoardsToSeed) {
+		await tx.monitoringStationBoard.upsert({
+			where: { id: boardPayload.id },
+			update: {
+				workspaceId: "PATS",
+				productionDate: boardPayload.date,
+				boothId: boardPayload.boothId,
+				workProcessId: boardPayload.processId,
+				boothLabel: boardPayload.boothLabel,
+				processName: boardPayload.processName,
+				partName: boardPayload.partName,
+				lotCode: boardPayload.lotCode,
+				labelledCycleTimeSec: boardPayload.labelledCycleTimeSec,
+				targetPerHour: boardPayload.targetPerHour,
+				targetPerDay: boardPayload.targetPerDay,
+				slotsJson: boardPayload.slots,
+				payloadJson: boardPayload,
+				rowVersion: 1,
+			},
+			create: {
+				id: boardPayload.id,
+				workspaceId: "PATS",
+				productionDate: boardPayload.date,
+				boothId: boardPayload.boothId,
+				workProcessId: boardPayload.processId,
+				boothLabel: boardPayload.boothLabel,
+				processName: boardPayload.processName,
+				partName: boardPayload.partName,
+				lotCode: boardPayload.lotCode,
+				labelledCycleTimeSec: boardPayload.labelledCycleTimeSec,
+				targetPerHour: boardPayload.targetPerHour,
+				targetPerDay: boardPayload.targetPerDay,
+				slotsJson: boardPayload.slots,
+				payloadJson: boardPayload,
+				rowVersion: 1,
+			},
+		});
+	}
 
 	return {
 		profile,

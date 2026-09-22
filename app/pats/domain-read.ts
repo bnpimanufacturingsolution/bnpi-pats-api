@@ -137,7 +137,15 @@ function dashboardProgress(
 			activeQuantity: number;
 			activeBatchCount: number;
 			lotIds: Set<string>;
-			slots: Map<string, { healthy: number; blocked: number }>;
+			slots: Map<
+				string,
+				{
+					healthy: number;
+					blocked: number;
+					batchCount: number;
+					blockedBatchCount: number;
+				}
+			>;
 		}
 	>();
 
