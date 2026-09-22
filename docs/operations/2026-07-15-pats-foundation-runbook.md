@@ -52,6 +52,33 @@ VITE_PATS_API_URL=http://localhost:3000/api/v1
 The app calls local login, self, capabilities, and the deployment-scoped catalog route. It does
 not send a workspace/tenant selector to the canonical API.
 
+## Troubleshooting: Windows host-port bind failures (WSAEACCES 10013)
+
+Symptom: `pnpm dev` fails in Phase 1 with compose reporting
+`ports are not available: ... bind: An attempt was made to access a socket in a way forbidden by
+its access permissions`, while nothing is actually listening on the port. The API then starts
+without its database. This happens after a reboot because Windows (WinNAT/Hyper-V/WSL2) re-assigns
+large dynamic port reservation ranges in the ephemeral range (49152-65535) at every boot; today's
+reservation may cover `55432` tomorrow.
+
+Diagnosis (`netsh interface ipv4 show excludedportrange protocol=tcp`): if the stack's host port
+(default PostgreSQL `55432`) falls inside a listed range without `*`, binds to it are forbidden.
+Ranges marked `*` are administered (statically reserved) and remain bindable.
+
+Durable fix (one-time, elevated terminal) — permanently reserve the port so Windows never
+re-assigns it to dynamic reservations:
+
+```powershell
+net stop winnat
+netsh int ipv4 add excludedportrange protocol=tcp startport=55432 numberofports=1 store=persistent
+net start winnat
+```
+
+Then re-run `pnpm dev`. Do not "fix" this by changing `POSTGRES_PORT`: any port in the ephemeral
+range can be claimed by the next reboot, and the port is part of the documented local contract
+(`.env.example`, runbook, CI). `scripts/ensure-docker-infra.mjs` detects this exact condition
+before compose up and prints the same remediation.
+
 ## Required validation
 
 API:

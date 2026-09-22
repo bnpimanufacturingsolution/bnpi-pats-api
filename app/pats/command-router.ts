@@ -25,15 +25,42 @@ import type { CommandTransaction } from "./command-support";
 import { assertQualityStageAllowed } from "./quality-stage-scope";
 import { recordPrintJob } from "./print-job";
 import { allowUnauthenticatedDeskPrint, deliverDeskLabel } from "./print-desk";
+import { setDeprecationHeaders } from "../canonical/response-headers";
+
+// Station→Section rename (2026-09-16) transitional bridge. The canonical paths
+// are /sections + sectionId/sectionCode; the legacy /stations + stationId/
+// stationCode aliases below are TRANSITIONAL per the endpoint design standard
+// §7 and emit Deprecation/Sunset headers. Sunset is ≥90 days after first
+// release of the canonical paths. Request bodies accept both spellings and
+// prefer the canonical one when both are present.
+const SECTION_LEGACY_SUNSET = new Date("2027-06-30T00:00:00Z");
+
+function legacyStationHeaders(req: Request, extra: Record<string, string> = {}): Record<string, string> {
+	if (!isLegacyStationPath(req)) return { ...extra };
+	const target = {
+		headers: {} as Record<string, string>,
+		setHeader(name: string, value: string) {
+			this.headers[name] = value;
+		},
+	};
+	setDeprecationHeaders(target, SECTION_LEGACY_SUNSET);
+	return { ...extra, ...target.headers };
+}
+
+function isLegacyStationPath(req: Request): boolean {
+	const path = req.baseUrl + req.path;
+	return /(^|\/)stations(\/|$)/.test(path);
+}
 
 const decimalString = z.string().trim().regex(/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/, "Must be a non-negative decimal with up to 6 places.");
 
 const productionPlanCreateSchema = z.object({
-	planCode: z.string().trim().min(1).max(120),
+	planCode: z.string().trim().min(1).max(120).optional(),
+	projectCode: z.string().trim().min(1).max(120).optional(),
 	name: z.string().trim().min(1).max(240),
 	requiredProductionQuantity: z.number().int().positive(),
 	productId: z.string().trim().min(1).max(100).nullable().optional(),
-}).strict();
+}).strict().refine((body) => Boolean(body.projectCode || body.planCode), "Either projectCode or planCode is required.");
 
 const productionPlanPatchSchema = z.object({
 	name: z.string().trim().min(1).max(240).optional(),
@@ -108,12 +135,14 @@ const stageEventCreateSchema = z.object({
 
 const printJobCreateSchema = z.object({
 	batchId: z.string().trim().min(1).max(100),
-	stationId: z.string().trim().min(1).max(100),
+	sectionId: z.string().trim().min(1).max(100).optional(),
+	// TRANSITIONAL alias for the pre-rename stationId field (§7).
+	stationId: z.string().trim().min(1).max(100).optional(),
 	reprintOf: z.string().trim().min(1).max(100).nullable().optional(),
 	// Actual pcs in the completed pack (label truth). Optional — defaults to the
 	// planned pack quantity; must be a positive integer when provided.
 	actualQuantity: z.number().int().positive().nullable().optional(),
-}).strict();
+}).strict().refine((body) => Boolean(body.sectionId ?? body.stationId), "Either sectionId or stationId is required.");
 
 const deskPrintSchema = z.object({
 	barcodeValue: z.string().trim().min(1).max(240),
@@ -153,17 +182,31 @@ const qualityInspectionCreateSchema = z.object({
 	batchId: z.string().trim().min(1).max(100),
 	stageId: z.string().trim().min(1).max(100),
 	subStageId: z.string().trim().min(1).max(100).nullable().optional(),
+	sectionId: z.string().trim().min(1).max(100).nullable().optional(),
+	// TRANSITIONAL alias for the pre-rename stationId field (§7).
 	stationId: z.string().trim().min(1).max(100).nullable().optional(),
 	inspectedQuantity: decimalString.nullable().optional(),
 	quantityUom: z.string().trim().min(1).max(40).nullable().optional(),
 	evidence: z.record(z.string(), z.unknown()).nullable().optional(),
 }).strict();
 
-const qualityDecisionSchema = z.object({
-	decision: z.enum(["PASSED", "FAILED", "HOLD"]),
-	reasonCode: z.string().trim().max(80).nullable().optional(),
-	reasonNote: z.string().trim().max(500).nullable().optional(),
-}).strict();
+const qualityDecisionSchema = z
+	.object({
+		decision: z.enum(["PASSED", "FAILED", "HOLD"]),
+		reasonCode: z.string().trim().max(80).nullable().optional(),
+		reasonNote: z.string().trim().max(500).nullable().optional(),
+	})
+	.strict()
+	.superRefine((body, ctx) => {
+		// A fail must say why (2026-09-09 QC plan D3); PASSED/HOLD need no reason.
+		if (body.decision === "FAILED" && !(body.reasonCode && body.reasonCode.length > 0)) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ["reasonCode"],
+				message: "A FAILED decision requires a reason code.",
+			});
+		}
+	});
 
 const routingViolationResolutionSchema = z.object({
 	resolutionNote: z.string().trim().min(1).max(500),
@@ -184,20 +227,56 @@ const subStageCreateSchema = z.object({
 	 subProcessGroup: z.string().trim().max(120).nullable().optional(),
 }).strict();
 
-const stationCreateSchema = z.object({
+const sectionCreateSchema = z.object({
 	name: z.string().trim().min(1).max(160),
-	stationCode: z.string().trim().min(1).max(80),
-	stageId: z.string().trim().min(1).max(100),
+	sectionCode: z.string().trim().min(1).max(80).optional(),
+	// TRANSITIONAL alias for the pre-rename stationCode field (§7).
+	stationCode: z.string().trim().min(1).max(80).optional(),
+	// stageId/displayOrder are optional: the board's create flow carries no
+	// stage context, so the server places new sections in the first stage
+	// and appends them. Explicit values are still honored when provided.
+	stageId: z.string().trim().min(1).max(100).optional(),
 	screenType: z.enum(["COMPUTER", "TABLET"]).optional(),
 	scannerAttached: z.boolean().optional(),
 	printerAttached: z.boolean().optional(),
-	displayOrder: z.number().int().nonnegative(),
+	displayOrder: z.number().int().nonnegative().optional(),
+}).strict();
+
+const sectionPatchSchema = z.object({
+	name: z.string().trim().min(1).max(160).optional(),
+	sectionCode: z.string().trim().min(1).max(80).optional(),
+	// TRANSITIONAL alias for the pre-rename stationCode field (§7).
+	stationCode: z.string().trim().min(1).max(80).optional(),
 }).strict();
 
 const stationStepCreateSchema = z.object({
 	stationId: z.string().trim().min(1).max(100),
 	stageId: z.string().trim().min(1).max(100),
 	subStageId: z.string().trim().min(1).max(100).nullable().optional(),
+}).strict();
+
+const sectionProcessesSchema = z.object({
+	processIds: z.array(z.string().trim().min(1).max(100)).min(0),
+}).strict();
+
+const sectionOrderSchema = z.object({
+	sectionIds: z.array(z.string().trim().min(1).max(100)).min(1).optional(),
+	// TRANSITIONAL alias for the pre-rename stationIds field (§7).
+	stationIds: z.array(z.string().trim().min(1).max(100)).min(1).optional(),
+}).strict().refine((body) => Boolean(body.sectionIds ?? body.stationIds), "Either sectionIds or stationIds is required.");
+
+const workProcessCreateSchema = z.object({
+	sectionId: z.string().trim().min(1).max(100).nullable().optional(),
+	// TRANSITIONAL alias: pre-rename field name that referenced the same Section row (§7).
+	stationId: z.string().trim().min(1).max(100).nullable().optional(),
+	subStageId: z.string().trim().min(1).max(100).nullable().optional(),
+	parentProcessId: z.string().trim().min(1).max(100).nullable().optional(),
+	name: z.string().min(1),
+}).strict().refine((body) => Boolean(body.subStageId) || Boolean(body.sectionId ?? body.stationId), "Provide subStageId or sectionId.");
+
+const workProcessPatchSchema = z.object({
+	name: z.string().trim().min(1).max(160).optional(),
+	parentProcessId: z.string().trim().min(1).max(100).nullable().optional(),
 }).strict();
 
 const workInstructionCreateSchema = z.object({
@@ -218,16 +297,19 @@ const monitoringStationBoardUpsertSchema = z.object({
 	payload: z.record(z.string(), z.unknown()),
 }).strict();
 
-function resourceHeaders(id: string, rowVersion: number): Record<string, string> {
-	return { Location: `/api/v1/production-plans/${id}`, ETag: `"${rowVersion}"` };
+function resourceHeaders(id: string, rowVersion: number, req?: Request): Record<string, string> {
+	const isProject = req ? (req.baseUrl + req.path).includes("/projects") : false;
+	const base = isProject ? "/api/v1/projects" : "/api/v1/production-plans";
+	return { Location: `${base}/${id}`, ETag: `"${rowVersion}"` };
 }
 
 function batchHeaders(id: string, rowVersion: number): Record<string, string> {
 	return { Location: `/api/v1/batches/${id}`, ETag: `"${rowVersion}"` };
 }
 
-function planResponse(plan: { id: string; projectCode: string; name: string; status: string; requiredProductionQuantity: number; productId: string | null; rowVersion: number }) {
-	return {
+function planResponse(plan: { id: string; projectCode: string; name: string; status: string; requiredProductionQuantity: number; productId: string | null; rowVersion: number }, req?: Request) {
+	const isProject = req ? (req.baseUrl + req.path).includes("/projects") : false;
+	const base = {
 		planId: plan.id,
 		planCode: plan.projectCode,
 		name: plan.name,
@@ -236,6 +318,14 @@ function planResponse(plan: { id: string; projectCode: string; name: string; sta
 		productId: plan.productId,
 		rowVersion: plan.rowVersion,
 	};
+	if (isProject) {
+		return {
+			projectId: plan.id,
+			projectCode: plan.projectCode,
+			...base,
+		};
+	}
+	return base;
 }
 
 function notFound(detail: string): never {
@@ -248,6 +338,10 @@ function conflict(detail: string): never {
 
 function staleVersion(): never {
 	throw new CommandProblem(412, "urn:bandai:pats:problem:precondition-failed", "Precondition Failed", "The resource changed since it was read. Reload it before retrying.");
+}
+
+function malformed(detail: string): never {
+	throw new CommandProblem(400, "urn:bandai:pats:problem:malformed-request", "Bad Request", detail);
 }
 
 function ensurePlanEditable(plan: { status: string }): void {
@@ -314,7 +408,7 @@ export function commandRouter(
 ): Router {
 	const router = Router();
 
-	router.post("/production-plans", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post(["/projects", "/production-plans"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, productionPlanCreateSchema);
 			const response = await executeCommand(database, req, "productionPlanCreate", body, async (transaction) => {
@@ -322,10 +416,11 @@ export function commandRouter(
 					const product = await transaction.product.findUnique({ where: { id: body.productId }, select: { id: true } });
 					if (!product) notFound("The requested catalog product was not found.");
 				}
+				const planCode = (body.projectCode ?? body.planCode)!;
 				const plan = await transaction.project.create({
 					data: {
 						workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS",
-						projectCode: body.planCode,
+						projectCode: planCode,
 						name: body.name,
 						requiredProductionQuantity: body.requiredProductionQuantity,
 						status: PlanLifecycleStatus.DRAFT,
@@ -333,7 +428,7 @@ export function commandRouter(
 					},
 				});
 				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_CREATED", "ProductionPlan", plan.id, { planCode: plan.projectCode });
-				return { status: 201, body: planResponse(plan), headers: resourceHeaders(plan.id, plan.rowVersion) };
+				return { status: 201, body: planResponse(plan, req), headers: resourceHeaders(plan.id, plan.rowVersion, req) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -341,12 +436,13 @@ export function commandRouter(
 		}
 	});
 
-	router.patch("/production-plans/:planId", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.patch(["/projects/:projectId", "/production-plans/:planId"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
+			const targetId = req.params.projectId ?? req.params.planId;
 			const body = parseCommandBody(req, productionPlanPatchSchema);
 			const expectedVersion = requireIfMatch(req, "production plan");
-			const response = await executeCommand(database, req, "productionPlanPatch", { planId: req.params.planId, body }, async (transaction) => {
-				const current = await transaction.project.findUnique({ where: { id: req.params.planId } });
+			const response = await executeCommand(database, req, "productionPlanPatch", { planId: targetId, body }, async (transaction) => {
+				const current = await transaction.project.findUnique({ where: { id: targetId } });
 				if (!current) notFound("The requested production plan was not found.");
 				if (current.rowVersion !== expectedVersion) staleVersion();
 				if (current.status === PlanLifecycleStatus.RELEASED || current.status === PlanLifecycleStatus.COMPLETED || current.status === PlanLifecycleStatus.CANCELLED) conflict("Released or completed production plans cannot be edited.");
@@ -364,7 +460,7 @@ export function commandRouter(
 					},
 				});
 				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_UPDATED", "ProductionPlan", plan.id, { rowVersion: plan.rowVersion });
-				return { status: 200, body: planResponse(plan), headers: resourceHeaders(plan.id, plan.rowVersion) };
+				return { status: 200, body: planResponse(plan, req), headers: resourceHeaders(plan.id, plan.rowVersion, req) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -372,12 +468,13 @@ export function commandRouter(
 		}
 	});
 
-	router.post("/production-plans/:planId/model-allocations", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post(["/projects/:projectId/model-allocations", "/production-plans/:planId/model-allocations"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
+			const targetId = req.params.projectId ?? req.params.planId;
 			const body = parseCommandBody(req, productionPlanModelAllocationSchema);
 			const expectedVersion = requireIfMatch(req, "production plan");
-			const response = await executeCommand(database, req, "productionPlanModelAllocationUpsert", { planId: req.params.planId, body }, async (transaction) => {
-				const plan = await transaction.project.findUnique({ where: { id: req.params.planId }, select: { id: true, productId: true, status: true, rowVersion: true } });
+			const response = await executeCommand(database, req, "productionPlanModelAllocationUpsert", { planId: targetId, body }, async (transaction) => {
+				const plan = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, productId: true, status: true, rowVersion: true } });
 				if (!plan) notFound("The requested production plan was not found.");
 				if (plan.rowVersion !== expectedVersion) staleVersion();
 				ensurePlanEditable(plan);
@@ -448,7 +545,7 @@ export function commandRouter(
 
 				const updatedPlan = await transaction.project.update({ where: { id: plan.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
 				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_MODEL_ALLOCATION_UPSERTED", "ProductionPlan", plan.id, { allocationId: allocation.id, modelId: model.id, partsListVersionId });
-				return { status: 200, body: { allocationId: allocation.id, modelId: allocation.modelId, plannedQuantity: allocation.plannedQuantity, partsListVersionId, planRowVersion: updatedPlan.rowVersion }, headers: resourceHeaders(plan.id, updatedPlan.rowVersion) };
+				return { status: 200, body: { allocationId: allocation.id, modelId: allocation.modelId, plannedQuantity: allocation.plannedQuantity, partsListVersionId, planRowVersion: updatedPlan.rowVersion }, headers: resourceHeaders(plan.id, updatedPlan.rowVersion, req) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -456,12 +553,13 @@ export function commandRouter(
 		}
 	});
 
-	router.post("/production-plans/:planId/parts-list-versions", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post(["/projects/:projectId/parts-list-versions", "/production-plans/:planId/parts-list-versions"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
+			const targetId = req.params.projectId ?? req.params.planId;
 			const body = parseCommandBody(req, productionPlanPartsListVersionSchema);
 			const expectedVersion = requireIfMatch(req, "production plan");
-			const response = await executeCommand(database, req, "productionPlanPartsListVersionCreate", { planId: req.params.planId, body }, async (transaction) => {
-				const plan = await transaction.project.findUnique({ where: { id: req.params.planId }, select: { id: true, status: true, rowVersion: true } });
+			const response = await executeCommand(database, req, "productionPlanPartsListVersionCreate", { planId: targetId, body }, async (transaction) => {
+				const plan = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, status: true, rowVersion: true } });
 				if (!plan) notFound("The requested production plan was not found.");
 				if (plan.rowVersion !== expectedVersion) staleVersion();
 				ensurePlanEditable(plan);
@@ -505,7 +603,7 @@ export function commandRouter(
 				});
 				const updatedPlan = await transaction.project.update({ where: { id: plan.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
 				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_PARTS_LIST_VERSION_CREATED", "PartsList", partsList.id, { planId: plan.id, version: partsList.version, stepCount: body.steps.length });
-				return { status: 201, body: { partsListVersionId: partsList.id, version: partsList.version, planRowVersion: updatedPlan.rowVersion }, headers: resourceHeaders(plan.id, updatedPlan.rowVersion) };
+				return { status: 201, body: { partsListVersionId: partsList.id, version: partsList.version, planRowVersion: updatedPlan.rowVersion }, headers: resourceHeaders(plan.id, updatedPlan.rowVersion, req) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -513,11 +611,12 @@ export function commandRouter(
 		}
 	});
 
-	router.post("/production-plans/:planId/release", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post(["/projects/:projectId/release", "/production-plans/:planId/release"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
+			const targetId = req.params.projectId ?? req.params.planId;
 			const expectedVersion = requireIfMatch(req, "production plan");
-			const response = await executeCommand(database, req, "productionPlanRelease", { planId: req.params.planId, expectedVersion }, async (transaction) => {
-				const current = await transaction.project.findUnique({ where: { id: req.params.planId } });
+			const response = await executeCommand(database, req, "productionPlanRelease", { planId: targetId, expectedVersion }, async (transaction) => {
+				const current = await transaction.project.findUnique({ where: { id: targetId } });
 				if (!current) notFound("The requested production plan was not found.");
 				if (current.rowVersion !== expectedVersion) staleVersion();
 				if (current.status !== PlanLifecycleStatus.DRAFT && current.status !== PlanLifecycleStatus.READY) conflict("Only draft or ready production plans can be released.");
@@ -526,7 +625,7 @@ export function commandRouter(
 					data: { status: PlanLifecycleStatus.RELEASED, releasedAt: new Date(), releasedBySubjectId: actorId(req), rowVersion: { increment: 1 } },
 				});
 				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_RELEASED", "ProductionPlan", plan.id, { rowVersion: plan.rowVersion });
-				return { status: 200, body: planResponse(plan), headers: resourceHeaders(plan.id, plan.rowVersion) };
+				return { status: 200, body: planResponse(plan, req), headers: resourceHeaders(plan.id, plan.rowVersion, req) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -534,19 +633,68 @@ export function commandRouter(
 		}
 	});
 
-	router.post("/production-plans/:planId/lots", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.delete(["/projects/:projectId", "/production-plans/:planId"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
+			const targetId = req.params.projectId ?? req.params.planId;
+			const ifMatch = req.header("If-Match");
+			const expectedVersion = ifMatch?.match(/^"(\d+)"$/) ? Number(ifMatch.match(/^"(\d+)"$/)![1]) : undefined;
+			const response = await executeCommand(database, req, "projectDraftDelete", { projectId: targetId }, async (transaction) => {
+				const current = await transaction.project.findUnique({
+					where: { id: targetId },
+					include: { lots: { select: { id: true } } },
+				});
+				if (!current) notFound("The requested project was not found.");
+				if (expectedVersion !== undefined && current.rowVersion !== expectedVersion) staleVersion();
+				if (current.status !== PlanLifecycleStatus.DRAFT) {
+					conflict("Released or completed projects cannot be deleted.");
+				}
+				if (current.lots.length > 0) {
+					conflict("Projects with lots cannot be deleted.");
+				}
+				const partsLists = await transaction.partsList.findMany({ where: { projectId: current.id }, select: { id: true } });
+				if (partsLists.length > 0) {
+					const partsListIds = partsLists.map((p) => p.id);
+					await transaction.routingStep.deleteMany({ where: { partsListId: { in: partsListIds } } });
+					await transaction.partsList.deleteMany({ where: { id: { in: partsListIds } } });
+				}
+				await transaction.part.deleteMany({ where: { projectId: current.id } });
+				await transaction.projectModelAllocation.deleteMany({ where: { projectId: current.id } });
+				await transaction.planDemandAllocation.deleteMany({ where: { projectId: current.id } });
+				await transaction.materialRequirement.deleteMany({ where: { projectId: current.id } });
+				await transaction.productSpecification.deleteMany({ where: { projectId: current.id } });
+				await transaction.pmrs.deleteMany({ where: { projectId: current.id } });
+				await transaction.workflowGroup.deleteMany({ where: { projectId: current.id } });
+				await transaction.processChangeLog.deleteMany({ where: { projectId: current.id } });
+
+				await transaction.project.delete({ where: { id: current.id } });
+
+				await recordCommandSuccess(transaction, req, "PROJECT_DRAFT_DELETED", "Project", current.id, {
+					projectCode: current.projectCode,
+					name: current.name,
+				});
+
+				return { status: 204, body: null, headers: {} };
+			});
+			respondCommand(res, response);
+		} catch (error) {
+			commandError(error, req, res, next);
+		}
+	});
+
+	router.post(["/projects/:projectId/lots", "/production-plans/:planId/lots"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const targetId = req.params.projectId ?? req.params.planId;
 			const body = parseCommandBody(req, lotCreateSchema);
-			const response = await executeCommand(database, req, "productionPlanLotCreate", { planId: req.params.planId, body }, async (transaction) => {
-				const plan = await transaction.project.findUnique({ where: { id: req.params.planId }, select: { id: true } });
+			const response = await executeCommand(database, req, "productionPlanLotCreate", { planId: targetId, body }, async (transaction) => {
+				const plan = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true } });
 				if (!plan) notFound("The requested production plan was not found.");
-				const partsList = await transaction.partsList.findFirst({ where: { id: body.partsListId, projectId: req.params.planId, version: body.partsListVersion }, select: { id: true } });
+				const partsList = await transaction.partsList.findFirst({ where: { id: body.partsListId, projectId: targetId, version: body.partsListVersion }, select: { id: true } });
 				if (!partsList) notFound("The requested parts-list version was not found for this production plan.");
-				const part = await transaction.part.findFirst({ where: { id: body.partId, projectId: req.params.planId }, select: { id: true, partName: true } });
+				const part = await transaction.part.findFirst({ where: { id: body.partId, projectId: targetId }, select: { id: true, partName: true } });
 				if (!part) notFound("The requested plan part was not found.");
 				const lot = await transaction.lot.create({
 					data: {
-						projectId: req.params.planId,
+						projectId: targetId,
 						lotCode: body.lotCode,
 						lotName: body.lotName,
 						partsListId: body.partsListId,
@@ -570,7 +718,7 @@ export function commandRouter(
 						usageBasis: body.usageBasis ?? null,
 					},
 				});
-				await recordCommandSuccess(transaction, req, "LOT_CREATED", "Lot", lot.id, { planId: req.params.planId, lotCode: lot.lotCode });
+				await recordCommandSuccess(transaction, req, "LOT_CREATED", "Lot", lot.id, { planId: targetId, lotCode: lot.lotCode });
 				return { status: 201, body: { lotId: lot.id, lotCode: lot.lotCode, status: lot.status }, headers: { Location: `/api/v1/lots/${lot.id}` } };
 			});
 			respondCommand(res, response);
@@ -725,15 +873,16 @@ export function commandRouter(
 	router.post("/print-jobs", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, printJobCreateSchema);
+			const sectionId = (body.sectionId ?? body.stationId)!;
 			const response = await executeCommand(database, req, "printJobCreate", body, async (transaction) => {
 				try {
 					const job = await recordPrintJob(transaction as unknown as Parameters<typeof recordPrintJob>[0], {
 						batchId: body.batchId,
-						stationId: body.stationId,
-						reprintOf: body.reprintOf ?? null,
-						actualQuantity: body.actualQuantity ?? null,
-						actor: actorDisplay(req),
-						actorSubjectId: actorId(req),
+					stationId: sectionId,
+					reprintOf: body.reprintOf ?? null,
+					actualQuantity: body.actualQuantity ?? null,
+					actor: actorDisplay(req),
+					actorSubjectId: actorId(req),
 					});
 					await recordCommandSuccess(transaction, req, "PRINT_JOB_RECORDED", "PrintJob", job.id, {
 						batchId: job.batchId,
@@ -753,7 +902,7 @@ export function commandRouter(
 					};
 				} catch (error) {
 					if (error instanceof Error && error.message === "NOT_FOUND_STATION") {
-						notFound("The requested station was not found.");
+						notFound("The requested section was not found.");
 					}
 					if (error instanceof Error && error.message === "NOT_FOUND_BATCH") {
 						notFound("The requested batch was not found.");
@@ -827,7 +976,7 @@ export function commandRouter(
 						batchId: body.batchId,
 						stageId: body.stageId,
 						subStageId: body.subStageId ?? null,
-						stationId: body.stationId ?? null,
+						stationId: (body.sectionId ?? body.stationId) ?? null,
 						inspectedQuantity: body.inspectedQuantity ?? null,
 						quantityUom: body.quantityUom ?? null,
 						status: QualityInspectionStatus.OPEN,
@@ -922,15 +1071,78 @@ export function commandRouter(
 		} catch (error) { commandError(error, req, res, next); }
 	});
 
-	router.post("/stations", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post(["/sections", "/stations"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const body = parseCommandBody(req, stationCreateSchema);
-			const response = await executeCommand(database, req, "stationCreate", body, async (transaction) => {
-				const stage = await transaction.stage.findUnique({ where: { id: body.stageId }, select: { id: true } });
-				if (!stage) notFound("The requested station stage was not found.");
-				const station = await transaction.station.create({ data: { ...body, workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS", screenType: body.screenType ?? "COMPUTER", scannerAttached: body.scannerAttached ?? true, printerAttached: body.printerAttached ?? true } });
-				await recordCommandSuccess(transaction, req, "STATION_CREATED", "Station", station.id, { stationCode: station.stationCode });
-				return { status: 201, body: { stationId: station.id, stationCode: station.stationCode, name: station.name }, headers: { Location: `/api/v1/stations/${station.id}` } };
+			const body = parseCommandBody(req, sectionCreateSchema);
+			const response = await executeCommand(database, req, "sectionCreate", body, async (transaction) => {
+				let stageId = body.stageId;
+				if (stageId) {
+					const stage = await transaction.stage.findUnique({ where: { id: stageId }, select: { id: true } });
+					if (!stage) notFound("The requested section stage was not found.");
+				} else {
+					const firstStage = await transaction.stage.findFirst({ orderBy: [{ displayOrder: "asc" }, { id: "asc" }], select: { id: true } });
+					if (!firstStage) notFound("No stage exists to own the section.");
+					stageId = firstStage.id;
+				}
+				const providedCode = body.sectionCode ?? body.stationCode;
+				let sectionCode: string;
+				if (providedCode) {
+					const clash = await transaction.section.findUnique({ where: { sectionCode: providedCode } });
+					if (clash) conflict("The section code is already in use.");
+					sectionCode = providedCode;
+				} else {
+					const stem = `SEC-${body.name.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "SEC"}`;
+					sectionCode = stem;
+					for (let attempt = 1; ; attempt++) {
+						const clash = await transaction.section.findUnique({ where: { sectionCode } });
+						if (!clash) break;
+						sectionCode = `${stem}-${attempt + 1}`;
+					}
+				}
+				const displayOrder = body.displayOrder ?? await transaction.section.count();
+				const section = await transaction.section.create({ data: { name: body.name, sectionCode, stageId, screenType: body.screenType ?? "COMPUTER", scannerAttached: body.scannerAttached ?? true, printerAttached: body.printerAttached ?? true, displayOrder, workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS" } });
+
+				// Create bound steps for all sub-stages of this stage so work processes
+				// can resolve their sub-stage via the section's bound steps.
+				const subStages = await transaction.subStage.findMany({
+					where: { eligibleStages: { some: { stageId } } },
+					select: { id: true },
+				});
+				if (subStages.length > 0) {
+					await transaction.stationStep.createMany({
+						data: subStages.map((subStage) => ({
+							stationId: section.id,
+							stageId,
+							subStageId: subStage.id,
+						})),
+						skipDuplicates: true,
+					});
+				}
+
+				await recordCommandSuccess(transaction, req, "SECTION_CREATED", "Section", section.id, { sectionCode: section.sectionCode });
+				return { status: 201, body: { sectionId: section.id, sectionCode: section.sectionCode, name: section.name }, headers: { Location: `/api/v1/sections/${section.id}`, ...legacyStationHeaders(req) } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.patch(["/sections/:sectionId", "/stations/:stationId"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, sectionPatchSchema);
+			const sectionId = req.params.sectionId ?? req.params.stationId;
+			const response = await executeCommand(database, req, "sectionUpdate", { sectionId, body }, async (transaction) => {
+				const section = await transaction.section.findUnique({ where: { id: sectionId }, select: { id: true, name: true } });
+				if (!section) notFound("The requested section was not found.");
+				const data: Record<string, unknown> = {};
+				if (body.name !== undefined) data.name = body.name;
+				const nextCode = body.sectionCode ?? body.stationCode;
+				if (nextCode !== undefined) data.sectionCode = nextCode;
+				if (Object.keys(data).length === 0) conflict("At least one field must be provided.");
+				const updated = await transaction.section.update({ where: { id: sectionId }, data });
+				await recordCommandSuccess(transaction, req, "SECTION_UPDATED", "Section", sectionId, { name: updated.name });
+				// No ETag: Section rows carry no rowVersion validator, so concurrent
+				// updates are last-writer-wins (documented N/A per standard §9).
+				return { status: 200, body: { sectionId: updated.id, name: updated.name }, headers: { ...legacyStationHeaders(req) } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
@@ -940,7 +1152,7 @@ export function commandRouter(
 		try {
 			const body = parseCommandBody(req, stationStepCreateSchema);
 			const response = await executeCommand(database, req, "stationStepCreate", body, async (transaction) => {
-				const station = await transaction.station.findUnique({ where: { id: body.stationId }, select: { id: true } });
+				const station = await transaction.section.findUnique({ where: { id: body.stationId }, select: { id: true } });
 				const stage = await transaction.stage.findUnique({ where: { id: body.stageId }, select: { id: true } });
 				if (!station || !stage) notFound("The requested station or stage was not found.");
 				const step = await transaction.stationStep.create({ data: { ...body, subStageId: body.subStageId ?? null } });
@@ -1077,6 +1289,208 @@ export function commandRouter(
 						ETag: `"${board.rowVersion}"`,
 					},
 				};
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.put(["/sections/:sectionId/processes", "/stations/:stationId/processes"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, sectionProcessesSchema);
+			const sectionId = req.params.sectionId ?? req.params.stationId;
+			const response = await executeCommand(database, req, "sectionProcessesReplace", { sectionId, processIds: body.processIds }, async (transaction) => {
+				const section = await transaction.section.findUnique({ where: { id: sectionId } });
+				if (!section) notFound("The requested section was not found.");
+				if (body.processIds.length > 0) {
+					const processes = await transaction.workProcess.findMany({ where: { id: { in: body.processIds } } });
+					const foundIds = new Set(processes.map((p) => p.id));
+					const missing = body.processIds.filter((id) => !foundIds.has(id));
+					if (missing.length > 0) notFound(`The following work processes were not found: ${missing.join(", ")}`);
+				}
+				await transaction.booth.updateMany({
+					where: { stationId: sectionId, workProcessId: { notIn: body.processIds } },
+					data: { workProcessId: null },
+				});
+				for (const processId of body.processIds) {
+					const booth = await transaction.booth.findFirst({ where: { stationId: sectionId, workProcessId: null } });
+					if (booth) {
+						await transaction.booth.update({ where: { id: booth.id }, data: { workProcessId: processId } });
+					}
+				}
+				// Board membership truth: the section owns exactly this process
+				// set. Listed processes are claimed; processes this section
+				// owned but no longer listed become unowned. Processes owned
+				// by other sections are never touched.
+				await transaction.workProcess.updateMany({
+					where: { id: { in: body.processIds } },
+					data: { sectionId },
+				});
+				await transaction.workProcess.updateMany({
+					where: { id: { notIn: body.processIds }, sectionId },
+					data: { sectionId: null },
+				});
+				await recordCommandSuccess(transaction, req, "SECTION_PROCESSES_REPLACED", "Section", sectionId, { processCount: body.processIds.length });
+				// No ETag: Section rows carry no rowVersion validator (last-writer-wins, N/A per standard §9).
+				return { status: 200, body: { sectionId, processIds: body.processIds }, headers: { ...legacyStationHeaders(req) } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.put(["/sections/order", "/stations/order"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, sectionOrderSchema);
+			const sectionIds = (body.sectionIds ?? body.stationIds)!;
+			const response = await executeCommand(database, req, "sectionOrderReorder", { sectionIds }, async (transaction) => {
+				const sections = await transaction.section.findMany({ where: { id: { in: sectionIds } } });
+				const foundIds = new Set(sections.map((s) => s.id));
+				const missing = sectionIds.filter((id) => !foundIds.has(id));
+				if (missing.length > 0) notFound(`The following sections were not found: ${missing.join(", ")}`);
+				for (const [index, sectionId] of sectionIds.entries()) {
+					await transaction.section.update({ where: { id: sectionId }, data: { displayOrder: index } });
+				}
+				await recordCommandSuccess(transaction, req, "SECTIONS_REORDERED", "Section", sectionIds[0] ?? "", { sectionCount: sectionIds.length });
+				// No ETag: ordering carries no rowVersion validator (last-writer-wins, N/A per standard §9).
+				return { status: 200, body: { sectionIds }, headers: { ...legacyStationHeaders(req) } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.post("/work-processes", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, workProcessCreateSchema);
+			const sectionRef = body.sectionId ?? body.stationId ?? null;
+			let resolvedSubStageId = body.subStageId ?? null;
+			if (!resolvedSubStageId && sectionRef) {
+				const section = await database.section.findFirst({
+					where: { id: sectionRef },
+					select: { boundSteps: { select: { subStageId: true } } },
+				});
+				if (section?.boundSteps.length) {
+					resolvedSubStageId = section.boundSteps.find((step) => step.subStageId !== null)?.subStageId ?? null;
+				}
+			}
+			if (!resolvedSubStageId) {
+				malformed("The section has no bound sub-stage.");
+				return;
+			}
+			const subStage = await database.subStage.findUnique({ where: { id: resolvedSubStageId }, select: { id: true } });
+			if (!subStage) notFound("The requested sub-stage was not found.");
+			// Senior guard: self-parent and cycle-proof. The app's descendantIds is
+			// already cycle-proof, but the API must not trust the client.
+			if (body.parentProcessId) {
+				if (body.parentProcessId.trim().length === 0) malformed("parentProcessId must be a valid identifier.");
+				const parent = await database.workProcess.findUnique({ where: { id: body.parentProcessId }, select: { id: true, parentProcessId: true } });
+				if (!parent) notFound("The requested parent process was not found.");
+				// Cycle check: walk parent chain, abort if we loop (defensive, 50 hops max)
+				let cursor: string | null = parent.parentProcessId;
+				const seen = new Set<string>([parent.id]);
+				for (let hops = 0; hops < 50 && cursor; hops++) {
+					if (seen.has(cursor)) break;
+					seen.add(cursor);
+					const next = await database.workProcess.findUnique({ where: { id: cursor }, select: { parentProcessId: true } });
+					if (!next) break;
+					cursor = next.parentProcessId;
+				}
+			}
+			const response = await executeCommand(database, req, "workProcessCreate", { subStageId: resolvedSubStageId, name: body.name, sectionId: sectionRef, parentProcessId: body.parentProcessId }, async (transaction) => {
+				const order = await transaction.workProcess.count({ where: { subStageId: resolvedSubStageId } });
+				const process = await transaction.workProcess.create({
+					data: { subStageId: resolvedSubStageId, name: body.name, displayOrder: order, isEnabled: true, isSystemSeed: false, sectionId: sectionRef ?? null, parentProcessId: body.parentProcessId ?? null },
+				});
+				await recordCommandSuccess(transaction, req, "WORK_PROCESS_CREATED", "WorkProcess", process.id, { subStageId: process.subStageId, name: process.name, sectionId: process.sectionId, parentProcessId: process.parentProcessId });
+				return { status: 201, body: { processId: process.id, subStageId: process.subStageId, name: process.name, sectionId: process.sectionId, parentProcessId: process.parentProcessId }, headers: { Location: `/api/v1/work-processes/${process.id}` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.patch("/work-processes/:processId", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, workProcessPatchSchema);
+			const processId = req.params.processId;
+			const response = await executeCommand(database, req, "workProcessUpdate", { processId, body }, async (transaction) => {
+				const process = await transaction.workProcess.findUnique({ where: { id: processId }, select: { id: true, name: true, subStageId: true } });
+				if (!process) notFound("The requested work process was not found.");
+				if (body.parentProcessId !== undefined) {
+					if (body.parentProcessId === processId) conflict("A process cannot be its own parent.");
+					if (body.parentProcessId !== null) {
+						const parent = await transaction.workProcess.findUnique({ where: { id: body.parentProcessId }, select: { id: true, parentProcessId: true } });
+						if (!parent) notFound("The requested parent process was not found.");
+						// Walk parent chain to detect cycle that would make processId an ancestor of its new parent
+						let cursor: string | null = parent.parentProcessId;
+						const seen = new Set<string>([parent.id]);
+						for (let hops = 0; hops < 50 && cursor; hops++) {
+							if (cursor === processId) conflict("The requested parent would create a circular reference.");
+							if (seen.has(cursor)) break;
+							seen.add(cursor);
+							const next = await transaction.workProcess.findUnique({ where: { id: cursor }, select: { parentProcessId: true } });
+							if (!next) break;
+							cursor = next.parentProcessId;
+						}
+					}
+				}
+				const data: Record<string, unknown> = {};
+				if (body.name !== undefined) data.name = body.name;
+				if (body.parentProcessId !== undefined) data.parentProcessId = body.parentProcessId;
+				if (Object.keys(data).length === 0) conflict("At least one field must be provided.");
+				const updated = await transaction.workProcess.update({ where: { id: processId }, data });
+				await recordCommandSuccess(transaction, req, "WORK_PROCESS_UPDATED", "WorkProcess", processId, { name: updated.name });
+				// No ETag: WorkProcess rows carry no rowVersion validator (last-writer-wins, N/A per standard §9).
+				return { status: 200, body: { processId: updated.id, subStageId: updated.subStageId, name: updated.name, sectionId: updated.sectionId, parentProcessId: updated.parentProcessId }, headers: {} };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.delete("/work-processes/:processId", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const processId = req.params.processId;
+			const response = await executeCommand(database, req, "workProcessDelete", { processId }, async (transaction) => {
+				const process = await transaction.workProcess.findUnique({ where: { id: processId }, select: { id: true, name: true } });
+				if (!process) notFound("The requested work process was not found.");
+				// Collect all descendants to unassign (sectionId null) - they become orphaned roots
+				const toUnassign = new Set<string>([processId]);
+				const queue: string[] = [processId];
+				for (let i = 0; i < queue.length && i < 100; i++) {
+					const current = queue[i];
+					const children = await transaction.workProcess.findMany({ where: { parentProcessId: current }, select: { id: true } });
+					for (const child of children) {
+						if (!toUnassign.has(child.id)) {
+							toUnassign.add(child.id);
+							queue.push(child.id);
+						}
+					}
+				}
+				// Unassign descendants from sections (keep them in catalog as unassigned, per UI "unassigned" contract)
+				// The parent itself will be deleted, so exclude it from unassign
+				const descendantIds = Array.from(toUnassign).filter((id) => id !== processId);
+				if (descendantIds.length > 0) {
+					await transaction.workProcess.updateMany({ where: { id: { in: descendantIds } }, data: { sectionId: null } });
+				}
+				await transaction.workProcess.delete({ where: { id: processId } });
+				await recordCommandSuccess(transaction, req, "WORK_PROCESS_DELETED", "WorkProcess", processId, { name: process.name });
+				return { status: 200, body: { processId }, headers: {} };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.delete(["/sections/:sectionId", "/stations/:stationId"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const sectionId = req.params.sectionId ?? req.params.stationId;
+			const response = await executeCommand(database, req, "sectionDelete", { sectionId }, async (transaction) => {
+				const section = await transaction.section.findUnique({ where: { id: sectionId }, select: { id: true, name: true, sectionCode: true } });
+				if (!section) notFound("The requested section was not found.");
+				await transaction.stationStep.deleteMany({ where: { stationId: sectionId } });
+				await transaction.booth.updateMany({ where: { stationId: sectionId }, data: { stationId: null } });
+				await transaction.workProcess.updateMany({ where: { sectionId }, data: { sectionId: null } });
+				await transaction.section.delete({ where: { id: sectionId } });
+				await recordCommandSuccess(transaction, req, "SECTION_DELETED", "Section", sectionId, { sectionCode: section.sectionCode });
+				// 200 with the deleted identifier (audit correlation) is the documented
+				// DELETE contract for this resource; repeat deletes return 404.
+				return { status: 200, body: { sectionId }, headers: { ...legacyStationHeaders(req) } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }

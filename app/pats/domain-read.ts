@@ -1,18 +1,33 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
-import type { PrismaClient as PatsPrismaClient } from "../../generated/pats-client";
+import { Prisma, type PrismaClient as PatsPrismaClient } from "../../generated/pats-client";
 import { buildOffsetPage, parseOffsetPagination } from "../canonical/collection";
 import { actorId, CommandProblem, sendCommandProblem } from "./command-support";
 import { parseBatchResolveCode, resolveBatchByCode } from "./batch-resolve";
 import { parseResolveCode, resolveQualityInspectionByCode } from "./quality-resolve";
 import { listAllowedQualityStageIds } from "./quality-stage-scope";
+import { setDeprecationHeaders } from "../canonical/response-headers";
+
+// Station→Section rename (2026-09-16) transitional bridge: /sections is
+// CANONICAL, /stations is TRANSITIONAL (§7) with Deprecation/Sunset headers.
+const SECTION_LEGACY_SUNSET = new Date("2027-06-30T00:00:00Z");
+
+function isLegacyStationPath(req: Request): boolean {
+	const path = req.baseUrl + req.path;
+	return /(^|\/)stations(\/|$)/.test(path);
+}
+
+function applyLegacyStationHeaders(req: Request, res: Response): void {
+	if (isLegacyStationPath(req)) setDeprecationHeaders(res, SECTION_LEGACY_SUNSET);
+}
 
 type DomainReadDatabase = Pick<
 	PatsPrismaClient,
+	| "$queryRaw"
 	| "project"
 	| "workflowGroup"
 	| "stage"
 	| "subStage"
-	| "station"
+	| "section"
 	| "stationStep"
 	| "workInstruction"
 	| "workProcess"
@@ -32,6 +47,7 @@ type DomainReadDatabase = Pick<
 	| "planDemandAllocation"
 	| "lot"
 	| "part"
+	| "section"
 >;
 
 const PROBLEM_TYPE = {
@@ -356,7 +372,7 @@ export function domainReadRouter(
 ): Router {
 	const router = Router();
 
-	router.get("/production-plans", requireCapability("planning.read"), async (req, res) => {
+	router.get(["/projects", "/production-plans"], requireCapability("planning.read"), async (req, res) => {
 		const page = pagination(req, res);
 		if (!page) return;
 		try {
@@ -381,29 +397,41 @@ export function domainReadRouter(
 					},
 				}),
 			]);
-			const data = plans.map((plan) => ({
-				planId: plan.id,
-				planCode: plan.projectCode,
-				name: plan.name,
-				status: plan.status,
-				requiredProductionQuantity: plan.requiredProductionQuantity,
-				productId: plan.productId,
-				productName: plan.product?.productName ?? null,
-				lotCount: plan.lots.length,
-				rowVersion: plan.rowVersion,
-				createdAt: plan.createdAt.toISOString(),
-				releasedAt: date(plan.releasedAt),
-			}));
+			const isProject = (req.baseUrl + req.path).includes("/projects");
+			const data = plans.map((plan) => {
+				const base = {
+					planId: plan.id,
+					planCode: plan.projectCode,
+					name: plan.name,
+					status: plan.status,
+					requiredProductionQuantity: plan.requiredProductionQuantity,
+					productId: plan.productId,
+					productName: plan.product?.productName ?? null,
+					lotCount: plan.lots.length,
+					rowVersion: plan.rowVersion,
+					createdAt: plan.createdAt.toISOString(),
+					releasedAt: date(plan.releasedAt),
+				};
+				if (isProject) {
+					return {
+						projectId: plan.id,
+						projectCode: plan.projectCode,
+						...base,
+					};
+				}
+				return base;
+			});
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(data, page, totalItems));
 		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production plan data is unavailable.");
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS project data is unavailable.");
 		}
 	});
 
-	router.get("/production-plans/:planId", requireCapability("planning.read"), async (req, res) => {
+	router.get(["/projects/:projectId", "/production-plans/:planId"], requireCapability("planning.read"), async (req, res) => {
+		const targetId = req.params.projectId ?? req.params.planId;
 		try {
 			const plan = await database.project.findUnique({
-				where: { id: req.params.planId },
+				where: { id: targetId },
 				include: {
 					product: { select: { id: true, productCode: true, productName: true } },
 					productSpecification: true,
@@ -423,14 +451,16 @@ export function domainReadRouter(
 				},
 			});
 			if (!plan) {
-				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested production plan was not found.");
+				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested project was not found.");
 				return;
 			}
 			// Mutable plan resources expose the optimistic-concurrency token as a strong ETag.
 			// Clients must send this value (or body.rowVersion) as If-Match on plan commands.
 			res.setHeader("ETag", `"${plan.rowVersion}"`);
 			res.setHeader("Cache-Control", "no-store").json({
+				projectId: plan.id,
 				planId: plan.id,
+				projectCode: plan.projectCode,
 				planCode: plan.projectCode,
 				name: plan.name,
 				status: plan.status,
@@ -546,22 +576,59 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get("/stations", requireCapability("execution.read"), async (req, res) => {
+	router.get(["/sections", "/stations"], requireCapability("execution.read"), async (req, res) => {
+		const page = pagination(req, res, ["search"]);
+		if (!page) return;
 		try {
-			const stations = await database.station.findMany({ orderBy: [{ displayOrder: "asc" }, { id: "asc" }], include: { boundSteps: true } });
-			res.setHeader("Cache-Control", "no-store").json({ data: stations });
+			const requestQuery = query(req);
+			const searchRaw = requestQuery.search;
+			const searchText = (Array.isArray(searchRaw) ? searchRaw[0] : searchRaw)?.toString().trim() ?? "";
+			const skip = (page.page - 1) * page.limit;
+			const whereClause = searchText
+				? {
+						OR: [
+							{ name: { contains: searchText, mode: "insensitive" as const } },
+							{ sectionCode: { contains: searchText, mode: "insensitive" as const } },
+						],
+				  }
+				: undefined;
+			const [totalItems, stations] = await Promise.all([
+				searchText.length >= 3
+					? database.$queryRaw<{ count: number }[]>(Prisma.sql`
+						SELECT COUNT(*)::integer AS count FROM "Section" s
+						WHERE s."name" % ${searchText} OR s."sectionCode" % ${searchText}
+					`).then(r => r[0]?.count ?? 0)
+					: database.section.count({ where: whereClause }),
+				searchText.length >= 3
+					? database.$queryRaw<{ id: string; sectionCode: string; name: string; displayOrder: number; isEnabled: boolean; parentSectionId: string | null; stageId: string | null }[]>(Prisma.sql`
+						SELECT s."id", s."sectionCode", s."name", s."displayOrder", s."isEnabled", s."parentSectionId", s."stageId"
+						FROM "Section" s
+						WHERE s."name" % ${searchText} OR s."sectionCode" % ${searchText}
+						ORDER BY s."name" <-> ${searchText}, s."displayOrder" ASC, s."id" ASC
+						LIMIT ${page.limit} OFFSET ${skip}
+					`)
+					: database.section.findMany({
+							where: whereClause,
+							orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+							skip,
+							take: page.limit,
+							include: { boundSteps: true },
+					  }),
+			]);
+			applyLegacyStationHeaders(req, res);
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(stations.map((s) => ({ ...s, stationCode: s.sectionCode })), page, totalItems));
 		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station configuration is unavailable.");
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS section configuration is unavailable.");
 		}
 	});
 
-	router.get("/stations/:stationId/history", requireCapability("execution.read"), async (req, res) => {
+	router.get(["/sections/:sectionId/history", "/stations/:stationId/history"], requireCapability("execution.read"), async (req, res) => {
 		try {
-			const station = await database.station.findUnique({
-				where: { id: req.params.stationId },
+			const station = await database.section.findUnique({
+				where: { id: req.params.sectionId ?? req.params.stationId },
 				select: {
 					id: true,
-					stationCode: true,
+					sectionCode: true,
 					name: true,
 					stageId: true,
 					boundSteps: { select: { stageId: true, subStageId: true } },
@@ -601,8 +668,12 @@ export function domainReadRouter(
 			const lotCodes = new Map(lots.map((lot) => [lot.id, lot.lotCode]));
 			const partsById = new Map(parts.map((part) => [part.id, part]));
 
-			res.setHeader("Cache-Control", "no-store").json({
-				station: { id: station.id, stationCode: station.stationCode, name: station.name, stageId: station.stageId },
+			res.setHeader("Cache-Control", "no-store");
+			applyLegacyStationHeaders(req, res);
+			res.json({
+				station: { id: station.id, stationCode: station.sectionCode, name: station.name, stageId: station.stageId },
+				// Canonical alias for the renamed resource; `station` is the TRANSITIONAL shape (§7).
+				section: { id: station.id, sectionCode: station.sectionCode, name: station.name, stageId: station.stageId },
 				events: events.map((event) => ({
 					id: event.id,
 					occurredAt: event.occurredAt.toISOString(),
@@ -648,7 +719,7 @@ export function domainReadRouter(
 	 * - wipProgress: same positions (compat)
 	 * - staff / expectedOutput / targetQuantity: null until product owns sources
 	 */
-	router.get("/stations/:stationId/support", requireCapability("execution.read"), async (req, res) => {
+	router.get(["/sections/:sectionId/support", "/stations/:stationId/support"], requireCapability("execution.read"), async (req, res) => {
 		try {
 			const requestQuery = query(req);
 			const allowedKeys = new Set(["date"]);
@@ -662,11 +733,11 @@ export function domainReadRouter(
 				return;
 			}
 
-			const station = await database.station.findUnique({
-				where: { id: req.params.stationId },
+			const station = await database.section.findUnique({
+				where: { id: req.params.sectionId ?? req.params.stationId },
 				select: {
 					id: true,
-					stationCode: true,
+					sectionCode: true,
 					name: true,
 					stageId: true,
 					boundSteps: { select: { stageId: true, subStageId: true } },
@@ -827,9 +898,14 @@ export function domainReadRouter(
 			}
 			const lotPlans = [...lotPlanMap.values()];
 
-			res.setHeader("Cache-Control", "no-store").json({
+			res.setHeader("Cache-Control", "no-store");
+			applyLegacyStationHeaders(req, res);
+			res.json({
 				stationId: station.id,
-				stationCode: station.stationCode,
+				stationCode: station.sectionCode,
+				// Canonical aliases for the renamed resource (§7).
+				sectionId: station.id,
+				sectionCode: station.sectionCode,
 				name: station.name,
 				asOf: new Date().toISOString(),
 				date: window.dateKey,
@@ -860,47 +936,72 @@ export function domainReadRouter(
 			const stationSteps = await database.stationStep.findMany({
 				orderBy: [{ stationId: "asc" }, { stageId: "asc" }, { id: "asc" }],
 				include: {
-					station: { select: { id: true, stationCode: true, name: true } },
+					station: { select: { id: true, sectionCode: true, name: true } },
 					stage: { select: { id: true, name: true } },
 					subStage: { select: { id: true, name: true } },
 				},
 			});
-			res.setHeader("Cache-Control", "no-store").json({ data: stationSteps });
+			const stationStepsResponse = stationSteps.map((step) => ({
+				...step,
+				station: { id: step.station.id, stationCode: step.station.sectionCode, name: step.station.name },
+			}));
+			res.setHeader("Cache-Control", "no-store").json({ data: stationStepsResponse });
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station-step configuration is unavailable.");
 		}
 	});
 
 	router.get("/work-processes", requireCapability("execution.read"), async (req, res) => {
+		const page = pagination(req, res, ["subStageId", "search"]);
+		if (!page) return;
 		try {
 			const requestQuery = query(req);
-			const allowedKeys = new Set(["subStageId"]);
-			if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
-				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The work-process query is invalid.");
-				return;
-			}
 			const subStageId = Array.isArray(requestQuery.subStageId)
 				? requestQuery.subStageId[0]
 				: requestQuery.subStageId;
-			const processes = await database.workProcess.findMany({
-				where: {
-					isEnabled: true,
-					...(subStageId ? { subStageId } : {}),
-				},
-				orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
-				include: { subStage: { select: { id: true, name: true } } },
-			});
-			res.setHeader("Cache-Control", "no-store").json({
-				data: processes.map((process) => ({
-					id: process.id,
-					subStageId: process.subStageId,
-					subStageName: process.subStage.name,
-					name: process.name,
-					displayOrder: process.displayOrder,
-					labelledCycleTimeSec: process.labelledCycleTimeSec,
-					isEnabled: process.isEnabled,
-				})),
-			});
+			const searchRaw = requestQuery.search;
+			const searchText = (Array.isArray(searchRaw) ? searchRaw[0] : searchRaw)?.toString().trim() ?? "";
+			const skip = (page.page - 1) * page.limit;
+			const where = { isEnabled: true, ...(subStageId ? { subStageId } : {}) };
+			const [totalItems, processes] = await Promise.all([
+				searchText.length >= 3
+					? database.$queryRaw<{ count: number }[]>(Prisma.sql`
+						SELECT COUNT(*)::integer AS count FROM "WorkProcess" wp
+						LEFT JOIN "SubStage" subStage ON wp."subStageId" = subStage."id"
+						WHERE wp."isEnabled" = true
+						${subStageId ? Prisma.sql`AND wp."subStageId" = ${subStageId}` : Prisma.sql``}
+						AND (wp."name" % ${searchText} OR subStage."name" % ${searchText})
+					`).then(r => r[0]?.count ?? 0)
+					: database.workProcess.count({ where }),
+				searchText.length >= 3
+					? database.$queryRaw<{ id: string; subStageId: string; subStageName: string; name: string; displayOrder: number; isEnabled: boolean; sectionId: string | null; parentProcessId: string | null }[]>(Prisma.sql`
+						SELECT wp."id", wp."subStageId", subStage."name" AS "subStageName", wp."name", wp."displayOrder", wp."isEnabled", wp."sectionId", wp."parentProcessId"
+						FROM "WorkProcess" wp
+						LEFT JOIN "SubStage" subStage ON wp."subStageId" = subStage."id"
+						WHERE wp."isEnabled" = true
+						${subStageId ? Prisma.sql`AND wp."subStageId" = ${subStageId}` : Prisma.sql``}
+						AND (wp."name" % ${searchText} OR subStage."name" % ${searchText})
+						ORDER BY wp."displayOrder" ASC, wp."id" ASC, wp."name" <-> ${searchText}
+						LIMIT ${page.limit} OFFSET ${skip}
+					`)
+					: database.workProcess.findMany({
+							where,
+							orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+							skip,
+							take: page.limit,
+							include: { subStage: { select: { id: true, name: true } } },
+					  }),
+			]);
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(processes.map((p) => ({
+				id: p.id,
+				subStageId: p.subStageId,
+				subStageName: "subStage" in p ? p.subStage.name : p.subStageName,
+				name: p.name,
+				displayOrder: p.displayOrder,
+				isEnabled: p.isEnabled,
+				sectionId: p.sectionId,
+				parentProcessId: p.parentProcessId,
+			})), page, totalItems));
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS work-process catalog is unavailable.");
 		}
@@ -909,14 +1010,16 @@ export function domainReadRouter(
 	router.get("/booths", requireCapability("execution.read"), async (req, res) => {
 		try {
 			const requestQuery = query(req);
-			const allowedKeys = new Set(["stationId"]);
+			// `station_id` is canonical snake_case (§5); `stationId` is the TRANSITIONAL alias (§7).
+			const allowedKeys = new Set(["station_id", "stationId"]);
 			if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
 				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The booth query is invalid.");
 				return;
 			}
-			const stationId = Array.isArray(requestQuery.stationId)
-				? requestQuery.stationId[0]
-				: requestQuery.stationId;
+			const stationIdRaw = requestQuery.station_id ?? requestQuery.stationId;
+			const stationId = Array.isArray(stationIdRaw)
+				? stationIdRaw[0]
+				: stationIdRaw;
 			const booths = await database.booth.findMany({
 				where: {
 					isEnabled: true,

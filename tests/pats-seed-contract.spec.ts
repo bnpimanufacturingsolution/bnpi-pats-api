@@ -92,9 +92,16 @@ describe("PATS seed contract", () => {
       script.indexOf("async function seedProfile"),
     );
     expect(wipeRegion).to.match(/\.deleteMany\s*\(/);
-    for (const table of ["outboxMessage", "auditRecord", "stageEvent", "batch", "qualityInspection", "qualityStageAssignment", "subjectAssignment", "subject"]) {
+    for (const table of ["outboxMessage", "auditRecord", "stageEvent", "batch", "qualityInspection", "qualityStageAssignment", "subjectAssignment", "subject", "section"]) {
       expect(wipeRegion, `wipe is missing table ${table}`).to.contain(`"${table}"`);
     }
+    // The Station→Section model rename must be reflected in the wipe list —
+    // `tx["station"]` no longer exists on the client and would abort the wipe.
+    expect(wipeRegion).to.not.match(/"station",/);
+    // Legacy-table deletes must be existence-gated: a failed DELETE aborts the
+    // whole wipe transaction (25P02 on every later statement), so try/catch
+    // around the raw DELETE is not sufficient.
+    expect(wipeRegion).to.contain("pg_tables");
 
     // Fresh-reset safety contract: explicit env opt-in, off by default, and
     // refused for production ENVs.
@@ -103,7 +110,7 @@ describe("PATS seed contract", () => {
     expect(script).not.to.match(/const freshReset\s*=\s*(true|1);?/);
   });
 
-  it("seeds demo.planner as a pure planner and demo.quality as QC-primary QI", () => {
+  it("seeds marco.villanueva as a pure planner and karen.limjoco as QC-primary QI", () => {
     const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
 
     expect(script).to.contain("Pure planner: planning + read-only monitoring + catalog read. Not a QC account.");
@@ -125,8 +132,8 @@ describe("PATS seed contract", () => {
     expect(script).to.contain("substage-injection-molding");
     expect(script).to.contain("[injectionStageId, subInjectionMoldingId]");
     expect(script).to.contain('"station-step-inj-mold"');
-    expect(script).to.contain("work-process-molding");
-    expect(script).to.contain("Molding\", 1, 14");
+    expect(script).to.contain("work-process-inj-machine-op");
+    expect(script).to.contain("Machine Operator\", 1, 14");
 
     // Line Leader gains scope-less QC read for the Reports tab — read only, never resolve.
     expect(script).to.contain('kind: "CAPABILITY", key: "quality.read"');
@@ -137,7 +144,7 @@ describe("PATS seed contract", () => {
     // Ledger evidence rows are part of the seed's writable (and wiped) surface.
     expect(script).to.contain('batchIds["batch-fw-inj"]');
     expect(script).to.contain('"printJob"');
-    expect(script).to.contain("workProcesses: 5,");
+    expect(script).to.contain("workProcesses: 16,");
   });
 
   it("documents the RBAC fixture subjects and the negative-path QI without scope", () => {
@@ -150,10 +157,43 @@ describe("PATS seed contract", () => {
     // Negative fixture: QI bundle with no quality-stage rows; Journey D must
     // fail closed. The subject is created but never added to qualityScopeBySubject.
     expect(script).to.contain('"subject-quality-noscope"');
-    expect(script, "noscope subject must be created from the profile prefix").to.match(/`\$\{profile\}\.quality_noscope`/);
+    expect(script, "noscope subject must use its proper-name username").to.contain('"paolo.garcia"');
     expect(script).to.match(/fail closed/i);
     expect(script, "noscope subject must not be granted Decoration/Injection scope").not.to.match(
       /qualityNoScope\.id, \[decorationStageId, injectionStageId\]/,
     );
+  });
+
+  it("uses realistic employee display names with proper-name usernames as fixtures", () => {
+    const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+
+    // The RBAC fixture contract is the username — proper names, no demo prefix.
+    expect(script).to.contain('"marco.villanueva"');
+    expect(script).to.contain('"liza.delacruz"');
+    expect(script).to.contain('"paolo.garcia"');
+    expect(script).to.contain('"joshua.reyes"');
+    expect(script).to.contain('"aila.torres"');
+    expect(script).to.contain('"karen.limjoco"');
+    expect(script).not.to.match(/\$\{profile\}\.(planner|operator|lineleader|quality|admin)/);
+    // Display names are narrative-only and must not derive from the prefix.
+    for (const name of [
+      "Liza Dela Cruz",
+      "Marco Villanueva",
+      "Joshua Reyes",
+      "Aila Torres",
+      "Karen Limjoco",
+      "Paolo Garcia",
+    ]) {
+      expect(script, `seed must assign ${name}`).to.contain(name);
+    }
+    expect(script).not.to.contain("`${prefix} Planner`");
+    expect(script).not.to.contain("`${prefix} Admin`");
+    expect(script).not.to.contain("`${prefix} Line Leader`");
+    expect(script).not.to.contain("`${prefix} Operator`");
+    expect(script).not.to.contain("`${prefix} Quality");
+    expect(script).not.to.contain("DEMO Line Leader");
+    // Email snapshots stay bound to the username (Layer-1 identity anchor
+    // asserted exactly in e2e/rbac/api-matrix.spec.ts) — narrative does not touch them.
+    expect(script).to.contain('`${username}@pats.local`');
   });
 });

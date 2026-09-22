@@ -62,7 +62,10 @@ pnpm dev
 `pnpm dev` opens Docker Desktop if needed, starts the foundation containers
 (PostgreSQL + MinIO), then runs the API (`tsx watch`). Escape hatches:
 `pnpm dev:api` (API only), `pnpm dev:infra` (containers only),
-`SKIP_DOCKER=1 pnpm dev`.
+`SKIP_DOCKER=1 pnpm dev`. To stop the API process started in another terminal
+(e.g. by an agent), run `pnpm end` (matches API dev/serve processes) or
+`pnpm end:port 3000` (kills whatever listens on the port); `pnpm end:infra`
+stops and removes the foundation containers (volumes preserved).
 
 Copy `.env.example` to `.env` and set a local `JWT_SECRET`. The development
 defaults enable test mode and keep `ENABLE_LEGACY_API=false`; do not carry

@@ -340,10 +340,10 @@ describe("canonical PATS domain read contract", () => {
 	it("returns server-owned station history from execution evidence", async () => {
 		const occurredAt = new Date("2026-07-31T02:00:00.000Z");
 		const app = appFor({
-			station: {
+			section: {
 				findUnique: async () => ({
 					id: "station-injection",
-					stationCode: "ST-INJ-01",
+					sectionCode: "ST-INJ-01",
 					name: "Injection Station 01",
 					stageId: "stage-injection",
 					boundSteps: [{ stageId: "stage-injection", subStageId: null }],
@@ -408,10 +408,10 @@ describe("canonical PATS domain read contract", () => {
 		let printSelect: Record<string, unknown> | undefined;
 		let positionWhere: Record<string, unknown> | undefined;
 		const app = appFor({
-			station: {
+			section: {
 				findUnique: async () => ({
 					id: "station-deco-fs",
-					stationCode: "ST-DECO-FS",
+					sectionCode: "ST-DECO-FS",
 					name: "Full Spray PC",
 					stageId: "stage-decoration",
 					boundSteps: [{ stageId: "stage-decoration", subStageId: "sub-full-spray" }],
@@ -438,7 +438,7 @@ describe("canonical PATS domain read contract", () => {
 							batch: {
 								id: "batch-1",
 								batchCode: "BNI-2607-01",
-								barcodeValue: "DEMO-BNI-2607-01",
+								barcodeValue: "BNI-2607-01",
 								plannedQuantity: 200,
 								status: "IN_PROGRESS",
 								lot: {
@@ -457,7 +457,7 @@ describe("canonical PATS domain read contract", () => {
 							batch: {
 								id: "batch-2",
 								batchCode: "BNI-2607-02",
-								barcodeValue: "DEMO-BNI-2607-02",
+								barcodeValue: "BNI-2607-02",
 								plannedQuantity: 80,
 								status: "IN_PROGRESS",
 								lot: {
@@ -490,7 +490,7 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.materials).to.deep.equal([
 			{
 				batchId: "batch-1",
-				barcodeValue: "DEMO-BNI-2607-01",
+				barcodeValue: "BNI-2607-01",
 				partName: "Ice L",
 				quantity: 100,
 			},
@@ -519,10 +519,10 @@ describe("canonical PATS domain read contract", () => {
 
 	it("does not count reprint print jobs as today's output", async () => {
 		const app = appFor({
-			station: {
+			section: {
 				findUnique: async () => ({
 					id: "station-deco-fs",
-					stationCode: "ST-DECO-FS",
+					sectionCode: "ST-DECO-FS",
 					name: "Full Spray PC",
 					stageId: "stage-decoration",
 					boundSteps: [{ stageId: "stage-decoration", subStageId: "sub-full-spray" }],
@@ -557,7 +557,7 @@ describe("canonical PATS domain read contract", () => {
 
 	it("rejects invalid station support date query", async () => {
 		const app = appFor({
-			station: { findUnique: async () => null },
+			section: { findUnique: async () => null },
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
@@ -823,6 +823,114 @@ describe("canonical PATS domain read contract", () => {
 
 		expect(response.status).to.equal(400);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:malformed-request");
+		expect(called).to.equal(false);
+	});
+
+	it("returns a station directory from server persistence", async () => {
+		const app = appFor(
+			{ section: { findMany: async () => [{ id: "station-1", name: "Station 1", stageId: "stage-1", displayOrder: 0, sectionCode: "ST-01" }], count: async () => 1 } },
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/sections")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.data).to.have.length(1);
+		expect(response.body.data[0]).to.deep.include({ id: "station-1", name: "Station 1", sectionCode: "ST-01" });
+	});
+
+	it("filters sections by search across name and code", async () => {
+		let receivedQuery: { sql: string; values: unknown[] } | undefined;
+		const app = appFor(
+			{
+				section: {
+					findMany: async (args: Record<string, unknown>) => {
+						receivedQuery = args;
+						return [];
+					},
+				},
+				$queryRaw: async function(_sql: unknown, ..._values: unknown[]): Promise<unknown[]> {
+					receivedQuery = { sql: String(_sql), values: _values };
+					return [];
+				},
+			},
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/sections")
+			.query({ search: "deco" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedQuery).to.not.be.undefined;
+	});
+
+	it("lists work processes with section links and filters them by search", async () => {
+		let receivedQuery: { sql: string; values: unknown[] } | undefined;
+		const app = appFor(
+			{
+				workProcess: {
+					findMany: async () => [],
+				},
+				$queryRaw: async function(_sql: unknown, ..._values: unknown[]): Promise<unknown[]> {
+					receivedQuery = { sql: String(_sql), values: _values };
+					return [{
+						id: "proc-1",
+						subStageId: "sub-1",
+						subStageName: "Full Spray",
+						name: "Manual Spray",
+						displayOrder: 1,
+						isEnabled: true,
+						sectionId: "section-1",
+						parentProcessId: null,
+					}];
+				},
+			},
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/work-processes")
+			.query({ search: "spray" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedQuery).to.not.be.undefined;
+		expect(response.body.data).to.deep.equal([{
+			id: "proc-1",
+			subStageId: "sub-1",
+			subStageName: "Full Spray",
+			name: "Manual Spray",
+			displayOrder: 1,
+			isEnabled: true,
+			sectionId: "section-1",
+			parentProcessId: null,
+		}]);
+	});
+
+	it("rejects unknown work-process query keys", async () => {
+		let called = false;
+		const app = appFor(
+			{
+				workProcess: {
+					findMany: async () => {
+						called = true;
+						return [];
+					},
+				},
+			},
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/work-processes")
+			.query({ bogus: "1" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(400);
 		expect(called).to.equal(false);
 	});
 });

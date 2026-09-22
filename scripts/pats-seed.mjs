@@ -8,7 +8,7 @@
  *
  * SEED_MODE=none|demo|uat — additive + idempotent by default (+ PATS_SEED_FRESH=1
  * for a gated reset+reseed; dev/test only, never default, refused in production).
- * The demo subjects are the canonical RBAC fixture set for future Playwright
+ * The seeded subjects are the canonical RBAC fixture set for future Playwright
  * ABAC/RBAC tests — positive + negative capability/deny paths. See the fixture
  * table in seedProfile(). v1.0 fabricated B308 family is dropped.
  *
@@ -61,7 +61,6 @@ if (freshReset) {
 }
 
 const profile = mode;
-const prefix = mode.toUpperCase();
 // Relative-to-now anchor so every fresh seed is "recent" and plans/batches/QC
 // line up with the monitoring sheets (which snap to today) instead of a stale
 // frozen date. All offsets below spread from this single instant per run.
@@ -75,9 +74,12 @@ function stableId(key) {
 	return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
 }
 
-/** Profile-scoped business codes (DEMO-B251 / UAT-B251) for multi-profile DBs. */
+/** Business codes are bare stems (B251, ST-INJ-01, ...). No profile prefix:
+ *  PATS business codes are globally unique in the schema, so multi-profile
+ *  co-seeding is not supported. Profile identity lives in stableId() keys and
+ *  sourceReference.seedProfile. */
 function code(value) {
-	return `${prefix}-${value}`;
+	return value;
 }
 
 function atOffset({ days = 0, hours = 0, minutes = 0 } = {}) {
@@ -112,11 +114,15 @@ function deskDailySheetId(stationId, workProcessId, date) {
  *   Direct CAPABILITY grants (e.g. Line Leader `daily-metrics.encode`). Not a fourth business role.
  */
 async function upsertSubject(tx, key, username, displayName, roleBundles, passwordHash, extraAssignments = []) {
+	// Email snapshot stays bound to the username: `/users/me` is the Layer-1
+	// identity anchor and e2e asserts the `<username>@pats.local` address set
+	// exactly (see e2e/rbac/api-matrix.spec.ts). Only the display name is narrative.
+	const snapshotEmail = `${username}@pats.local`;
 	const subject = await tx.subject.upsert({
 		where: { id: stableId(key) },
 		update: {
 			displayNameSnapshot: displayName,
-			emailSnapshot: `${username}@pats.local`,
+			emailSnapshot: snapshotEmail,
 			status: "ACTIVE",
 		},
 		create: {
@@ -125,7 +131,7 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
 			issuer: "pats-local",
 			providerSubject: username,
 			displayNameSnapshot: displayName,
-			emailSnapshot: `${username}@pats.local`,
+			emailSnapshot: snapshotEmail,
 			status: "ACTIVE",
 		},
 	});
@@ -163,7 +169,7 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
 		});
 	}
 
-	// Re-seed must slim leftover fat bundles (e.g. demo.planner no longer holds QC).
+	// Re-seed must slim leftover fat bundles (e.g. marco.villanueva no longer holds QC).
 	const desiredKeys = new Set([
 		...roleBundles.map((role) => `ROLE_BUNDLE:${role}`),
 		...extraAssignments.map((assignment) => `${assignment.kind}:${assignment.key}`),
@@ -195,16 +201,44 @@ async function upsertSubject(tx, key, username, displayName, roleBundles, passwo
  * check above). Runs inside the seed $transaction so a failed reset+reseed rolls
  * back cleanly. Children are deleted before parents. Tables outside the seed's
  * writable surface are intentionally left untouched.
+ *
+ * Beyond the seed-written tables this also clears:
+ * - runtime-accumulating canonical tables (processChangeLog, idempotencyRecord)
+ *   whose rows reference seeded subjects/projects and would otherwise wedge the
+ *   reset; they are rebuilt from live API traffic.
+ * - legacy orphan join tables (StationProcess, LineLeaderAssignment) that predate
+ *   the current schema, still FK into seed tables, and have no Prisma model. They
+ *   are cleared with raw SQL and skipped when absent (fresh DBs without the legacy
+ *   migration history).
  */
 async function wipeSeededTables(tx) {
+	// Legacy tables predate the canonical model and usually do not exist. A
+	// failed DELETE would abort the whole transaction (every later statement
+	// then fails with 25P02), so probe pg_tables first instead of try/catch.
+	const legacyRows = await tx.$queryRawUnsafe(
+		"SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('StationProcess', 'LineLeaderAssignment')",
+	);
+	const legacyTables = new Set(legacyRows.map((row) => row.tablename));
+	for (const legacyTable of ["StationProcess", "LineLeaderAssignment"]) {
+		if (legacyTables.has(legacyTable)) {
+			await tx.$executeRawUnsafe(`DELETE FROM "${legacyTable}"`);
+		}
+	}
+
 	for (const model of [
 		"idempotencyRecord",
 		"printJob",
 		"processChangeLog",
 		"outboxMessage",
 		"auditRecord",
+		"idempotencyRecord",
 		"qualityDecision",
 		"qualityInspection",
+		"workInstruction",
+		"processChangeLog",
+		"subjectAssignment",
+		"subjectCredential",
+		"userPreference",
 		"monitoringStationBoard",
 		"monitoringDailySheet",
 		"routingViolation",
@@ -213,36 +247,34 @@ async function wipeSeededTables(tx) {
 		"inventoryTransaction",
 		"batchPositionProjection",
 		"batchPartLine",
-		"batch",
 		"lotPartAllocation",
-		"lot",
+		"batch",
 		"materialRequirement",
 		"routingStep",
 		"pmrs",
 		"partsList",
+		"qualityStageAssignment",
+		"stationStep",
+		"subStageEligibility",
+		"processRouteStage",
+		"booth",
+		"workProcess",
+		"stage",
+		"subStage",
+		"section",
+		"bomLine",
+		"bomDefinition",
+		"modelPart",
+		"processRoute",
+		"lot",
 		"part",
 		"planDemandAllocation",
 		"projectModelAllocation",
 		"productSpecification",
 		"project",
-		"workInstruction",
-		"booth",
-		"workProcess",
-		"stationStep",
-		"station",
-		"subStageEligibility",
-		"subStage",
-		"processRouteStage",
-		"processRoute",
-		"bomLine",
-		"bomDefinition",
-		"modelPart",
 		"model",
 		"product",
-		"userPreference",
-		"qualityStageAssignment",
-		"subjectAssignment",
-		"subjectCredential",
+		"workflowGroup",
 		"subject",
 	]) {
 		await tx[model].deleteMany({});
@@ -259,32 +291,37 @@ async function seedProfile(tx) {
 	// ── RBAC fixture subjects (Playwright ABAC/RBAC ground) ────────────────
 	// Every subject is a deliberate capability-matrix row. All share the single
 	// PATS_SEED_PASSWORD. stableId(key) entries keep re-seeds idempotent.
-	//   positive  demo.admin           — admin bundle; every capability true.
-	//   positive  demo.planner         — pure planner (planning + read-only
-	//                                     monitoring + catalog read). No QC,
-	//                                     no floor ops, no day-sheet encode.
-	//   positive  demo.operator        — floor execution + inventory.issue +
-	//                                     station encode. DENIED: daily-sheet
-	//                                     encode, QC, ops-admin, catalog-manage.
-	//   positive  demo.lineleader      — operator + CAPABILITY daily-metrics.encode
-	//                                     (Journey B / day-sheet grant path) +
-	//                                     CAPABILITY quality.read (Reports QC reads
-	//                                     without a Quality stage scope; scope-less
-	//                                     LL cannot resolve, only read).
-	//   positive  demo.quality         — qi bundle + quality-stage scope
-	//                                     Decoration + Injection (QC-primary).
-	//   negative  demo.quality_noscope — qi bundle with NO quality-stage rows:
-	//                                     Journey D must FAIL CLOSED (scope-
-	//                                     dependent deny fixture).
-	// The operator-only deny path needs no separate user — demo.operator already
-	// is the operator without daily-metrics.encode. demo.inventory/demo.guest were
+	//   positive  liza.delacruz  — admin bundle; every capability true.
+	//   positive  marco.villanueva — pure planner (planning + read-only
+	//                                monitoring + catalog read). No QC,
+	//                                no floor ops, no day-sheet encode.
+	//   positive  joshua.reyes     — floor execution + inventory.issue +
+	//                                station encode. DENIED: daily-sheet
+	//                                encode, QC, ops-admin, catalog-manage.
+	//   positive  aila.torres      — operator + CAPABILITY daily-metrics.encode
+	//                                (Journey B / day-sheet grant path) +
+	//                                CAPABILITY quality.read (Reports QC reads
+	//                                without a Quality stage scope; scope-less
+	//                                LL cannot resolve, only read).
+	//   positive  karen.limjoco    — qi bundle + quality-stage scope
+	//                                Decoration + Injection (QC-primary).
+	//   negative  paolo.garcia     — qi bundle with NO quality-stage rows:
+	//                                Journey D must FAIL CLOSED (scope-
+	//                                dependent deny fixture).
+	// The operator-only deny path needs no separate user — joshua.reyes already
+	// is the operator without daily-metrics.encode. Extra guest accounts were
 	// considered and dropped: they add no distinct capability assertion.
+	//
+	// Display names and email snapshots are NARRATIVE ONLY (realistic employee
+	// names so surfaces read like a live factory). The proper-name usernames are the
+	// RBAC fixture contract — e2e/RBAC tests log in with them and must never be
+	// renamed. Re-seeding updates the display/email snapshots idempotently.
 
 	const planner = await upsertSubject(
 		tx,
 		"subject-planner",
-		`${profile}.planner`,
-		`${prefix} Planner`,
+		"marco.villanueva",
+		"Marco Villanueva",
 		// Pure planner: planning + read-only monitoring + catalog read. Not a QC account.
 		["planner"],
 		passwordHash,
@@ -292,8 +329,8 @@ async function seedProfile(tx) {
 	const operator = await upsertSubject(
 		tx,
 		"subject-operator",
-		`${profile}.operator`,
-		`${prefix} Operator`,
+		"joshua.reyes",
+		"Joshua Reyes",
 		["operator"],
 		passwordHash,
 	);
@@ -301,8 +338,8 @@ async function seedProfile(tx) {
 	const lineLeader = await upsertSubject(
 		tx,
 		"subject-lineleader",
-		`${profile}.lineleader`,
-		`${prefix} Line Leader`,
+		"aila.torres",
+		"Aila Torres",
 		["operator"],
 		passwordHash,
 		[
@@ -313,8 +350,8 @@ async function seedProfile(tx) {
 	const quality = await upsertSubject(
 		tx,
 		"subject-quality",
-		`${profile}.quality`,
-		`${prefix} Quality`,
+		"karen.limjoco",
+		"Karen Limjoco",
 		["qi"],
 		passwordHash,
 	);
@@ -325,16 +362,16 @@ async function seedProfile(tx) {
 	const qualityNoScope = await upsertSubject(
 		tx,
 		"subject-quality-noscope",
-		`${profile}.quality_noscope`,
-		`${prefix} Quality NoScope`,
+		"paolo.garcia",
+		"Paolo Garcia",
 		["qi"],
 		passwordHash,
 	);
 	const admin = await upsertSubject(
 		tx,
 		"subject-admin",
-		`${profile}.admin`,
-		`${prefix} Admin`,
+		"liza.delacruz",
+		"Liza Dela Cruz",
 		["admin"],
 		passwordHash,
 	);
@@ -707,28 +744,50 @@ async function seedProfile(tx) {
 	const assemblyStageId = stableId("stage-assembly");
 	const warehouseStageId = stableId("stage-warehouse");
 	const subFullSprayId = stableId("substage-full-spray");
-	const subMaskSprayId = stableId("substage-mask-spray");
+	const subLineSprayId = stableId("substage-line-spray");
 	const subTampoId = stableId("substage-tampo");
+	const subMimakiId = stableId("substage-mimaki");
 	// Retired: Quality is Journey D, not a SubStage / Station / Process.
 	const retiredQualityCheckSubId = stableId("substage-quality-check");
-	const retiredQualityCheckStationId = stableId("station-assembly-quality-check");
+	const retiredQualityCheckSectionId = stableId("station-assembly-quality-check");
 	const retiredQualityCheckProcessId = stableId("work-process-quality-check");
+	const subAssemblyStagingId = stableId("substage-assembly-staging");
 	const subSubAssemblyId = stableId("substage-sub-assembly");
+	const subMainAssemblyId = stableId("substage-main-assembly");
+	const subCapsulationId = stableId("substage-capsulation");
 	const subAssortmentId = stableId("substage-assortment");
 	const subMainPackingId = stableId("substage-main-packing");
 	// Injection Molding: the Injection desk bridge sub-stage (Option A reshape).
 	// Leaf under the Injection stage so the monitoring desk resolves a non-null
 	// subStageId work-process and its daily sheet stops failing closed.
 	const subInjectionMoldingId = stableId("substage-injection-molding");
-	// Device install default (D-008): one Station per SubStage when present; stage-level otherwise.
-	// Keep legacy keys for injection/decoration-primary so existing station ids stay stable.
-	const injectionStationId = stableId("station-injection-01");
-	const decorationStationId = stableId("station-decoration-full-spray"); // primary deco PC (was decoration-01)
-	const decorationMaskStationId = stableId("station-decoration-mask-spray");
-	const decorationTampoStationId = stableId("station-decoration-tampo");
-	const assemblySubAssemblyStationId = stableId("station-assembly-sub-assembly");
-	const assemblyAssortmentStationId = stableId("station-assembly-assortment");
-	const warehouseStationId = stableId("station-warehouse-main-packing");
+	// Line-setup tree reshape (2026-09-19): one Section per Stage — the board's
+	// Section → Process → Sub-process parents. The per-SubStage desk rows are
+	// retired (see retiredDeskSectionIds below); four stable keys are reused
+	// as the parents so every existing section reference keeps resolving.
+	const injectionSectionId = stableId("station-injection-01");
+	const decorationSectionId = stableId("station-decoration-full-spray"); // now the Decoration parent
+	const assemblySubAssemblySectionId = stableId("station-assembly-sub-assembly"); // now the Assembly parent
+	const warehouseSectionId = stableId("station-warehouse-main-packing"); // now the Warehouse parent
+	// Retired per-SubStage desk keys: rows are disabled on reseed (additive
+	// hardening) and wiped on fresh reseed. Kept as constants so the
+	// disable-list stays explicit.
+	const decorationLineSectionId = stableId("station-decoration-line-spray");
+	const decorationTampoSectionId = stableId("station-decoration-tampo");
+	const decorationMimakiSectionId = stableId("station-decoration-mimaki");
+	const assemblyStagingSectionId = stableId("station-assembly-staging");
+	const assemblyMainAssemblySectionId = stableId("station-assembly-main-assembly");
+	const assemblyCapsulationSectionId = stableId("station-assembly-capsulation");
+	const assemblyAssortmentSectionId = stableId("station-assembly-assortment");
+	const retiredDeskSectionIds = [
+		decorationLineSectionId,
+		decorationTampoSectionId,
+		decorationMimakiSectionId,
+		assemblyStagingSectionId,
+		assemblyMainAssemblySectionId,
+		assemblyCapsulationSectionId,
+		assemblyAssortmentSectionId,
+	];
 
 	await tx.workflowGroup.upsert({
 		where: { id: workflowId },
@@ -764,10 +823,10 @@ async function seedProfile(tx) {
 	}
 
 	// Journey D allowedStages (v1 stage grain). Fail closed without these rows.
-	// demo.quality = Decoration + Injection (QC-primary QI). demo.admin = all catalog stages
+	// karen.limjoco = Decoration + Injection (QC-primary QI). liza.delacruz = all catalog stages
 	// so admin quality caps are not fail-closed on empty scope.
-	// demo.planner is a pure planner — no QC capabilities and no stage rows.
-	// demo.quality_noscope is the negative fixture — qi bundle but NO scope rows
+	// marco.villanueva is a pure planner — no QC capabilities and no stage rows.
+	// paolo.garcia is the negative fixture — qi bundle but NO scope rows
 	// here on purpose; any leaked rows from an earlier seed get revoked below.
 	const qualityWorkspaceId = process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS";
 	const allCatalogStageIds = [injectionStageId, decorationStageId, assemblyStageId, warehouseStageId];
@@ -797,7 +856,7 @@ async function seedProfile(tx) {
 		}
 	}
 	// Re-seed must slim leftover fat scope (additive-mode hardening):
-	// demo.planner never holds QC scope, and demo.quality_noscope must never
+	// marco.villanueva never holds QC scope, and paolo.garcia must never
 	// gain scope, so any stalker rows are revoked to preserve the deny fixture.
 	const leftoverNoScopeSubjects = [planner.id, qualityNoScope.id];
 	for (const subjectId of leftoverNoScopeSubjects) {
@@ -815,10 +874,14 @@ async function seedProfile(tx) {
 	for (const [id, name, displayOrder, flags] of [
 		[subInjectionMoldingId, "Molding", 1, { isConfigurable: true }],
 		[subFullSprayId, "Full Spray", 1, { isConfigurable: true }],
-		[subMaskSprayId, "Mask Spray", 2, { isConfigurable: true }],
+		[subLineSprayId, "Line Spray (Mask)", 2, { isConfigurable: true }],
 		[subTampoId, "Tampo", 3, { isConfigurable: true }],
-		[subSubAssemblyId, "Sub-Assembly", 1, { isConfigurable: true }],
-		[subAssortmentId, "Assortment", 3, { isConfigurable: true }],
+		[subMimakiId, "Mimaki", 4, { isConfigurable: true }],
+		[subAssemblyStagingId, "Assembly Staging", 1, { isConfigurable: true }],
+		[subSubAssemblyId, "Sub Assembly", 2, { isConfigurable: true }],
+		[subMainAssemblyId, "Main Assembly", 3, { isConfigurable: true }],
+		[subCapsulationId, "Capsulation", 4, { isConfigurable: true }],
+		[subAssortmentId, "Assortment", 5, { isConfigurable: true }],
 		[subMainPackingId, "Main Packing", 1, { isConfigurable: true }],
 	]) {
 		await tx.subStage.upsert({
@@ -846,9 +909,13 @@ async function seedProfile(tx) {
 	for (const [stageId, subStageId] of [
 		[injectionStageId, subInjectionMoldingId],
 		[decorationStageId, subFullSprayId],
-		[decorationStageId, subMaskSprayId],
+		[decorationStageId, subLineSprayId],
 		[decorationStageId, subTampoId],
+		[decorationStageId, subMimakiId],
+		[assemblyStageId, subAssemblyStagingId],
 		[assemblyStageId, subSubAssemblyId],
+		[assemblyStageId, subMainAssemblyId],
+		[assemblyStageId, subCapsulationId],
 		[assemblyStageId, subAssortmentId],
 		[warehouseStageId, subMainPackingId],
 	]) {
@@ -891,21 +958,18 @@ async function seedProfile(tx) {
 		});
 	}
 
-	for (const [id, name, stationCode, stageId, displayOrder] of [
-		[injectionStationId, "Injection · Molding", "ST-INJ-01", injectionStageId, 1],
-		[decorationStationId, "Decoration · Full Spray", "ST-DEC-FS", decorationStageId, 2],
-		[decorationMaskStationId, "Decoration · Mask Spray", "ST-DEC-MS", decorationStageId, 3],
-		[decorationTampoStationId, "Decoration · Tampo", "ST-DEC-TP", decorationStageId, 4],
-		[assemblySubAssemblyStationId, "Assembly · Sub-Assembly", "ST-ASM-SUB", assemblyStageId, 5],
-		[assemblyAssortmentStationId, "Assembly · Assortment", "ST-ASM-AST", assemblyStageId, 7],
-		[warehouseStationId, "Warehouse · Main Packing", "ST-WH-PK", warehouseStageId, 8],
+	for (const [id, name, sectionCode, stageId, displayOrder] of [
+		[injectionSectionId, "Injection", "SEC-INJ", injectionStageId, 1],
+		[decorationSectionId, "Decoration", "SEC-DEC", decorationStageId, 2],
+		[assemblySubAssemblySectionId, "Assembly", "SEC-ASM", assemblyStageId, 3],
+		[warehouseSectionId, "Warehouse", "SEC-WH", warehouseStageId, 4],
 	]) {
-		await tx.station.upsert({
+		await tx.section.upsert({
 			where: { id },
 			update: {
 				workspaceId: "PATS",
 				name,
-				stationCode: code(stationCode),
+				sectionCode: code(sectionCode),
 				operationalContextKey: "PATS",
 				stageId,
 				displayOrder,
@@ -915,7 +979,7 @@ async function seedProfile(tx) {
 				id,
 				workspaceId: "PATS",
 				name,
-				stationCode: code(stationCode),
+				sectionCode: code(sectionCode),
 				operationalContextKey: "PATS",
 				stageId,
 				displayOrder,
@@ -928,14 +992,18 @@ async function seedProfile(tx) {
 		// Injection keeps the stage-wide bound step (station history filters match
 		// null-rotor events) and gains a sub-stage-bound step so the Monitoring
 		// desk bridge can resolve its work-process against a non-null subStageId.
-		[stableId("station-step-inj"), injectionStationId, injectionStageId, null],
-		[stableId("station-step-inj-mold"), injectionStationId, injectionStageId, subInjectionMoldingId],
-		[stableId("station-step-dec-fs"), decorationStationId, decorationStageId, subFullSprayId],
-		[stableId("station-step-dec-ms"), decorationMaskStationId, decorationStageId, subMaskSprayId],
-		[stableId("station-step-dec-tp"), decorationTampoStationId, decorationStageId, subTampoId],
-		[stableId("station-step-subassy"), assemblySubAssemblyStationId, assemblyStageId, subSubAssemblyId],
-		[stableId("station-step-assort"), assemblyAssortmentStationId, assemblyStageId, subAssortmentId],
-		[stableId("station-step-wh"), warehouseStationId, warehouseStageId, subMainPackingId],
+		[stableId("station-step-inj"), injectionSectionId, injectionStageId, null],
+		[stableId("station-step-inj-mold"), injectionSectionId, injectionStageId, subInjectionMoldingId],
+		[stableId("station-step-dec-fs"), decorationSectionId, decorationStageId, subFullSprayId],
+		[stableId("station-step-dec-ls"), decorationSectionId, decorationStageId, subLineSprayId],
+		[stableId("station-step-dec-tp"), decorationSectionId, decorationStageId, subTampoId],
+		[stableId("station-step-dec-mk"), decorationSectionId, decorationStageId, subMimakiId],
+		[stableId("station-step-asm-stg"), assemblySubAssemblySectionId, assemblyStageId, subAssemblyStagingId],
+		[stableId("station-step-subassy"), assemblySubAssemblySectionId, assemblyStageId, subSubAssemblyId],
+		[stableId("station-step-asm-main"), assemblySubAssemblySectionId, assemblyStageId, subMainAssemblyId],
+		[stableId("station-step-asm-cap"), assemblySubAssemblySectionId, assemblyStageId, subCapsulationId],
+		[stableId("station-step-assort"), assemblySubAssemblySectionId, assemblyStageId, subAssortmentId],
+		[stableId("station-step-wh"), warehouseSectionId, warehouseStageId, subMainPackingId],
 	]) {
 		await tx.stationStep.upsert({
 			where: { id },
@@ -945,9 +1013,14 @@ async function seedProfile(tx) {
 	}
 
 	// Work processes under sub-stages (catalog leaf; not stations). Bridge names match current SubStages.
-	const processMoldingId = stableId("work-process-molding");
-	const processFullSprayId = stableId("work-process-full-spray");
-	const processMaskSprayId = stableId("work-process-mask-spray");
+	const processInjMachineOpId = stableId("work-process-inj-machine-op");
+	const processInjGateCutId = stableId("work-process-inj-gate-cut");
+	const processInjOfflineOpId = stableId("work-process-inj-offline-op");
+	const processInjIQCId = stableId("work-process-inj-iqc");
+	const processInjMHId = stableId("work-process-inj-mh");
+	const processFsManualId = stableId("work-process-fs-manual");
+	const processFsDrumId = stableId("work-process-fs-drum");
+	const processLsMaskId = stableId("work-process-ls-mask");
 	const processTampoId = stableId("work-process-tampo");
 	const processSubAssemblyId = stableId("work-process-sub-assembly");
 	const processAssortmentId = stableId("work-process-assortment");
@@ -962,32 +1035,33 @@ async function seedProfile(tx) {
 		[processAssortmentId, subAssortmentId, "Assortment", 2, 8],
 		[processMainPackingId, subMainPackingId, "Main Packing", 1, null],
 	]) {
+		const sectionId = processSectionBySubStage[subStageId] ?? null;
 		await tx.workProcess.upsert({
 			where: { id },
 			update: {
 				subStageId,
 				name,
 				displayOrder,
+				sectionId,
 				isEnabled: true,
 				isSystemSeed: true,
-				labelledCycleTimeSec,
 			},
 			create: {
 				id,
 				subStageId,
 				name,
 				displayOrder,
+				sectionId,
 				isEnabled: true,
 				isSystemSeed: true,
-				labelledCycleTimeSec,
 			},
 		});
 	}
 
 	// Quality Inspection is Journey D. Remount leftover Quality Check hops (additive — no deletes).
 	await tx.qualityInspection.updateMany({
-		where: { OR: [{ subStageId: retiredQualityCheckSubId }, { stationId: retiredQualityCheckStationId }] },
-		data: { subStageId: subSubAssemblyId, stationId: assemblySubAssemblyStationId },
+		where: { OR: [{ subStageId: retiredQualityCheckSubId }, { stationId: retiredQualityCheckSectionId }] },
+		data: { subStageId: subSubAssemblyId, stationId: assemblySubAssemblySectionId },
 	});
 	await tx.batch.updateMany({
 		where: { currentSubStageId: retiredQualityCheckSubId },
@@ -1018,11 +1092,17 @@ async function seedProfile(tx) {
 		data: { isEnabled: false },
 	});
 	await tx.booth.updateMany({
-		where: { OR: [{ stationId: retiredQualityCheckStationId }, { subStageId: retiredQualityCheckSubId }] },
-		data: { stationId: assemblySubAssemblyStationId, subStageId: subSubAssemblyId },
+		where: { OR: [{ stationId: retiredQualityCheckSectionId }, { subStageId: retiredQualityCheckSubId }] },
+		data: { stationId: assemblySubAssemblySectionId, subStageId: subSubAssemblyId },
 	});
-	await tx.station.updateMany({
-		where: { id: retiredQualityCheckStationId },
+	await tx.section.updateMany({
+		where: { id: retiredQualityCheckSectionId },
+		data: { isEnabled: false },
+	});
+	// Tree reshape: the retired per-SubStage desks stay queryable by id for
+	// audit history but leave the board (fresh reseed wipes them outright).
+	await tx.section.updateMany({
+		where: { id: { in: retiredDeskSectionIds } },
 		data: { isEnabled: false },
 	});
 
@@ -1478,7 +1558,7 @@ async function seedProfile(tx) {
 		["batch-av-dec", "BNI-2607-002", "01", "B251-01-01", tray, decorationStageId, subFullSprayId, "ACTIVE"],
 		["batch-av-qc", "BNI-2607-003", "01", "B251-01-04", tray, assemblyStageId, subSubAssemblyId, "ACTIVE"],
 		["batch-hd-inj", "BNI-2607-004", "02", "B251-01-08", tray, injectionStageId, null, "ACTIVE"],
-		["batch-hd-dec", "BNI-2607-005", "02", "B251-01-10", tray, decorationStageId, subMaskSprayId, "ACTIVE"],
+		["batch-hd-dec", "BNI-2607-005", "02", "B251-01-10", tray, decorationStageId, subLineSprayId, "ACTIVE"],
 		["batch-tc-inj", "BNI-2607-006", "03", "B251-01-11", tray, injectionStageId, null, "ACTIVE"],
 		["batch-tc-asm", "BNI-2607-007", "03", "B251-01-12", tray, assemblyStageId, subAssortmentId, "ACTIVE"],
 		["batch-fw-dec", "BNI-2607-008", "04", "B251-01-15", tray, decorationStageId, subTampoId, "ACTIVE"],
@@ -1601,7 +1681,7 @@ async function seedProfile(tx) {
 				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"${code(batchBarcode)}-${seq}"}`,
 				status: "SENT",
 				failureReason: null,
-				actor: `${profile}.lineleader`,
+				actor: "aila.torres",
 				actorSubjectId: lineLeader.id,
 				occurredAt: atOffset({ minutes: dueOffset }),
 			},
@@ -1620,7 +1700,7 @@ async function seedProfile(tx) {
 				language: "EN",
 				renderedPayload: `{"demoprint":true,"sequence":${seq},"label":"${code(batchBarcode)}-${seq}"}`,
 				status: "SENT",
-				actor: `${profile}.lineleader`,
+				actor: "aila.torres",
 				actorSubjectId: lineLeader.id,
 				occurredAt: atOffset({ minutes: dueOffset }),
 			},
@@ -1633,7 +1713,7 @@ async function seedProfile(tx) {
 		["ev-av-dec", "batch-av-dec", decorationStageId, subFullSprayId, "B251-01-01", tray - 2, 0, 5, "STAGE_COMPLETED", "ACCEPTED", false],
 		["ev-av-skip", "batch-av-qc", assemblyStageId, null, "B251-01-04", tray, 0, 6, "STAGE_SCAN_RECORDED", "BLOCKED", true],
 		["ev-hd-inj", "batch-hd-inj", injectionStageId, null, "B251-01-08", tray, 1, 1, "STAGE_COMPLETED", "ACCEPTED", false],
-		["ev-hd-dec", "batch-hd-dec", decorationStageId, subMaskSprayId, "B251-01-10", tray - 2, 1, 3, "STAGE_COMPLETED", "ACCEPTED", false],
+		["ev-hd-dec", "batch-hd-dec", decorationStageId, subLineSprayId, "B251-01-10", tray - 2, 1, 3, "STAGE_COMPLETED", "ACCEPTED", false],
 		["ev-tc-inj", "batch-tc-inj", injectionStageId, null, "B251-01-11", tray, 1, 4, "STAGE_COMPLETED", "ACCEPTED", false],
 		["ev-tc-asm", "batch-tc-asm", assemblyStageId, subAssortmentId, "B251-01-12", tray, 2, 1, "STAGE_COMPLETED", "ACCEPTED", false],
 		["ev-fw-dec", "batch-fw-dec", decorationStageId, subTampoId, "B251-01-15", tray, 2, 2, "STAGE_COMPLETED", "ACCEPTED", false],
@@ -1751,7 +1831,7 @@ async function seedProfile(tx) {
 				actualQuantityMagnitude: `${actual}.000000`,
 				quantityUom: "piece",
 				usageBasis: "1 per product",
-				withdrawalFormRef: type === "ISSUANCE" ? `${prefix}-WD-${partCode}` : null,
+				withdrawalFormRef: type === "ISSUANCE" ? `WD-${partCode}` : null,
 				recordedAt: atOffset({ days: day, hours: hour }),
 				recordedBy: operator.displayNameSnapshot ?? operator.id,
 				recordedBySubjectId: operator.id,
@@ -1772,7 +1852,7 @@ async function seedProfile(tx) {
 				actualQuantityMagnitude: `${actual}.000000`,
 				quantityUom: "piece",
 				usageBasis: "1 per product",
-				withdrawalFormRef: type === "ISSUANCE" ? `${prefix}-WD-${partCode}` : null,
+				withdrawalFormRef: type === "ISSUANCE" ? `WD-${partCode}` : null,
 				recordedAt: atOffset({ days: day, hours: hour }),
 				recordedBy: operator.displayNameSnapshot ?? operator.id,
 				recordedBySubjectId: operator.id,
@@ -1810,7 +1890,7 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// QC worklist + history on B251 batches (PROVISIONAL demo dispositions)
+	// QC worklist + history on B251 batches (PROVISIONAL seed dispositions)
 	// [key, batchKey, partCode, partName, qty, stage, sub, status, day, hour]
 	const qcOpenDefs = [
 		["qi-b251-open-taco", "batch-tc-asm", "B251-01-12", "Right Taco", tray, assemblyStageId, subAssortmentId, "IN_PROGRESS", 1, 3],
@@ -1828,7 +1908,7 @@ async function seedProfile(tx) {
 				batchId: batchIds[batchKey],
 				stageId,
 				subStageId,
-				stationId: stageId === decorationStageId ? decorationStationId : assemblySubAssemblyStationId,
+				stationId: stageId === decorationStageId ? decorationSectionId : assemblySubAssemblySectionId,
 				inspectedQuantity: `${qty}.000000`,
 				quantityUom: "piece",
 				status,
@@ -1847,7 +1927,7 @@ async function seedProfile(tx) {
 				batchId: batchIds[batchKey],
 				stageId,
 				subStageId,
-				stationId: stageId === decorationStageId ? decorationStationId : assemblySubAssemblyStationId,
+				stationId: stageId === decorationStageId ? decorationSectionId : assemblySubAssemblySectionId,
 				inspectedQuantity: `${qty}.000000`,
 				quantityUom: "piece",
 				status,
@@ -1885,10 +1965,10 @@ async function seedProfile(tx) {
 				subStageId,
 				stationId:
 					stageId === warehouseStageId
-						? warehouseStationId
+						? warehouseSectionId
 						: stageId === decorationStageId
-							? decorationStationId
-							: assemblySubAssemblyStationId,
+							? decorationSectionId
+							: assemblySubAssemblySectionId,
 				inspectedQuantity: `${qty}.000000`,
 				quantityUom: "piece",
 				status: "COMPLETED",
@@ -1909,10 +1989,10 @@ async function seedProfile(tx) {
 				subStageId,
 				stationId:
 					stageId === warehouseStageId
-						? warehouseStationId
+						? warehouseSectionId
 						: stageId === decorationStageId
-							? decorationStationId
-							: assemblySubAssemblyStationId,
+							? decorationSectionId
+							: assemblySubAssemblySectionId,
 				inspectedQuantity: `${qty}.000000`,
 				quantityUom: "piece",
 				status: "COMPLETED",
@@ -1958,7 +2038,7 @@ async function seedProfile(tx) {
 			resourceType: "ProductionPlan",
 			resourceId: projectId,
 			outcome: "SUCCESS",
-			correlationId: `${prefix}-SEED-B251`,
+			correlationId: `SEED-B251`,
 			detail: {
 				seedProfile: profile,
 				productCode: CLIENT_B251.productCode,
@@ -1975,7 +2055,7 @@ async function seedProfile(tx) {
 			resourceType: "ProductionPlan",
 			resourceId: projectId,
 			outcome: "SUCCESS",
-			correlationId: `${prefix}-SEED-B251`,
+			correlationId: `SEED-B251`,
 			detail: {
 				seedProfile: profile,
 				productCode: CLIENT_B251.productCode,
@@ -2012,7 +2092,7 @@ async function seedProfile(tx) {
 	});
 
 	// ── Monitoring encode seed (Line Leader sheets + booth boards) ─────────
-	// Durable demo for Management / Daily / Station monitoring in canonical mode.
+	// Durable seed rows for Management / Daily / Station monitoring in canonical mode.
 	const monDate = monitoringSeedDate();
 	const booth01Id = stableId("booth-01");
 	const booth02Id = stableId("booth-02");
@@ -2421,15 +2501,15 @@ async function seedProfile(tx) {
 		plans: 1,
 		lots: lotDefs.length,
 		batches: batchDefs.length,
-		stations: 7,
-		workProcesses: 5,
+		stations: 11,
+		workProcesses: 16,
 		booths: 2,
-		monitoringDailySheets: 2,
+		monitoringDailySheets: 4,
 		monitoringStationBoards: 2,
 		productId: productB251Id,
 		projectId,
 		openInspectionId: inspectionOpenId,
-		adminUsername: `${profile}.admin`,
+		adminUsername: "liza.delacruz",
 		evidenceNote:
 			"B251 client-parts-list (PROVISIONAL) + monitoring encode seed — fabricated B308 family dropped; not Drive-approved",
 	};

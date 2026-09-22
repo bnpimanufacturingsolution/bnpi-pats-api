@@ -362,6 +362,116 @@ describe("Journey D quality stage allow-list", () => {
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
 	});
 
+	it("rejects a FAILED decision without a reason code (422, reason required)", async () => {
+		let decided = 0;
+		const database = idempotentDatabase({
+			qualityStageAssignment: { findMany: async () => [{ stageId: "stage-decoration" }] },
+			qualityInspection: {
+				findUnique: async () => ({
+					id: "inspection-1",
+					stageId: "stage-decoration",
+					status: "OPEN",
+					rowVersion: 1,
+				}),
+				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
+			},
+			qualityDecision: {
+				create: async () => {
+					decided += 1;
+					return { id: "decision-1", decision: "FAILED" };
+				},
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		});
+		const app = commandApp(database);
+
+		const response = await request(app)
+			.post("/api/v1/quality-inspections/inspection-1/decisions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "qc-fail-no-reason")
+			.set("If-Match", '"1"')
+			.send({ decision: "FAILED" });
+
+		expect(response.status).to.equal(422);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:validation-error");
+		const reasonIssue = (response.body.errors ?? []).find(
+			(issue: { field: string }) => issue.field === "reasonCode",
+		);
+		expect(reasonIssue).to.exist;
+		expect(decided).to.equal(0);
+	});
+
+	it("records a FAILED decision that carries a reason code", async () => {
+		let recordedReasonCode: string | null = null;
+		const database = idempotentDatabase({
+			qualityStageAssignment: { findMany: async () => [{ stageId: "stage-decoration" }] },
+			qualityInspection: {
+				findUnique: async () => ({
+					id: "inspection-1",
+					stageId: "stage-decoration",
+					status: "OPEN",
+					rowVersion: 1,
+				}),
+				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
+			},
+			qualityDecision: {
+				create: async ({ data }: { data: { reasonCode: string | null } }) => {
+					recordedReasonCode = data.reasonCode;
+					return { id: "decision-1", decision: "FAILED" };
+				},
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		});
+		const app = commandApp(database);
+
+		const response = await request(app)
+			.post("/api/v1/quality-inspections/inspection-1/decisions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "qc-fail-with-reason")
+			.set("If-Match", '"1"')
+			.send({ decision: "FAILED", reasonCode: "REWORK" });
+
+		expect(response.status).to.equal(201);
+		expect(recordedReasonCode).to.equal("REWORK");
+	});
+
+	it("still accepts PASSED and HOLD without a reason code", async () => {
+		let decisions = 0;
+		const database = idempotentDatabase({
+			qualityStageAssignment: { findMany: async () => [{ stageId: "stage-decoration" }] },
+			qualityInspection: {
+				findUnique: async () => ({
+					id: "inspection-1",
+					stageId: "stage-decoration",
+					status: "OPEN",
+					rowVersion: 1,
+				}),
+				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
+			},
+			qualityDecision: {
+				create: async () => {
+					decisions += 1;
+					return { id: "decision-1", decision: "PASSED" };
+				},
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		});
+		const app = commandApp(database);
+
+		const passed = await request(app)
+			.post("/api/v1/quality-inspections/inspection-1/decisions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "qc-pass-no-reason")
+			.set("If-Match", '"1"')
+			.send({ decision: "PASSED" });
+		expect(passed.status).to.equal(201);
+
+		expect(decisions).to.equal(1);
+	});
+
 	it("lets quality.read list but not resolve or decide", async () => {
 		const readOnly: SubjectAssignmentRecord[] = [{ kind: "CAPABILITY", key: "quality.read", status: "ACTIVE" }];
 		const listApp = readApp(

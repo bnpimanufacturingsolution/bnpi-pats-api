@@ -7,6 +7,13 @@
  *   REQUIRE_DOCKER=1   Fail hard if Docker/compose cannot start (default: soft fail)
  *   DOCKER_WAIT_MS     Max wait for Docker engine (default 180000)
  *   DEV_INFRA_QUIET=1  Less chatter (default is verbose)
+ *
+ * Windows host-port guard: compose port publishes fail with WSAEACCES 10013
+ * ("An attempt was made to access a socket in a way forbidden by its access
+ * permissions") when the host port falls inside a WinNAT/Hyper-V dynamic port
+ * reservation range. Those ranges are re-assigned at every boot, so a stack that
+ * bound fine yesterday can fail today. This script detects that state before
+ * compose up and prints the durable one-time fix.
  */
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -78,6 +85,87 @@ function sleep(ms) {
 
 function truthy(value) {
 	return value === "1" || value === "true" || value === "yes";
+}
+
+// ── Windows host-port guard (pure helpers, exported for tests) ───────────────
+
+/**
+ * Parses `netsh interface ipv4 show excludedportrange protocol=tcp` output into
+ * [{ start, end, administered }] where `administered` marks statically reserved
+ * ranges (the `*` rows). Applications may still bind inside administered ranges;
+ * dynamic (WinNAT/Hyper-V) ranges forbid binds.
+ */
+export function parseNetshExcludedPortRanges(stdout) {
+	const ranges = [];
+	for (const line of String(stdout ?? "").split(/\r?\n/)) {
+		const match = line.match(/^\s*(\d{1,5})\s+(\d{1,5})\s*(\*)?\s*$/);
+		if (!match) continue;
+		const start = Number(match[1]);
+		const end = Number(match[2]);
+		if (
+			!Number.isInteger(start) ||
+			!Number.isInteger(end) ||
+			start < 0 ||
+			end > 65535 ||
+			start > end
+		) {
+			continue;
+		}
+		ranges.push({ start, end, administered: match[3] === "*" });
+	}
+	return ranges;
+}
+
+/**
+ * Resolves the host ports this compose stack will publish, mirroring the
+ * `${VAR:-default}` interpolation in docker-compose.yml. `env` (process env)
+ * wins over `envFile` (compose auto-loads `.env`), which wins over defaults.
+ */
+export function resolveComposeHostPorts({ env = {}, envFile = "" } = {}) {
+	const fileValues = {};
+	for (const line of String(envFile ?? "").split(/\r?\n/)) {
+		const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+		if (!match || match[1] in fileValues) continue;
+		fileValues[match[1]] = match[2].replace(/^["']|["']$/g, "");
+	}
+	const port = (key, fallback) => {
+		const raw = env[key] ?? fileValues[key];
+		const parsed = Number(raw);
+		return raw !== undefined &&
+			raw !== "" &&
+			Number.isInteger(parsed) &&
+			parsed > 0 &&
+			parsed < 65536
+			? parsed
+			: fallback;
+	};
+	return [
+		{ service: "postgres", variable: "POSTGRES_PORT", port: port("POSTGRES_PORT", 55432) },
+		{ service: "minio", variable: "MINIO_API_PORT", port: port("MINIO_API_PORT", 9000) },
+		{
+			service: "minio",
+			variable: "MINIO_CONSOLE_PORT",
+			port: port("MINIO_CONSOLE_PORT", 9001),
+		},
+	];
+}
+
+/**
+ * Returns mappings whose port sits inside a *dynamic* (non-administered)
+ * excluded range — exactly the ports Docker will fail to bind.
+ */
+export function findDynamicPortConflicts(mappings, ranges) {
+	const conflicts = [];
+	for (const mapping of mappings ?? []) {
+		const range = (ranges ?? []).find(
+			(candidate) =>
+				!candidate.administered &&
+				mapping.port >= candidate.start &&
+				mapping.port <= candidate.end,
+		);
+		if (range) conflicts.push({ ...mapping, range });
+	}
+	return conflicts;
 }
 
 function run(command, args, options = {}) {
@@ -248,6 +336,51 @@ async function waitForDockerEngine(timeoutMs) {
 		await sleep(3000);
 	}
 	return false;
+}
+
+function windowsExcludedPortRanges() {
+	if (process.platform !== "win32") return null;
+	const result = capture(
+		"netsh",
+		["interface", "ipv4", "show", "excludedportrange", "protocol=tcp"],
+		{ verboseCmd: false },
+	);
+	if (!result.ok) return null;
+	return parseNetshExcludedPortRanges(result.stdout);
+}
+
+/**
+ * Detects stack host ports claimed by dynamic WinNAT/Hyper-V reservation ranges
+ * and prints the durable fix. Returns true when a conflict was found.
+ */
+function warnIfHostPortsReserved(apiDir) {
+	const ranges = windowsExcludedPortRanges();
+	if (!ranges || ranges.length === 0) return false;
+
+	const envPath = path.join(apiDir, ".env");
+	const envFile = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
+	const mappings = resolveComposeHostPorts({ env: process.env, envFile });
+	const conflicts = findDynamicPortConflicts(mappings, ranges);
+	if (conflicts.length === 0) return false;
+
+	warn("Windows dynamic port reservations (WinNAT/Hyper-V) cover this stack's host ports:");
+	for (const conflict of conflicts) {
+		warn(
+			`  ${conflict.service} host port ${conflict.port} (${conflict.variable}) is inside ` +
+				`reserved range ${conflict.range.start}-${conflict.range.end}; the bind will fail ` +
+				`with "forbidden by its access permissions".`,
+		);
+	}
+	warn("Durable fix (one-time, elevated terminal) — permanently reserve the port(s) so Windows never re-assigns them:");
+	warn("  net stop winnat");
+	for (const conflict of conflicts) {
+		warn(
+			`  netsh int ipv4 add excludedportrange protocol=tcp startport=${conflict.port} numberofports=1 store=persistent`,
+		);
+	}
+	warn("  net start winnat");
+	warn("Then re-run `pnpm dev`.");
+	return true;
 }
 
 function printComposePs(apiDir) {
@@ -450,6 +583,8 @@ export async function ensureDockerInfra(options = {}) {
 		return { ok: false, skipped: false, reason: "compose-missing" };
 	}
 	ok(compose.stdout || "docker compose available");
+
+	warnIfHostPortsReserved(apiDir);
 
 	const upOk = composeUp(apiDir);
 	if (!upOk) {
