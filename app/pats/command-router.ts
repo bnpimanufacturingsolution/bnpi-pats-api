@@ -1493,28 +1493,49 @@ export function commandRouter(
 		try {
 			const processId = req.params.processId;
 			const response = await executeCommand(database, req, "workProcessDelete", { processId }, async (transaction) => {
-				const process = await transaction.workProcess.findUnique({ where: { id: processId }, select: { id: true, name: true } });
-				if (!process) notFound("The requested work process was not found.");
-				// Collect all descendants to unassign (sectionId null) - they become orphaned roots
-				const toUnassign = new Set<string>([processId]);
-				const queue: string[] = [processId];
-				for (let i = 0; i < queue.length && i < 100; i++) {
-					const current = queue[i];
-					const children = await transaction.workProcess.findMany({ where: { parentProcessId: current }, select: { id: true } });
-					for (const child of children) {
-						if (!toUnassign.has(child.id)) {
-							toUnassign.add(child.id);
-							queue.push(child.id);
-						}
+			const process = await transaction.workProcess.findUnique({ where: { id: processId }, select: { id: true, name: true } });
+			if (!process) notFound("The requested work process was not found.");
+			// Station-screen lines are operational instances bound to a leaf
+			// process through a required FK. Deleting a process with lines
+			// would destroy floor evidence, so refuse explicitly (409) instead
+			// of tripping the FK into a 500.
+			const attachedLineCount = await transaction.line.count({ where: { processId } });
+			if (attachedLineCount > 0) conflict(`Cannot delete: ${attachedLineCount} line(s) attached.`);
+			// Collect all descendants to unassign (sectionId null) - they become orphaned roots.
+			// Direct children are additionally detached from the deleted parent
+			// (parentProcessId null); deeper levels keep their own parent links
+			// so the surviving subtree stays intact instead of tripping the
+			// self-referential FK into a 500.
+			const toUnassign = new Set<string>([processId]);
+			const queue: string[] = [processId];
+			const directChildIds: string[] = [];
+			for (let i = 0; i < queue.length && i < 100; i++) {
+				const current = queue[i];
+				const children = await transaction.workProcess.findMany({ where: { parentProcessId: current }, select: { id: true } });
+				for (const child of children) {
+					if (!toUnassign.has(child.id)) {
+						toUnassign.add(child.id);
+						queue.push(child.id);
+						if (current === processId) directChildIds.push(child.id);
 					}
 				}
-				// Unassign descendants from sections (keep them in catalog as unassigned, per UI "unassigned" contract)
-				// The parent itself will be deleted, so exclude it from unassign
-				const descendantIds = Array.from(toUnassign).filter((id) => id !== processId);
-				if (descendantIds.length > 0) {
-					await transaction.workProcess.updateMany({ where: { id: { in: descendantIds } }, data: { sectionId: null } });
-				}
-				await transaction.workProcess.delete({ where: { id: processId } });
+			}
+			// Unassign descendants from sections (keep them in catalog as unassigned, per UI "unassigned" contract)
+			// The parent itself will be deleted, so exclude it from unassign
+			const descendantIds = Array.from(toUnassign).filter((id) => id !== processId);
+			if (descendantIds.length > 0) {
+				await transaction.workProcess.updateMany({ where: { id: { in: descendantIds } }, data: { sectionId: null } });
+			}
+			if (directChildIds.length > 0) {
+				await transaction.workProcess.updateMany({ where: { id: { in: directChildIds } }, data: { parentProcessId: null } });
+			}
+			// Optional references survive the delete as detached rows: durable
+			// monitoring evidence keeps its denormalized labels while the FK is
+			// cleared, instead of tripping the FK into a 500.
+			await transaction.booth.updateMany({ where: { workProcessId: processId }, data: { workProcessId: null } });
+			await transaction.monitoringDailySheet.updateMany({ where: { workProcessId: processId }, data: { workProcessId: null } });
+			await transaction.monitoringStationBoard.updateMany({ where: { workProcessId: processId }, data: { workProcessId: null } });
+			await transaction.workProcess.delete({ where: { id: processId } });
 				await recordCommandSuccess(transaction, req, "WORK_PROCESS_DELETED", "WorkProcess", processId, { name: process.name });
 				return { status: 200, body: { processId }, headers: {} };
 			});
@@ -1526,9 +1547,14 @@ export function commandRouter(
 		try {
 			const sectionId = req.params.sectionId;
 			const response = await executeCommand(database, req, "sectionDelete", { sectionId }, async (transaction) => {
-				const section = await transaction.section.findUnique({ where: { id: sectionId }, select: { id: true, name: true, sectionCode: true } });
-				if (!section) notFound("The requested section was not found.");
-				await transaction.stationStep.deleteMany({ where: { sectionId: sectionId } });
+			const section = await transaction.section.findUnique({ where: { id: sectionId }, select: { id: true, name: true, sectionCode: true } });
+			if (!section) notFound("The requested section was not found.");
+			// Station-screen lines belong to a section through a required FK.
+			// Refuse explicitly (409) instead of tripping the FK into a 500;
+			// processes are still unassigned below.
+			const attachedSectionLineCount = await transaction.line.count({ where: { sectionId } });
+			if (attachedSectionLineCount > 0) conflict(`Cannot delete: ${attachedSectionLineCount} line(s) in this section.`);
+			await transaction.stationStep.deleteMany({ where: { sectionId: sectionId } });
 				await transaction.booth.updateMany({ where: { sectionId: sectionId }, data: { sectionId: null } });
 				await transaction.workProcess.updateMany({ where: { sectionId }, data: { sectionId: null } });
 				await transaction.section.delete({ where: { id: sectionId } });

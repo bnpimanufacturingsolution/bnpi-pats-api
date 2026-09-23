@@ -346,3 +346,27 @@ The approved first-release local-authentication boundary is now implemented as f
 - `SubjectAssignment` remains the sole RBAC authorization source after subject resolution;
 - account bootstrap, password reset/change, lockout/rate limiting, and operator assignment
   administration remain separate operational work and are not auto-created by this slice.
+
+## Work-process/section delete referential review evidence (2026-09-22)
+
+User-reported `DELETE /api/v1/work-processes/:processId` returned `500` whenever the process had
+children, lines, booths, or monitoring references: unhandled Prisma FK violations escaped
+`commandError` (which maps only `P2002`) into the generic `500` problem. No route shape, auth, or
+idempotency behavior changed; the fix is confined to the two existing delete handlers.
+
+- **Standard v1.2.1 sections checked:** §2 (paths/identifiers unchanged), §3 (DELETE stays
+  idempotent; repeat delete still returns `404` per the documented contract), §4 (no new nesting),
+  §6.3 (blocks now return `409 Conflict` as RFC 9457 `application/problem+json` via
+  `sendCommandProblem`; no error is wrapped in `2xx`), §8 (authorization unchanged:
+  `operations.manage`), §9 (N/A: these rows carry no row-version validator; last-writer-wins was
+  already documented), §11 (idempotency-key behavior unchanged).
+- **Resource/behavior defined:** `DELETE /work-processes/:processId` detaches children (direct
+  children lose `parentProcessId`, all descendants lose `sectionId`), detaches optional booth and
+  monitoring references (rows preserved, FK cleared), and refuses with `409` when required
+  station-screen lines are attached. `DELETE /sections/:sectionId` refuses with `409` when lines
+  belong to the section; its existing unassign semantics are unchanged.
+- **Tests:** `tests/work-process-delete.contract.spec.ts` covers line-blocked `409`s, child/evidence
+  detachment, and the unchanged no-line section delete. Full suite: 437 passing, 0 failing.
+- **OpenAPI:** N/A — no per-endpoint OpenAPI artifact exists for command routes in this repo; the
+  contract spec above is the review evidence.
+- **Exception:** none.

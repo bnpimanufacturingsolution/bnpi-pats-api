@@ -1162,7 +1162,7 @@ async function seedProfile(tx) {
 	};
 	const seededLines = await tx.workProcess.findMany({ where: { isEnabled: true } });
 	for (const [index, process] of seededLines.sort((a, b) => a.displayOrder - b.displayOrder).entries()) {
-		const lineCode = lineCodeByProcessId[process.id] ?? `${process.name.toUpperCase().replaceAll(/[^A-Z0-9]+/g, "-").slice(0, 24)}-01`;
+		const lineCode = lineCodeByProcessId[process.id] ?? (() => { throw new Error(`No line code mapping for process "${process.name}" (id=${process.id})`); })();
 		await tx.line.upsert({
 			where: { lineCode },
 			update: {
@@ -1178,7 +1178,7 @@ async function seedProfile(tx) {
 				sectionId: process.sectionId ?? injectionSectionId,
 				processId: process.id,
 				lineCode,
-				label: `${process.name} Line 01`,
+				label: `${process.name} #${process.displayOrder}`,
 				assignedLeaderId: lineLeader.id,
 				activeLeaderId: lineLeader.id,
 				displayOrder: index,
