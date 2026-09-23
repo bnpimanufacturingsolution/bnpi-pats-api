@@ -270,6 +270,95 @@ describe("line-screen surface", () => {
 		});
 	});
 
+	describe("DELETE /lines/{id}/permanent", () => {
+		const disabledLineRow = { ...lineRow, isEnabled: false, rowVersion: 4 };
+
+		function hardDeleteDatabase(overrides: Record<string, unknown> = {}) {
+			const calls: Record<string, unknown[]> = {};
+			const database = commandDatabase(
+				{
+					line: {
+						findUnique: async ({ where }: { where: { id: string } }) =>
+							where.id === "line-1" ? { ...disabledLineRow } : null,
+						delete: async ({ where }: { where: { id: string } }) => {
+							(calls.deleted ?? (calls.deleted = [])).push(where.id);
+							return { ...disabledLineRow };
+						},
+					},
+					lineOperatorAssignment: {
+						count: async () => 0,
+						deleteMany: async ({ where }: { where: { lineId: string } }) => {
+							(calls.cleared ?? (calls.cleared = [])).push(where.lineId);
+							return { count: 1 };
+						},
+					},
+					...overrides,
+				},
+				calls,
+			);
+			return { database, calls };
+		}
+
+		const admin = [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }] as SubjectAssignmentRecord[];
+
+		it("permanently deletes a disabled line with no active operators", async () => {
+			const { database, calls } = hardDeleteDatabase();
+			const response = await request(appFor(database, admin))
+				.delete("/api/v1/lines/line-1/permanent")
+				.set("Idempotency-Key", "line-key-8")
+				.set("If-Match", '"4"')
+				.expect(200);
+			expect(response.body).to.deep.equal({ lineId: "line-1", lineCode: "DEC-LS-01" });
+			expect(calls.cleared).to.deep.equal(["line-1"]);
+			expect(calls.deleted).to.deep.equal(["line-1"]);
+		});
+
+		it("refuses with 409 while operators are still active (force disable first)", async () => {
+			const { database } = hardDeleteDatabase({
+				lineOperatorAssignment: {
+					count: async () => 1,
+					deleteMany: async () => ({ count: 0 }),
+				},
+			});
+			const response = await request(appFor(database, admin))
+				.delete("/api/v1/lines/line-1/permanent")
+				.set("Idempotency-Key", "line-key-9")
+				.set("If-Match", '"4"')
+				.expect(409);
+			expect(response.body.detail).to.contain("Force disable");
+		});
+
+		it("refuses with 409 while the line is still enabled (disable first)", async () => {
+			const { database } = hardDeleteDatabase({
+				line: {
+					findUnique: async ({ where }: { where: { id: string } }) =>
+						where.id === "line-1" ? { ...lineRow } : null,
+					delete: async () => ({ ...lineRow }),
+				},
+			});
+			const response = await request(appFor(database, admin))
+				.delete("/api/v1/lines/line-1/permanent")
+				.set("Idempotency-Key", "line-key-10")
+				.set("If-Match", '"3"')
+				.expect(409);
+			expect(response.body.detail).to.contain("Disable the line");
+		});
+
+		it("returns 404 for an unknown line", async () => {
+			const { database } = hardDeleteDatabase({
+				line: {
+					findUnique: async () => null,
+					delete: async () => ({ ...disabledLineRow }),
+				},
+			});
+			await request(appFor(database, admin))
+				.delete("/api/v1/lines/missing/permanent")
+				.set("Idempotency-Key", "line-key-11")
+				.set("If-Match", '"1"')
+				.expect(404);
+		});
+	});
+
 	describe("operator assignments", () => {
 		const assignmentBody = { subjectId: "subject-operator", lineId: "line-1" };
 

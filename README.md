@@ -122,15 +122,15 @@ Generated files are written under `docs/generated/`.
 
 ## Seeds and persistence
 
-`prisma/seed.ts` remains the legacy Mongo compatibility/demo seed orchestrator.
-It is not a canonical PATS seed and must not be used to satisfy the app–API
-integration goal.
+The legacy Mongo compatibility/demo seed (`prisma/seed.ts` and `prisma/seeds/`)
+has been removed. It seeded the retired PMS domain (Workspace, Employee,
+WorkspaceMember, ProjectMember, Product) and is out of scope for the current
+app–API transition; the canonical PATS seed is `scripts/pats-seed.mjs`.
 
-The canonical PATS seed is `scripts/pats-seed.mjs` and is invoked with
-`pnpm prisma:pats:seed`. It supports `SEED_MODE=none|demo|uat`, requires an
-explicit `PATS_SEED_PASSWORD` for writable profiles, uses deterministic IDs and
-upserts, never clears/deletes records, and marks seeded values as provisional
-evidence. Example:
+The canonical PATS seed is invoked with `pnpm prisma:pats:seed`. It supports
+`SEED_MODE=none|demo|uat`, requires an explicit `PATS_SEED_PASSWORD` for
+writable profiles, uses deterministic IDs and upserts, never clears/deletes
+records, and marks seeded values as provisional evidence. Example:
 
 ```bash
 SEED_MODE=demo \
@@ -140,7 +140,7 @@ pnpm prisma:pats:seed
 ```
 
 Seed profiles are development/UAT data, not client-data migration or source
-publication. The legacy seed remains unchanged and explicitly compatibility-only.
+publication.
 
 ## Technology
 

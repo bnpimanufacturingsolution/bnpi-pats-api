@@ -280,6 +280,8 @@ async function wipeSeededTables(tx) {
 		"subStageEligibility",
 		"processRouteStage",
 		"booth",
+		"lineOperatorAssignment",
+		"line",
 		"workProcess",
 		"stage",
 		"subStage",
@@ -392,11 +394,17 @@ async function seedProfile(tx) {
 	const admin = await upsertSubject(
 		tx,
 		"subject-admin",
-		"liza.delacruz",
-		"Liza Dela Cruz",
+		"admin",
+		"Administrator",
 		["admin"],
 		passwordHash,
 	);
+	// The admin account is the bootstrap super-user: its email snapshot is the
+	// deployment address, not the `${username}@pats.local` convention.
+	await tx.subject.update({
+		where: { id: admin.id },
+		data: { emailSnapshot: "admin@bnpipats.tech" },
+	});
 
 	// ── Client-evidence catalog: B251 ────────────────────────────────────────
 	const productB251Id = stableId("product-b251");
@@ -1072,6 +1080,7 @@ async function seedProfile(tx) {
 	const processInjOfflineOpId = stableId("work-process-inj-offline-op");
 	const processInjIQCId = stableId("work-process-inj-iqc");
 	const processInjMHId = stableId("work-process-inj-mh");
+	const processFsFullId = stableId("work-process-fs-full");
 	const processFsManualId = stableId("work-process-fs-manual");
 	const processFsDrumId = stableId("work-process-fs-drum");
 	const processLsMaskId = stableId("work-process-ls-mask");
@@ -1098,20 +1107,25 @@ async function seedProfile(tx) {
 		[subAssortmentId]: assemblySubAssemblySectionId,
 		[subMainPackingId]: warehouseSectionId,
 	};
-	for (const [id, subStageId, name, displayOrder] of [
+	// Row shape: [id, subStageId, name, displayOrder, legacyUnused, parentProcessId?].
+	// The 5th slot is legacy dead data (ignored, kept for row-shape stability);
+	// tree parents go in the optional 6th slot. Full Spray is the parent process
+	// of Drum Spray and Line Spray (Mask); displayOrder 0 sorts it first.
+	for (const [id, subStageId, name, displayOrder, , parentProcessId = null] of [
 		[processInjMachineOpId, subInjectionMoldingId, "Machine Operator", 1, 14],
 		[processInjGateCutId, subInjectionMoldingId, "Gate Cutting", 2, null],
 		[processInjOfflineOpId, subInjectionMoldingId, "Offline Operator", 3, null],
 		[processInjIQCId, subInjectionMoldingId, "IQC", 4, null],
 		[processInjMHId, subInjectionMoldingId, "MH", 5, null],
+		[processFsFullId, subFullSprayId, "Full Spray", 0, null],
 		[processFsManualId, subFullSprayId, "Manual Spray", 1, 12],
-		[processFsDrumId, subFullSprayId, "Drum Spray", 2, null],
-		[processLsMaskId, subLineSprayId, "Line Spray (Mask)", 1, 10],
+		[processFsDrumId, subFullSprayId, "Drum Spray", 2, null, processFsFullId],
+		[processLsMaskId, subLineSprayId, "Line Spray (Mask)", 1, 10, processFsFullId],
 		[processTampoId, subTampoId, "Tampo Printing", 1, 6],
 		[processMimakiId, subMimakiId, "Machine Printing", 1, null],
 		[processAsmStagingId, subAssemblyStagingId, "Staging", 1, null],
-		[processAsmSubId, subSubAssemblyId, "Assembly Task", 1, null],
-		[processAsmMainId, subMainAssemblyId, "Assembly Task", 1, null],
+		[processAsmSubId, subSubAssemblyId, "Sub-Assembly Task", 1, null],
+		[processAsmMainId, subMainAssemblyId, "Main Assembly Task", 1, null],
 		[processAsmCapId, subCapsulationId, "Capsulation Task", 1, null],
 		[processAsmAstId, subAssortmentId, "Assortment Task", 1, null],
 		[processMainPackingId, subMainPackingId, "Main Packing", 1, null],
@@ -1123,6 +1137,7 @@ async function seedProfile(tx) {
 				subStageId,
 				name,
 				displayOrder,
+				parentProcessId,
 				sectionId,
 				isEnabled: true,
 				isSystemSeed: true,
@@ -1132,6 +1147,7 @@ async function seedProfile(tx) {
 				subStageId,
 				name,
 				displayOrder,
+				parentProcessId,
 				sectionId,
 				isEnabled: true,
 				isSystemSeed: true,
@@ -1139,55 +1155,85 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// Station-screen lines (1 line = 1 screen): one default line per seeded
-	// leaf WorkProcess (L-3 default). Leaders: line-leader subject assigned and
-	// active on every seeded line; admin flips active for cover at runtime.
-	const lineCodeByProcessId = {
-		[processInjMachineOpId]: "INJ-MO-01",
-		[processInjGateCutId]: "INJ-GC-01",
-		[processInjOfflineOpId]: "INJ-OO-01",
-		[processInjIQCId]: "INJ-IQC-01",
-		[processInjMHId]: "INJ-MH-01",
-		[processFsManualId]: "DEC-FS-MS-01",
-		[processFsDrumId]: "DEC-FS-DS-01",
-		[processLsMaskId]: "DEC-LS-01",
-		[processTampoId]: "DEC-TP-01",
-		[processMimakiId]: "DEC-MK-01",
-		[processAsmStagingId]: "ASM-STG-01",
-		[processAsmSubId]: "ASM-SA-01",
-		[processAsmMainId]: "ASM-MA-01",
-		[processAsmCapId]: "ASM-CAP-01",
-		[processAsmAstId]: "ASM-AST-01",
-		[processMainPackingId]: "WH-MP-01",
-	};
-	const seededLines = await tx.workProcess.findMany({ where: { isEnabled: true } });
-	for (const [index, process] of seededLines.sort((a, b) => a.displayOrder - b.displayOrder).entries()) {
-		const lineCode = lineCodeByProcessId[process.id] ?? (() => { throw new Error(`No line code mapping for process "${process.name}" (id=${process.id})`); })();
+	// Station-screen lines (1 line = 1 screen). Line counts follow the
+	// approved floor layout:
+	//   Injection   3  (Machine Operator, Gate Cutting, Offline Operator)
+	//   Decoration  17  (Manual Spray x2, Drum Spray x1, Line Spray x8,
+	//                    Tampo x5, Mimaki x1)
+	//   Assembly    11  (Staging, Sub-Assembly, Main Assembly, Capsulation,
+	//                    Assortment — one line each)
+	//   Warehouse   0  (no station-screen line; Main Packing is process-only)
+	// IQC and MH remain processes without a station-screen line.
+	// Leaders are drawn round-robin from the seeded leader subjects so each
+	// line has a distinct assigned leader (the controller refuses to demote
+	// the last owner and forbids assigning a non-leader).
+	const leaderSubjects = [lineLeader.id, operator.id, planner.id];
+	const lineDefs = [
+		// [lineCode, processId, label]
+		// ── Injection (3) ──
+		["INJ-MO-01", processInjMachineOpId, "Machine Operator #1"],
+		["INJ-GC-01", processInjGateCutId, "Gate Cutting #1"],
+		["INJ-OO-01", processInjOfflineOpId, "Offline Operator #1"],
+		// ── Decoration (17) ──
+		["DEC-FS-MS-01", processFsManualId, "Manual Spray #1"],
+		["DEC-FS-MS-02", processFsManualId, "Manual Spray #2"],
+		["DEC-FS-DS-01", processFsDrumId, "Drum Spray #1"],
+		["DEC-LS-01", processLsMaskId, "Line Spray #1"],
+		["DEC-LS-02", processLsMaskId, "Line Spray #2"],
+		["DEC-LS-03", processLsMaskId, "Line Spray #3"],
+		["DEC-LS-04", processLsMaskId, "Line Spray #4"],
+		["DEC-LS-05", processLsMaskId, "Line Spray #5"],
+		["DEC-LS-06", processLsMaskId, "Line Spray #6"],
+		["DEC-LS-07", processLsMaskId, "Line Spray #7"],
+		["DEC-LS-08", processLsMaskId, "Line Spray #8"],
+		["DEC-TP-01", processTampoId, "Tampo #1"],
+		["DEC-TP-02", processTampoId, "Tampo #2"],
+		["DEC-TP-03", processTampoId, "Tampo #3"],
+		["DEC-TP-04", processTampoId, "Tampo #4"],
+		["DEC-TP-05", processTampoId, "Tampo #5"],
+		["DEC-MK-01", processMimakiId, "Machine Printing #1"],
+		// ── Assembly (11) ──
+		["ASM-STG-01", processAsmStagingId, "Staging #1"],
+		["ASM-STG-02", processAsmStagingId, "Staging #2"],
+		["ASM-SA-01", processAsmSubId, "Sub-Assembly #1"],
+		["ASM-SA-02", processAsmSubId, "Sub-Assembly #2"],
+		["ASM-MA-01", processAsmMainId, "Main Assembly #1"],
+		["ASM-MA-02", processAsmMainId, "Main Assembly #2"],
+		["ASM-MA-03", processAsmMainId, "Main Assembly #3"],
+		["ASM-CAP-01", processAsmCapId, "Capsulation #1"],
+		["ASM-CAP-02", processAsmCapId, "Capsulation #2"],
+		["ASM-AST-01", processAsmAstId, "Assortment #1"],
+		["ASM-AST-02", processAsmAstId, "Assortment #2"],
+	];
+	for (const [index, [lineCode, processId, label]] of lineDefs.entries()) {
+		const process = await tx.workProcess.findUnique({ where: { id: processId }, select: { sectionId: true } });
+		const leaderId = leaderSubjects[index % leaderSubjects.length];
 		await tx.line.upsert({
 			where: { lineCode },
 			update: {
-				sectionId: process.sectionId ?? injectionSectionId,
-				processId: process.id,
-				assignedLeaderId: lineLeader.id,
-				activeLeaderId: lineLeader.id,
+				sectionId: process?.sectionId ?? injectionSectionId,
+				processId,
+				assignedLeaderId: leaderId,
+				activeLeaderId: leaderId,
+				label,
 				displayOrder: index,
 				isEnabled: true,
 			},
 			create: {
 				id: stableId(`line-${lineCode}`),
-				sectionId: process.sectionId ?? injectionSectionId,
-				processId: process.id,
+				sectionId: process?.sectionId ?? injectionSectionId,
+				processId,
 				lineCode,
-				label: `${process.name} #${process.displayOrder}`,
-				assignedLeaderId: lineLeader.id,
-				activeLeaderId: lineLeader.id,
+				label,
+				assignedLeaderId: leaderId,
+				activeLeaderId: leaderId,
 				displayOrder: index,
 				isEnabled: true,
 			},
 		});
 	}
 
-	// Operator-on-line fixture: joshua.reyes runs the Manual Spray line (ACTIVE).
+	// Operator-on-line fixture: joshua.reyes runs the first Manual Spray line (ACTIVE).
 	const manualSprayLineId = stableId("line-DEC-FS-MS-01");
 	await tx.lineOperatorAssignment.upsert({
 		where: { id: stableId("line-op-joshua-dec-fs-ms-01") },
@@ -2923,15 +2969,16 @@ async function seedProfile(tx) {
 		batches:
 			batchDefs.length +
 			Object.values(storyBatches).reduce((sum, batches) => sum + batches.length, 0),
-		stations: 11,
-		workProcesses: 16,
+		stations: lineDefs.length,
+		workProcesses: 17,
 		booths: 2,
 		monitoringDailySheets: 4,
 		monitoringStationBoards: 2,
 		productId: productB251Id,
 		projectId,
 		openInspectionId: inspectionOpenId,
-		adminUsername: "liza.delacruz",
+		adminUsername: "admin",
+		adminEmail: "admin@bnpipats.tech",
 		evidenceNote:
 			"B251 client-parts-list (PROVISIONAL) + monitoring encode seed — fabricated B308 family dropped; not Drive-approved",
 	};

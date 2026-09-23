@@ -74,7 +74,6 @@ describe("canonical catalog product collection", () => {
 				productCode: "B251",
 				productName: "Machibouke Hamburger Shop",
 				lifecycleStatus: "DRAFT",
-				evidenceStatus: "NEEDS_CONFIRMATION",
 				createdAt: "2026-07-15T00:00:00.000Z",
 				updatedAt: "2026-07-16T00:00:00.000Z",
 			}],
@@ -87,7 +86,6 @@ describe("canonical catalog product collection", () => {
 			productCode: true,
 			productName: true,
 			lifecycleStatus: true,
-			evidenceStatus: true,
 			createdAt: true,
 			updatedAt: true,
 		});

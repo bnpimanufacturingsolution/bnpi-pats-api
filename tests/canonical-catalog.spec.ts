@@ -74,7 +74,6 @@ describe("canonical deployment-scoped catalog", () => {
 			productId,
 			productCode: "B251",
 			lifecycleStatus: "DRAFT",
-			evidenceStatus: "NEEDS_CONFIRMATION",
 			rowVersion: 1,
 		});
 	});

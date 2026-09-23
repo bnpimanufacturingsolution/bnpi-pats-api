@@ -61,8 +61,7 @@ You are the API inventory worker for Bandai PATS.
 Objective: build an evidence-only inventory of bnpi-pats-api. Do not edit source,
 schema, seed, generated documentation, or configuration files.
 
-Inspect index.ts, config/, middleware/, app/*, prisma/schema/, prisma/seed.ts,
-prisma/seeds/, docs/openApiSpecs.ts, docs/generated/, package.json, and tests/.
+Inspect index.ts, config/, middleware/, app/*, prisma/, docs/openApiSpecs.ts, docs/generated/, package.json, and tests/.
 For every route module, record: route prefix, registration site, controller,
 repository, Prisma models, seeders, tests, generated docs, external integrations,
 and imports from other modules. Mark whether it is platform, legacy, or unclear.
@@ -580,7 +579,6 @@ Repeat Steps 1–6 for every `RETIRE_ACTIVE_ROUTE` group. If the group cannot pa
 **Files:**
 - Modify: `README.md`
 - Modify: `docs/openApiSpecs.ts` only for retained route descriptions and legacy deprecation/boundary metadata
-- Modify: `prisma/seed.ts` only when required to preserve a retained compatibility seed boundary
 - Modify: `docs/superpowers/reports/2026-07-13-api-disposition-matrix.md` with final file outcomes
 - Regenerate: `docs/generated/swagger.json`, `docs/generated/swagger.yaml`, `docs/generated/endpoints.json`, `docs/generated/postman.collection.json`
 
@@ -592,9 +590,14 @@ Repeat Steps 1–6 for every `RETIRE_ACTIVE_ROUTE` group. If the group cannot pa
 
 Replace claims that the inherited PMS modules are the manufacturing API with an explicit statement that the repository currently contains shared platform foundations, legacy compatibility modules, and a provisional unwired PATS schema. Keep setup commands accurate.
 
-- [ ] **Step 2: Update seed documentation without redesigning seed data.**
+- [ ] **Step 2: Remove the legacy seed.**
 
-Keep existing seed values unless their schema was retired. Add a clear header/comment to `prisma/seed.ts` that the current orchestrator seeds the legacy compatibility database and is not a canonical PATS seed. Do not add PATS entities or rename legacy values.
+The legacy Mongo compatibility/demo seed (`prisma/seed.ts` and `prisma/seeds/`)
+has been removed. It seeded the retired PMS domain (Workspace, Employee,
+WorkspaceMember, ProjectMember, Product) and is out of scope for the current
+app–API transition. The canonical PATS seed is `scripts/pats-seed.mjs`,
+invoked with `pnpm prisma:pats:seed`, and the legacy `prisma.seed` script was
+removed from `package.json`.
 
 - [ ] **Step 3: Regenerate and scan documentation.**
 

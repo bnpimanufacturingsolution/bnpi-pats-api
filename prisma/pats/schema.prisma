@@ -214,7 +214,6 @@ model Model {
   modelName         String?
   sourceStatus      ProductSourceStatus
   sourceReference   Json?
-  skuCode           String?
   pinned            Boolean                  @default(false)
   lifecycleStatus   CatalogLifecycleStatus   @default(DRAFT)
   evidenceStatus    CanonicalEvidenceStatus  @default(NEEDS_CONFIRMATION)

@@ -1500,7 +1500,7 @@ export function commandRouter(
 			// would destroy floor evidence, so refuse explicitly (409) instead
 			// of tripping the FK into a 500.
 			const attachedLineCount = await transaction.line.count({ where: { processId } });
-			if (attachedLineCount > 0) conflict(`Cannot delete: ${attachedLineCount} line(s) attached.`);
+			if (attachedLineCount > 0) conflict(`Cannot delete: ${attachedLineCount} line(s) attached. Disable and permanently delete those lines first.`);
 			// Collect all descendants to unassign (sectionId null) - they become orphaned roots.
 			// Direct children are additionally detached from the deleted parent
 			// (parentProcessId null); deeper levels keep their own parent links
@@ -1553,7 +1553,7 @@ export function commandRouter(
 			// Refuse explicitly (409) instead of tripping the FK into a 500;
 			// processes are still unassigned below.
 			const attachedSectionLineCount = await transaction.line.count({ where: { sectionId } });
-			if (attachedSectionLineCount > 0) conflict(`Cannot delete: ${attachedSectionLineCount} line(s) in this section.`);
+			if (attachedSectionLineCount > 0) conflict(`Cannot delete: ${attachedSectionLineCount} line(s) in this section. Disable and permanently delete those lines first.`);
 			await transaction.stationStep.deleteMany({ where: { sectionId: sectionId } });
 				await transaction.booth.updateMany({ where: { sectionId: sectionId }, data: { sectionId: null } });
 				await transaction.workProcess.updateMany({ where: { sectionId }, data: { sectionId: null } });
@@ -1648,8 +1648,32 @@ export function commandRouter(
 				if (ifMatch !== line.rowVersion) staleVersion();
 				await transaction.lineOperatorAssignment.updateMany({ where: { lineId, status: "ACTIVE" }, data: { status: "ENDED", endedAt: new Date() } });
 				const updated = await transaction.line.update({ where: { id: lineId }, data: { isEnabled: false, rowVersion: { increment: 1 } } });
-				await recordCommandSuccess(transaction, req, "LINE_DISABLED", "Line", lineId, { lineCode: line.lineCode });
-				return { status: 200, body: { lineId, lineCode: updated.lineCode, isEnabled: updated.isEnabled, rowVersion: updated.rowVersion }, headers: { ETag: `"${updated.rowVersion}"` } };
+			await recordCommandSuccess(transaction, req, "LINE_DISABLED", "Line", lineId, { lineCode: line.lineCode });
+			return { status: 200, body: { lineId, lineCode: updated.lineCode, isEnabled: updated.isEnabled, rowVersion: updated.rowVersion }, headers: { ETag: `"${updated.rowVersion}"` } };
+		});
+		respondCommand(res, response);
+	} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.delete("/lines/:lineId/permanent", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const lineId = req.params.lineId;
+			const response = await executeCommand(database, req, "lineHardDelete", { lineId }, async (transaction) => {
+				const line = await transaction.line.findUnique({ where: { id: lineId }, select: { id: true, lineCode: true, isEnabled: true, rowVersion: true } });
+				if (!line) notFound("The requested line was not found.");
+				const ifMatch = requireIfMatch(req, "Line");
+				if (ifMatch !== line.rowVersion) staleVersion();
+				// Hard-delete policy: only with no active operators — force
+				// disable first (DELETE /lines/:lineId ends assignments).
+				const activeCount = await transaction.lineOperatorAssignment.count({ where: { lineId, status: "ACTIVE" } });
+				if (activeCount > 0) conflict("Force disable the line before deleting.");
+				if (line.isEnabled) conflict("Disable the line before deleting.");
+				// ENDED assignments are line-scoped rows under a required FK, so
+				// they go down with the line. The audit record keeps the lineCode.
+				await transaction.lineOperatorAssignment.deleteMany({ where: { lineId } });
+				await transaction.line.delete({ where: { id: lineId } });
+				await recordCommandSuccess(transaction, req, "LINE_DELETED", "Line", lineId, { lineCode: line.lineCode });
+				return { status: 200, body: { lineId, lineCode: line.lineCode }, headers: {} };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }

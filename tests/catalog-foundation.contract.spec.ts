@@ -87,7 +87,7 @@ function database() {
 		model: {
 			create: async ({ data }: { data: Record<string, unknown> }) => ({ ...model, ...data }),
 			findUnique: async ({ where }: { where: { id: string } }) =>
-				where.id === model.id || where.id === product.id ? model : null,
+				where.id === model.id ? model : where.id === product.id ? product : null,
 			update: async ({ data }: { data: Record<string, unknown> }) => ({
 				...model,
 				...data,
@@ -170,7 +170,6 @@ describe("canonical catalog foundation writes", () => {
 			.send({
 				productCode: "B243",
 				productName: "Sanrio Characters Fruits Mejirushi Accessory",
-				evidenceStatus: "PROVISIONAL",
 				sourceEvidenceIds: ["evidence-b243-title"],
 			});
 
@@ -192,7 +191,6 @@ describe("canonical catalog foundation writes", () => {
 			.send({
 				productCode: "B243",
 				productName: "Sanrio Characters Fruits Mejirushi Accessory",
-				evidenceStatus: "PROVISIONAL",
 				sourceEvidenceIds: ["evidence-b243-title"],
 			});
 		expect(replay.status).to.equal(201);

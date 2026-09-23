@@ -141,10 +141,18 @@ describe("PATS seed contract", () => {
     // The standalone grant must pass the policy KNOWN filter, not just the seed.
     expect(policy).to.contain(`"quality.read",`);
 
-    // Ledger evidence rows are part of the seed's writable (and wiped) surface.
-    expect(script).to.contain('batchIds["batch-fw-inj"]');
-    expect(script).to.contain('"printJob"');
-    expect(script).to.contain("workProcesses: 16,");
+// Ledger evidence rows are part of the seed's writable (and wiped) surface.
+		expect(script).to.contain('batchIds["batch-fw-inj"]');
+		expect(script).to.contain('"printJob"');
+		expect(script).to.contain("workProcesses: 17,");
+		// Floor layout: Injection 3 + Decoration 17 + Assembly 11 = 31 station-screen lines.
+		expect(script).to.contain('["INJ-MO-01", processInjMachineOpId, "Machine Operator #1"]');
+		expect(script).to.contain('["DEC-FS-MS-01", processFsManualId, "Manual Spray #1"]');
+		expect(script).to.contain('["DEC-LS-08", processLsMaskId, "Line Spray #8"]');
+		expect(script).to.contain('["DEC-TP-05", processTampoId, "Tampo #5"]');
+		expect(script).to.contain('["DEC-MK-01", processMimakiId, "Machine Printing #1"]');
+		expect(script).to.contain('["ASM-AST-02", processAsmAstId, "Assortment #2"]');
+		expect(script).to.contain("lineDefs.length");
   });
 
   it("documents the RBAC fixture subjects and the negative-path QI without scope", () => {
@@ -164,20 +172,18 @@ describe("PATS seed contract", () => {
     );
   });
 
-  it("uses realistic employee display names with proper-name usernames as fixtures", () => {
+it("uses realistic employee display names with proper-name usernames as fixtures", () => {
     const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
 
     // The RBAC fixture contract is the username — proper names, no demo prefix.
     expect(script).to.contain('"marco.villanueva"');
-    expect(script).to.contain('"liza.delacruz"');
-    expect(script).to.contain('"paolo.garcia"');
     expect(script).to.contain('"joshua.reyes"');
     expect(script).to.contain('"aila.torres"');
     expect(script).to.contain('"karen.limjoco"');
+    expect(script).to.contain('"paolo.garcia"');
     expect(script).not.to.match(/\$\{profile\}\.(planner|operator|lineleader|quality|admin)/);
     // Display names are narrative-only and must not derive from the prefix.
     for (const name of [
-      "Liza Dela Cruz",
       "Marco Villanueva",
       "Joshua Reyes",
       "Aila Torres",
@@ -190,10 +196,14 @@ describe("PATS seed contract", () => {
     expect(script).not.to.contain("`${prefix} Admin`");
     expect(script).not.to.contain("`${prefix} Line Leader`");
     expect(script).not.to.contain("`${prefix} Operator`");
-    expect(script).not.to.contain("`${prefix} Quality");
+    expect(script).not.to.contain("`${prefix} Quality`");
     expect(script).not.to.contain("DEMO Line Leader");
     // Email snapshots stay bound to the username (Layer-1 identity anchor
     // asserted exactly in e2e/rbac/api-matrix.spec.ts) — narrative does not touch them.
     expect(script).to.contain('`${username}@pats.local`');
+    // The bootstrap admin account is the exception: it is the deployment
+    // super-user and carries the deployment email, not the per-username convention.
+    expect(script).to.contain('"admin@bnpipats.tech"');
+    expect(script).to.contain('"admin"');
   });
 });

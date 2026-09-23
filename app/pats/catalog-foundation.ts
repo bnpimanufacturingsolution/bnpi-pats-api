@@ -22,18 +22,6 @@ type CatalogDatabase = Pick<
 	"product" | "model" | "modelPart" | "sourceEvidence" | "canonicalEvidenceLink" | "stage" | "subStage"
 >;
 
-const evidenceStatuses = [
-	"CONFIRMED",
-	"INFERRED",
-	"PROVISIONAL",
-	"SOURCE_ANOMALY",
-	"UNAVAILABLE_DEPENDENCY",
-	"NEEDS_CONFIRMATION",
-	"CONFLICTING",
-	"STALE",
-] as const;
-
-const evidenceStatusSchema = z.enum(evidenceStatuses);
 const sourceEvidenceIdsSchema = z
 	.array(z.string().trim().min(1).max(100))
 	.max(100)
@@ -43,7 +31,6 @@ const productCreateSchema = z
 	.object({
 		productCode: z.string().trim().min(1).max(120),
 		productName: z.string().trim().min(1).max(240),
-		evidenceStatus: evidenceStatusSchema.optional(),
 		sourceEvidenceIds: sourceEvidenceIdsSchema.optional(),
 	})
 	.strict();
@@ -52,7 +39,6 @@ const productPatchSchema = z
 	.object({
 		productCode: z.string().trim().min(1).max(120).optional(),
 		productName: z.string().trim().min(1).max(240).optional(),
-		evidenceStatus: evidenceStatusSchema.optional(),
 	})
 	.strict()
 	.refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
@@ -62,8 +48,6 @@ const modelCreateSchema = z
 		productId: z.string().trim().min(1).max(100),
 		modelNumber: z.string().trim().min(1).max(120),
 		modelName: z.string().trim().max(240).nullable().optional(),
-		skuCode: z.string().trim().max(120).nullable().optional(),
-		evidenceStatus: evidenceStatusSchema.optional(),
 		sourceEvidenceIds: sourceEvidenceIdsSchema.optional(),
 	})
 	.strict();
@@ -72,9 +56,7 @@ const modelPatchSchema = z
 	.object({
 		modelNumber: z.string().trim().min(1).max(120).optional(),
 		modelName: z.string().trim().max(240).nullable().optional(),
-		skuCode: z.string().trim().max(120).nullable().optional(),
 		pinned: z.boolean().optional(),
-		evidenceStatus: evidenceStatusSchema.optional(),
 	})
 	.strict()
 	.refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
@@ -97,7 +79,6 @@ const modelPartCreateSchema = z
 		partCode: z.string().trim().min(1).max(120),
 		partName: z.string().trim().min(1).max(240),
 		plannedCycleTimes: plannedCycleTimesSchema,
-		evidenceStatus: evidenceStatusSchema.optional(),
 		sourceEvidenceIds: sourceEvidenceIdsSchema.optional(),
 	})
 	.strict();
@@ -113,12 +94,10 @@ const modelPartPatchSchema = z
 		partName: z.string().trim().min(1).max(240).optional(),
 		plannedCycleTimes: plannedCycleTimesSchema,
 		routingSteps: z.array(routeStepSchema).max(50).optional(),
-		evidenceStatus: evidenceStatusSchema.optional(),
 	})
 	.strict()
 	.refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
 
-type EvidenceStatusValue = (typeof evidenceStatuses)[number];
 type EvidenceSubjectType = "PRODUCT" | "MODEL" | "MODEL_PART";
 
 class InMemoryCatalogIdempotencyStore implements IdempotencyStore {
@@ -219,12 +198,8 @@ function setVersionHeaders(res: Response, rowVersion: number): void {
 	res.setHeader("ETag", `"${rowVersion}"`);
 }
 
-function isEvidenceStatus(value: EvidenceStatusValue): value is CanonicalEvidenceStatus {
-	return Object.values(CanonicalEvidenceStatus).includes(value as CanonicalEvidenceStatus);
-}
-
-function evidenceStatus(value?: EvidenceStatusValue): CanonicalEvidenceStatus {
-	if (value && isEvidenceStatus(value)) return value;
+/** Server-side evidence default: callers cannot set ingest trust; links carry provenance. */
+function defaultEvidenceStatus(): CanonicalEvidenceStatus {
 	return CanonicalEvidenceStatus.NEEDS_CONFIRMATION;
 }
 
@@ -410,7 +385,7 @@ export function catalogFoundationRouter(
 								productCode: body.productCode,
 								productName: body.productName,
 								lifecycleStatus: CatalogLifecycleStatus.DRAFT,
-								evidenceStatus: evidenceStatus(body.evidenceStatus),
+								evidenceStatus: defaultEvidenceStatus(),
 								rowVersion: 1,
 							},
 						});
@@ -475,7 +450,7 @@ export function catalogFoundationRouter(
 					const model = await inTransaction(database, async (transaction) => {
 						const product = await transaction.product.findUnique({
 							where: { id: body.productId },
-							select: { id: true },
+							select: { id: true, productCode: true },
 						});
 						if (!product)
 							throw notFound("The requested catalog product was not found.");
@@ -485,10 +460,9 @@ export function catalogFoundationRouter(
 								productId: body.productId,
 								modelNumber: body.modelNumber,
 								modelName: body.modelName ?? null,
-								skuCode: body.skuCode ?? null,
 								sourceStatus: ProductSourceStatus.NEEDS_CONFIRMATION,
 								lifecycleStatus: CatalogLifecycleStatus.DRAFT,
-								evidenceStatus: evidenceStatus(body.evidenceStatus),
+								evidenceStatus: defaultEvidenceStatus(),
 								rowVersion: 1,
 							},
 						});
@@ -498,15 +472,15 @@ export function catalogFoundationRouter(
 							"MODEL",
 							created.id,
 						);
-						return created;
+						return { created, productCode: product.productCode };
 					});
 
 					return {
 						status: 201,
-						body: toModelResource(model, body.sourceEvidenceIds?.length ?? 0),
+						body: toModelResource(model.created, model.productCode, body.sourceEvidenceIds?.length ?? 0),
 						headers: {
-							Location: `/api/v1/catalog/models/${model.id}`,
-							ETag: `"${model.rowVersion}"`,
+							Location: `/api/v1/catalog/models/${model.created.id}`,
+							ETag: `"${model.created.rowVersion}"`,
 						},
 					};
 				},
@@ -565,7 +539,7 @@ export function catalogFoundationRouter(
 								plannedCycleTimes: body.plannedCycleTimes ?? Prisma.JsonNull,
 								routingSteps: [],
 								lifecycleStatus: CatalogLifecycleStatus.DRAFT,
-								evidenceStatus: evidenceStatus(body.evidenceStatus),
+								evidenceStatus: defaultEvidenceStatus(),
 								rowVersion: 1,
 							},
 						});
@@ -636,9 +610,6 @@ export function catalogFoundationRouter(
 				data: {
 					...(body.productCode === undefined ? {} : { productCode: body.productCode }),
 					...(body.productName === undefined ? {} : { productName: body.productName }),
-					...(body.evidenceStatus === undefined
-						? {}
-						: { evidenceStatus: evidenceStatus(body.evidenceStatus) }),
 					rowVersion: { increment: 1 },
 				},
 			});
@@ -686,17 +657,18 @@ export function catalogFoundationRouter(
 				data: {
 					...(body.modelNumber === undefined ? {} : { modelNumber: body.modelNumber }),
 					...(body.modelName === undefined ? {} : { modelName: body.modelName }),
-					...(body.skuCode === undefined ? {} : { skuCode: body.skuCode }),
 					...(body.pinned === undefined ? {} : { pinned: body.pinned }),
-					...(body.evidenceStatus === undefined
-						? {}
-						: { evidenceStatus: evidenceStatus(body.evidenceStatus) }),
 					rowVersion: { increment: 1 },
 				},
 			});
+			const owningProduct = await database.product.findUnique({
+				where: { id: model.productId },
+				select: { productCode: true },
+			});
+			if (!owningProduct) throw notFound("The owning catalog product was not found.");
 			setVersionHeaders(res, model.rowVersion);
 			res.status(200).json(
-				toModelResource(model, await evidenceCount(database, "MODEL", model.id)),
+				toModelResource(model, owningProduct.productCode, await evidenceCount(database, "MODEL", model.id)),
 			);
 		} catch (error) {
 			handleRouteError(error, req, res, next);
@@ -747,9 +719,6 @@ export function catalogFoundationRouter(
 						? {}
 						: { plannedCycleTimes: body.plannedCycleTimes ?? Prisma.JsonNull }),
 					...(body.routingSteps === undefined ? {} : { routingSteps: body.routingSteps }),
-					...(body.evidenceStatus === undefined
-						? {}
-						: { evidenceStatus: evidenceStatus(body.evidenceStatus) }),
 					rowVersion: { increment: 1 },
 				},
 			});
@@ -804,7 +773,6 @@ function toProductResource(
 		productCode: string;
 		productName: string;
 		lifecycleStatus: CatalogLifecycleStatus;
-		evidenceStatus: CanonicalEvidenceStatus;
 		rowVersion: number;
 		createdAt: Date;
 		updatedAt: Date;
@@ -816,12 +784,16 @@ function toProductResource(
 		productCode: product.productCode,
 		productName: product.productName,
 		lifecycleStatus: product.lifecycleStatus,
-		evidenceStatus: product.evidenceStatus,
 		provenance: { sourceEvidenceCount },
 		rowVersion: product.rowVersion,
 		createdAt: product.createdAt.toISOString(),
 		updatedAt: product.updatedAt.toISOString(),
 	};
+}
+
+/** skuCode is derived, never stored: `${productCode}-${modelNumber}` (C-001). */
+export function deriveModelSkuCode(productCode: string, modelNumber: string): string {
+	return `${productCode}-${modelNumber}`;
 }
 
 function toModelResource(
@@ -830,15 +802,14 @@ function toModelResource(
 		productId: string;
 		modelNumber: string;
 		modelName: string | null;
-		skuCode: string | null;
 		pinned: boolean;
 		sourceStatus: ProductSourceStatus;
 		lifecycleStatus: CatalogLifecycleStatus;
-		evidenceStatus: CanonicalEvidenceStatus;
 		rowVersion: number;
 		createdAt: Date;
 		updatedAt: Date;
 	},
+	productCode: string,
 	sourceEvidenceCount: number,
 ) {
 	return {
@@ -846,11 +817,10 @@ function toModelResource(
 		productId: model.productId,
 		modelNumber: model.modelNumber,
 		modelName: model.modelName,
-		skuCode: model.skuCode,
+		skuCode: deriveModelSkuCode(productCode, model.modelNumber),
 		pinned: model.pinned,
 		sourceStatus: model.sourceStatus,
 		lifecycleStatus: model.lifecycleStatus,
-		evidenceStatus: model.evidenceStatus,
 		provenance: { sourceEvidenceCount },
 		rowVersion: model.rowVersion,
 		createdAt: model.createdAt.toISOString(),
@@ -930,7 +900,6 @@ function toModelPartResource(
 		partName: string;
 		plannedCycleTimes: unknown;
 		lifecycleStatus: CatalogLifecycleStatus;
-		evidenceStatus: CanonicalEvidenceStatus;
 		rowVersion: number;
 		createdAt: Date;
 	},
@@ -943,7 +912,6 @@ function toModelPartResource(
 		partName: modelPart.partName,
 		plannedCycleTimes: ctMapOrNull(modelPart.plannedCycleTimes),
 		lifecycleStatus: modelPart.lifecycleStatus,
-		evidenceStatus: modelPart.evidenceStatus,
 		provenance: { sourceEvidenceCount },
 		rowVersion: modelPart.rowVersion,
 		createdAt: modelPart.createdAt.toISOString(),
