@@ -7,7 +7,13 @@ Depends on: I1 model convergence and I2 canonical migration
 ## Implemented
 
 - Added `scripts/pats-seed.mjs` as the canonical PATS seed orchestrator.
-- Added `pnpm prisma:pats:seed` without changing the legacy `prisma/seed.ts`.
+- Added `pnpm prisma:pats:seed`.
+- Removed the legacy Mongo compatibility/demo seed: `prisma/seed.ts` and
+  `prisma/seeds/` (Workspace/Employee/WorkspaceMember/ProjectMember/Product
+  seeders). It seeded the retired PMS domain and is out of scope for the
+  current app–API transition.
+- Removed the legacy `prisma.seed` script from `package.json`; there is no
+  longer a `npx prisma db seed` path.
 - Added explicit `SEED_MODE=none|demo|uat` behavior.
 - Added deterministic profile-scoped UUIDs derived from a stable SHA-256 seed key.
 - Used upserts and stable business codes; the seed contains no delete or clear operation.

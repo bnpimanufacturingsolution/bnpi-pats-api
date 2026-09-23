@@ -101,8 +101,8 @@ describe("section identity mounting regression", () => {
 		{ method: "delete", path: "/sections/section-1", kind: "command" },
 		{ method: "put", path: "/sections/section-1/processes", kind: "command" },
 		{ method: "put", path: "/sections/order", kind: "command" },
-		{ method: "get", path: "/stations/section-1/history", kind: "read" },
-		{ method: "get", path: "/stations/section-1/support", kind: "read" },
+		{ method: "get", path: "/sections/section-1/history", kind: "read" },
+		{ method: "get", path: "/sections/section-1/support", kind: "read" },
 		{ method: "get", path: "/work-processes", kind: "read" },
 		{ method: "post", path: "/work-processes", kind: "command" },
 		{ method: "patch", path: "/work-processes/process-1", kind: "command" },
@@ -616,6 +616,7 @@ describe("canonical PATS command contract", () => {
 		let clearedBooths: Record<string, unknown>[] = [];
 		let assignedBooth: Record<string, unknown> | null = null;
 		const ownershipWrites: Array<{ where: unknown; data: unknown }> = [];
+		const orderWrites: Array<{ where: unknown; data: unknown }> = [];
 		const database = {
 			idempotencyRecord: {
 				findUnique: async () => null,
@@ -630,6 +631,7 @@ describe("canonical PATS command contract", () => {
 			workProcess: {
 				findMany: async () => [{ id: "proc-1", name: "Process 1" }, { id: "proc-2", name: "Process 2" }],
 				updateMany: async ({ where, data }: { where: unknown; data: unknown }) => { ownershipWrites.push({ where, data }); return { count: 1 }; },
+				update: async ({ where, data }: { where: unknown; data: unknown }) => { orderWrites.push({ where, data }); return { id: "proc-1", ...(data as Record<string, unknown>) }; },
 			},
 			booth: {
 				updateMany: async ({ data }: { data: Record<string, unknown> }) => { clearedBooths.push(data); return { count: 1 }; },
@@ -655,6 +657,10 @@ describe("canonical PATS command contract", () => {
 		expect(ownershipWrites).to.deep.equal([
 			{ where: { id: { in: ["proc-1"] } }, data: { sectionId: "station-1" } },
 			{ where: { id: { notIn: ["proc-1"] }, sectionId: "station-1" }, data: { sectionId: null } },
+		]);
+		// Board order truth: listed processes take their board position as displayOrder.
+		expect(orderWrites).to.deep.equal([
+			{ where: { id: "proc-1" }, data: { displayOrder: 0 } },
 		]);
 	});
 
@@ -906,5 +912,97 @@ describe("canonical PATS command contract", () => {
 
 		expect(response.status).to.equal(201);
 		expect(response.body).to.include({ subStageId: "substage-1", name: "New SubStage" });
+	});
+});
+
+describe("plan part cycle-time override (REQ-CT-1 S3)", () => {
+	function partApp(partRow: Record<string, unknown>, planStatus = "DRAFT") {
+		let stored = { ...partRow };
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-part-ct" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			part: {
+				findUnique: async () => ({ ...stored }),
+				update: async ({ data }: { data: Record<string, unknown> }) => {
+					stored = { ...stored, ...data, rowVersion: 2 };
+					return stored;
+				},
+			},
+			project: {
+				findUnique: async () => ({ id: "plan-1", status: planStatus }),
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		return appFor(database);
+	}
+
+	const basePart = { id: "part-1", projectId: "plan-1", plannedCycleTimes: { "STG-INJECTION::": 30 }, plannedCycleTimesOverride: null, rowVersion: 1 };
+
+	it("sets the finalization override with If-Match and bumps the version", async () => {
+		const app = partApp(basePart);
+		const response = await request(app)
+			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "part-ct-set-1")
+			.set("If-Match", '"1"')
+			.send({ plannedCycleTimesOverride: { "STG-INJECTION::": 25 } });
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.deep.include({ partId: "part-1" });
+		expect(response.body.plannedCycleTimes).to.deep.equal({ "STG-INJECTION::": 30 });
+		expect(response.body.plannedCycleTimesOverride).to.deep.equal({ "STG-INJECTION::": 25 });
+		expect(response.headers.etag).to.equal('"2"');
+	});
+
+	it("clears the override back to null (master fallback)", async () => {
+		const app = partApp({ ...basePart, plannedCycleTimesOverride: { "STG-INJECTION::": 25 } });
+		const response = await request(app)
+			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "part-ct-clear-1")
+			.set("If-Match", '"1"')
+			.send({ plannedCycleTimesOverride: null });
+
+		expect(response.status).to.equal(200);
+		expect(response.body.plannedCycleTimesOverride).to.equal(null);
+	});
+
+	it("refuses overrides on released plans", async () => {
+		const app = partApp(basePart, "RELEASED");
+		const response = await request(app)
+			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "part-ct-released-1")
+			.set("If-Match", '"1"')
+			.send({ plannedCycleTimesOverride: { "STG-INJECTION::": 25 } });
+
+		expect(response.status).to.equal(409);
+	});
+
+	it("rejects stale versions and invalid values", async () => {
+		const app = partApp(basePart);
+		const stale = await request(app)
+			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "part-ct-stale-1")
+			.set("If-Match", '"9"')
+			.send({ plannedCycleTimesOverride: { "STG-INJECTION::": 25 } });
+		expect(stale.status).to.equal(412);
+
+		for (const [key, bad] of [["zero", 0], ["negative", -3], ["fraction", 7.5]] as const) {
+			const response = await request(app)
+				.patch("/api/v1/projects/plan-1/parts/part-1")
+				.set("Authorization", "Bearer command-token")
+				.set("Idempotency-Key", `part-ct-bad-${key}`)
+				.set("If-Match", '"1"')
+				.send({ plannedCycleTimesOverride: { "STG-INJECTION::": bad } });
+			expect(response.status).to.equal(422);
+		}
 	});
 });

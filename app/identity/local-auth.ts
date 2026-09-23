@@ -34,6 +34,17 @@ function normalizeUsername(username: string): string | null {
 	return normalized;
 }
 
+/** Email identifiers are trimmed and lowercased; the lookup itself stays
+ *  case-insensitive. Rejects blanks and overlong input the same way the
+ *  username path does so both miss shapes behave identically. */
+function normalizeEmail(identifier: string): string | null {
+	const normalized = identifier.trim().toLowerCase();
+	if (normalized.length === 0 || normalized.length > 254 || !normalized.includes("@")) {
+		return null;
+	}
+	return normalized;
+}
+
 function bearerToken(request: Request): string | null {
 	const authorization = request.header("Authorization");
 	if (!authorization) return null;
@@ -90,10 +101,20 @@ export function createLocalAuthDependencies(
 				return null;
 			}
 
-			const normalizedUsername = normalizeUsername(username);
-			if (!normalizedUsername) return null;
-
-			const credential = await accounts.findByUsername(normalizedUsername);
+			// The sign-in box accepts "username or email": an identifier containing
+			// `@` resolves through the subject email snapshot, everything else
+			// through the credential username. Both miss shapes return the same
+			// null so existence stays undisclosed either way.
+			let credential: Awaited<ReturnType<LocalAccountRepository["findByUsername"]>>;
+			if (username.includes("@")) {
+				const normalizedEmail = normalizeEmail(username);
+				if (!normalizedEmail) return null;
+				credential = await accounts.findByEmail(normalizedEmail);
+			} else {
+				const normalizedUsername = normalizeUsername(username);
+				if (!normalizedUsername) return null;
+				credential = await accounts.findByUsername(normalizedUsername);
+			}
 			if (!credential) return null;
 
 			let passwordMatches = false;
