@@ -1,6 +1,7 @@
 import { Router, type Request, type RequestHandler } from "express";
 import { z } from "zod";
 import {
+	Prisma,
 	PrismaClient as PatsPrismaClient,
 	PlanLifecycleStatus,
 	LotStatus,
@@ -22,35 +23,11 @@ import {
 	respondCommand,
 } from "./command-support";
 import type { CommandTransaction } from "./command-support";
+import { hasCapability } from "../identity/policy";
+import type { SubjectAssignmentRecord } from "../identity/types";
 import { assertQualityStageAllowed } from "./quality-stage-scope";
 import { recordPrintJob } from "./print-job";
 import { allowUnauthenticatedDeskPrint, deliverDeskLabel } from "./print-desk";
-import { setDeprecationHeaders } from "../canonical/response-headers";
-
-// Station→Section rename (2026-09-16) transitional bridge. The canonical paths
-// are /sections + sectionId/sectionCode; the legacy /stations + stationId/
-// stationCode aliases below are TRANSITIONAL per the endpoint design standard
-// §7 and emit Deprecation/Sunset headers. Sunset is ≥90 days after first
-// release of the canonical paths. Request bodies accept both spellings and
-// prefer the canonical one when both are present.
-const SECTION_LEGACY_SUNSET = new Date("2027-06-30T00:00:00Z");
-
-function legacyStationHeaders(req: Request, extra: Record<string, string> = {}): Record<string, string> {
-	if (!isLegacyStationPath(req)) return { ...extra };
-	const target = {
-		headers: {} as Record<string, string>,
-		setHeader(name: string, value: string) {
-			this.headers[name] = value;
-		},
-	};
-	setDeprecationHeaders(target, SECTION_LEGACY_SUNSET);
-	return { ...extra, ...target.headers };
-}
-
-function isLegacyStationPath(req: Request): boolean {
-	const path = req.baseUrl + req.path;
-	return /(^|\/)stations(\/|$)/.test(path);
-}
 
 const decimalString = z.string().trim().regex(/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/, "Must be a non-negative decimal with up to 6 places.");
 
@@ -136,13 +113,11 @@ const stageEventCreateSchema = z.object({
 const printJobCreateSchema = z.object({
 	batchId: z.string().trim().min(1).max(100),
 	sectionId: z.string().trim().min(1).max(100).optional(),
-	// TRANSITIONAL alias for the pre-rename stationId field (§7).
-	stationId: z.string().trim().min(1).max(100).optional(),
 	reprintOf: z.string().trim().min(1).max(100).nullable().optional(),
 	// Actual pcs in the completed pack (label truth). Optional — defaults to the
 	// planned pack quantity; must be a positive integer when provided.
 	actualQuantity: z.number().int().positive().nullable().optional(),
-}).strict().refine((body) => Boolean(body.sectionId ?? body.stationId), "Either sectionId or stationId is required.");
+}).strict().refine((body) => Boolean(body.sectionId), "sectionId is required.");
 
 const deskPrintSchema = z.object({
 	barcodeValue: z.string().trim().min(1).max(240),
@@ -183,11 +158,17 @@ const qualityInspectionCreateSchema = z.object({
 	stageId: z.string().trim().min(1).max(100),
 	subStageId: z.string().trim().min(1).max(100).nullable().optional(),
 	sectionId: z.string().trim().min(1).max(100).nullable().optional(),
-	// TRANSITIONAL alias for the pre-rename stationId field (§7).
-	stationId: z.string().trim().min(1).max(100).nullable().optional(),
 	inspectedQuantity: decimalString.nullable().optional(),
 	quantityUom: z.string().trim().min(1).max(40).nullable().optional(),
 	evidence: z.record(z.string(), z.unknown()).nullable().optional(),
+}).strict();
+
+// Finalization override map for a run-scoped plan part (REQ-CT per-step CT).
+// Required but nullable: clients send explicit null to fall back to the snapshot.
+const planPartCycleTimesSchema = z.object({
+	plannedCycleTimesOverride: z
+		.record(z.string().trim().min(1).max(220), z.number().int().min(1).max(86400))
+		.nullable(),
 }).strict();
 
 const qualityDecisionSchema = z
@@ -229,10 +210,8 @@ const subStageCreateSchema = z.object({
 
 const sectionCreateSchema = z.object({
 	name: z.string().trim().min(1).max(160),
-	sectionCode: z.string().trim().min(1).max(80).optional(),
-	// TRANSITIONAL alias for the pre-rename stationCode field (§7).
-	stationCode: z.string().trim().min(1).max(80).optional(),
-	// stageId/displayOrder are optional: the board's create flow carries no
+		sectionCode: z.string().trim().min(1).max(80).optional(),
+		// stageId/displayOrder are optional: the board's create flow carries no
 	// stage context, so the server places new sections in the first stage
 	// and appends them. Explicit values are still honored when provided.
 	stageId: z.string().trim().min(1).max(100).optional(),
@@ -245,12 +224,10 @@ const sectionCreateSchema = z.object({
 const sectionPatchSchema = z.object({
 	name: z.string().trim().min(1).max(160).optional(),
 	sectionCode: z.string().trim().min(1).max(80).optional(),
-	// TRANSITIONAL alias for the pre-rename stationCode field (§7).
-	stationCode: z.string().trim().min(1).max(80).optional(),
 }).strict();
 
 const stationStepCreateSchema = z.object({
-	stationId: z.string().trim().min(1).max(100),
+	sectionId: z.string().trim().min(1).max(100),
 	stageId: z.string().trim().min(1).max(100),
 	subStageId: z.string().trim().min(1).max(100).nullable().optional(),
 }).strict();
@@ -260,23 +237,52 @@ const sectionProcessesSchema = z.object({
 }).strict();
 
 const sectionOrderSchema = z.object({
-	sectionIds: z.array(z.string().trim().min(1).max(100)).min(1).optional(),
-	// TRANSITIONAL alias for the pre-rename stationIds field (§7).
-	stationIds: z.array(z.string().trim().min(1).max(100)).min(1).optional(),
-}).strict().refine((body) => Boolean(body.sectionIds ?? body.stationIds), "Either sectionIds or stationIds is required.");
+	sectionIds: z.array(z.string().trim().min(1).max(100)).min(1),
+}).strict();
 
-const workProcessCreateSchema = z.object({
-	sectionId: z.string().trim().min(1).max(100).nullable().optional(),
-	// TRANSITIONAL alias: pre-rename field name that referenced the same Section row (§7).
-	stationId: z.string().trim().min(1).max(100).nullable().optional(),
-	subStageId: z.string().trim().min(1).max(100).nullable().optional(),
-	parentProcessId: z.string().trim().min(1).max(100).nullable().optional(),
-	name: z.string().min(1),
-}).strict().refine((body) => Boolean(body.subStageId) || Boolean(body.sectionId ?? body.stationId), "Provide subStageId or sectionId.");
+const workProcessCreateSchema = z
+	.object({
+		sectionId: z.string().trim().min(1).max(100).nullable().optional(),
+		stationId: z.string().trim().min(1).max(100).nullable().optional(),
+		subStageId: z.string().trim().min(1).max(100).nullable().optional(),
+		parentProcessId: z.string().trim().min(1).max(100).nullable().optional(),
+		name: z.string().min(1),
+	})
+	.strict()
+	.refine(
+		(body) => Boolean(body.subStageId) || Boolean(body.sectionId) || Boolean((body as { stationId?: string | null }).stationId),
+		"Provide subStageId or sectionId.",
+	);
 
 const workProcessPatchSchema = z.object({
 	name: z.string().trim().min(1).max(160).optional(),
 	parentProcessId: z.string().trim().min(1).max(100).nullable().optional(),
+}).strict();
+
+const lineCodePattern = /^[A-Z0-9](?:[A-Z0-9-]{0,48}[A-Z0-9])?$/;
+
+const lineCreateSchema = z.object({
+	sectionId: z.string().trim().min(1).max(100),
+	processId: z.string().trim().min(1).max(100),
+	lineCode: z.string().trim().regex(lineCodePattern, "Must be uppercase alphanumeric with dashes (1-50 chars).").max(50),
+	label: z.string().trim().max(160).nullable().optional(),
+	assignedLeaderId: z.string().trim().min(1).max(100),
+	displayOrder: z.number().int().nonnegative().optional(),
+}).strict();
+
+const linePatchSchema = z.object({
+	label: z.string().trim().max(160).nullable().optional(),
+	lineCode: z.string().trim().regex(lineCodePattern, "Must be uppercase alphanumeric with dashes (1-50 chars).").max(50).optional(),
+	assignedLeaderId: z.string().trim().min(1).max(100).optional(),
+	activeLeaderId: z.string().trim().min(1).max(100).nullable().optional(),
+	displayOrder: z.number().int().nonnegative().optional(),
+	isEnabled: z.boolean().optional(),
+}).strict().refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
+
+const operatorAssignmentCreateSchema = z.object({
+	subjectId: z.string().trim().min(1).max(100),
+	lineId: z.string().trim().min(1).max(100),
+	reason: z.string().trim().max(500).nullable().optional(),
 }).strict();
 
 const workInstructionCreateSchema = z.object({
@@ -342,6 +348,10 @@ function staleVersion(): never {
 
 function malformed(detail: string): never {
 	throw new CommandProblem(400, "urn:bandai:pats:problem:malformed-request", "Bad Request", detail);
+}
+
+function forbidden(detail: string): never {
+	throw new CommandProblem(403, "urn:bandai:pats:problem:authorization-denied", "Forbidden", detail);
 }
 
 function ensurePlanEditable(plan: { status: string }): void {
@@ -520,6 +530,7 @@ export function commandRouter(
 							projectId: plan.id,
 							partCode: modelPart.partCode,
 							partName: modelPart.partName,
+							plannedCycleTimes: (modelPart.plannedCycleTimes as Record<string, number> | null) ?? undefined,
 							sourceModelId: model.id,
 							sourceModelPartId: modelPart.id,
 						},
@@ -604,6 +615,37 @@ export function commandRouter(
 				const updatedPlan = await transaction.project.update({ where: { id: plan.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
 				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_PARTS_LIST_VERSION_CREATED", "PartsList", partsList.id, { planId: plan.id, version: partsList.version, stepCount: body.steps.length });
 				return { status: 201, body: { partsListVersionId: partsList.id, version: partsList.version, planRowVersion: updatedPlan.rowVersion }, headers: resourceHeaders(plan.id, updatedPlan.rowVersion, req) };
+			});
+			respondCommand(res, response);
+		} catch (error) {
+			commandError(error, req, res, next);
+		}
+	});
+
+	router.patch(["/projects/:projectId/parts/:partId", "/production-plans/:planId/parts/:partId"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const targetId = req.params.projectId ?? req.params.planId;
+			const partId = req.params.partId;
+			const body = parseCommandBody(req, planPartCycleTimesSchema);
+			const expectedVersion = requireIfMatch(req, "plan part");
+			const response = await executeCommand(database, req, "planPartCycleTimeOverride", { planId: targetId, partId, body }, async (transaction) => {
+				const part = await transaction.part.findUnique({ where: { id: partId }, select: { id: true, projectId: true, rowVersion: true } });
+				if (!part || part.projectId !== targetId) notFound("The requested plan part was not found in this production plan.");
+				const plan = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, status: true } });
+				if (!plan) notFound("The owning production plan was not found.");
+				ensurePlanEditable(plan);
+				if (part.rowVersion !== expectedVersion) staleVersion();
+				const updated = await transaction.part.update({ where: { id: part.id }, data: { plannedCycleTimesOverride: body.plannedCycleTimesOverride ?? Prisma.JsonNull, rowVersion: { increment: 1 } }, select: { id: true, plannedCycleTimes: true, plannedCycleTimesOverride: true, rowVersion: true } });
+				// Prisma reads JSON NULL back as null, but the write sentinel can echo
+				// through stubbed stores — normalize so the wire contract stays plain.
+				const asCycleMap = (value: unknown): Record<string, number> | null =>
+					value === null || value === undefined || value === Prisma.JsonNull || value === Prisma.DbNull
+						? null
+						: (value as Record<string, number>);
+				const snapshot = asCycleMap(updated.plannedCycleTimes);
+				const override = asCycleMap(updated.plannedCycleTimesOverride);
+				await recordCommandSuccess(transaction, req, "PLAN_PART_CYCLE_TIME_OVERRIDDEN", "Part", updated.id, { projectId: targetId, rowVersion: updated.rowVersion });
+				return { status: 200, body: { partId: updated.id, plannedCycleTimes: snapshot, plannedCycleTimesOverride: override }, headers: { ETag: `"${updated.rowVersion}"` } };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -873,12 +915,12 @@ export function commandRouter(
 	router.post("/print-jobs", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, printJobCreateSchema);
-			const sectionId = (body.sectionId ?? body.stationId)!;
+			const sectionId = body.sectionId;
 			const response = await executeCommand(database, req, "printJobCreate", body, async (transaction) => {
 				try {
 					const job = await recordPrintJob(transaction as unknown as Parameters<typeof recordPrintJob>[0], {
 						batchId: body.batchId,
-					stationId: sectionId,
+					sectionId: sectionId!,
 					reprintOf: body.reprintOf ?? null,
 					actualQuantity: body.actualQuantity ?? null,
 					actor: actorDisplay(req),
@@ -976,7 +1018,7 @@ export function commandRouter(
 						batchId: body.batchId,
 						stageId: body.stageId,
 						subStageId: body.subStageId ?? null,
-						stationId: (body.sectionId ?? body.stationId) ?? null,
+						sectionId: (body.sectionId) ?? null,
 						inspectedQuantity: body.inspectedQuantity ?? null,
 						quantityUom: body.quantityUom ?? null,
 						status: QualityInspectionStatus.OPEN,
@@ -1071,7 +1113,7 @@ export function commandRouter(
 		} catch (error) { commandError(error, req, res, next); }
 	});
 
-	router.post(["/sections", "/stations"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post("/sections", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, sectionCreateSchema);
 			const response = await executeCommand(database, req, "sectionCreate", body, async (transaction) => {
@@ -1084,7 +1126,7 @@ export function commandRouter(
 					if (!firstStage) notFound("No stage exists to own the section.");
 					stageId = firstStage.id;
 				}
-				const providedCode = body.sectionCode ?? body.stationCode;
+				const providedCode = body.sectionCode;
 				let sectionCode: string;
 				if (providedCode) {
 					const clash = await transaction.section.findUnique({ where: { sectionCode: providedCode } });
@@ -1111,7 +1153,7 @@ export function commandRouter(
 				if (subStages.length > 0) {
 					await transaction.stationStep.createMany({
 						data: subStages.map((subStage) => ({
-							stationId: section.id,
+							sectionId: section.id,
 							stageId,
 							subStageId: subStage.id,
 						})),
@@ -1120,29 +1162,29 @@ export function commandRouter(
 				}
 
 				await recordCommandSuccess(transaction, req, "SECTION_CREATED", "Section", section.id, { sectionCode: section.sectionCode });
-				return { status: 201, body: { sectionId: section.id, sectionCode: section.sectionCode, name: section.name }, headers: { Location: `/api/v1/sections/${section.id}`, ...legacyStationHeaders(req) } };
+				return { status: 201, body: { sectionId: section.id, sectionCode: section.sectionCode, name: section.name }, headers: { Location: `/api/v1/sections/${section.id}` } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
 	});
 
-	router.patch(["/sections/:sectionId", "/stations/:stationId"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.patch("/sections/:sectionId", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, sectionPatchSchema);
-			const sectionId = req.params.sectionId ?? req.params.stationId;
+			const sectionId = req.params.sectionId;
 			const response = await executeCommand(database, req, "sectionUpdate", { sectionId, body }, async (transaction) => {
 				const section = await transaction.section.findUnique({ where: { id: sectionId }, select: { id: true, name: true } });
 				if (!section) notFound("The requested section was not found.");
 				const data: Record<string, unknown> = {};
 				if (body.name !== undefined) data.name = body.name;
-				const nextCode = body.sectionCode ?? body.stationCode;
+				const nextCode = body.sectionCode;
 				if (nextCode !== undefined) data.sectionCode = nextCode;
 				if (Object.keys(data).length === 0) conflict("At least one field must be provided.");
 				const updated = await transaction.section.update({ where: { id: sectionId }, data });
 				await recordCommandSuccess(transaction, req, "SECTION_UPDATED", "Section", sectionId, { name: updated.name });
 				// No ETag: Section rows carry no rowVersion validator, so concurrent
 				// updates are last-writer-wins (documented N/A per standard §9).
-				return { status: 200, body: { sectionId: updated.id, name: updated.name }, headers: { ...legacyStationHeaders(req) } };
+				return { status: 200, body: { sectionId: updated.id, name: updated.name }, headers: { Location: `/api/v1/sections/${updated.id}` } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
@@ -1152,12 +1194,12 @@ export function commandRouter(
 		try {
 			const body = parseCommandBody(req, stationStepCreateSchema);
 			const response = await executeCommand(database, req, "stationStepCreate", body, async (transaction) => {
-				const station = await transaction.section.findUnique({ where: { id: body.stationId }, select: { id: true } });
+				const section = await transaction.section.findUnique({ where: { id: body.sectionId }, select: { id: true } });
 				const stage = await transaction.stage.findUnique({ where: { id: body.stageId }, select: { id: true } });
-				if (!station || !stage) notFound("The requested station or stage was not found.");
+				if (!section || !stage) notFound("The requested section or stage was not found.");
 				const step = await transaction.stationStep.create({ data: { ...body, subStageId: body.subStageId ?? null } });
-				await recordCommandSuccess(transaction, req, "STATION_STEP_CREATED", "StationStep", step.id, { stationId: step.stationId, stageId: step.stageId });
-				return { status: 201, body: { stationStepId: step.id, stationId: step.stationId, stageId: step.stageId, subStageId: step.subStageId }, headers: { Location: `/api/v1/station-steps/${step.id}` } };
+				await recordCommandSuccess(transaction, req, "STATION_STEP_CREATED", "StationStep", step.id, { sectionId: step.sectionId, stageId: step.stageId });
+				return { status: 201, body: { stationStepId: step.id, sectionId: step.sectionId, stageId: step.stageId, subStageId: step.subStageId }, headers: { Location: `/api/v1/station-steps/${step.id}` } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
@@ -1294,10 +1336,10 @@ export function commandRouter(
 		} catch (error) { commandError(error, req, res, next); }
 	});
 
-	router.put(["/sections/:sectionId/processes", "/stations/:stationId/processes"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.put("/sections/:sectionId/processes", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, sectionProcessesSchema);
-			const sectionId = req.params.sectionId ?? req.params.stationId;
+			const sectionId = req.params.sectionId;
 			const response = await executeCommand(database, req, "sectionProcessesReplace", { sectionId, processIds: body.processIds }, async (transaction) => {
 				const section = await transaction.section.findUnique({ where: { id: sectionId } });
 				if (!section) notFound("The requested section was not found.");
@@ -1308,11 +1350,11 @@ export function commandRouter(
 					if (missing.length > 0) notFound(`The following work processes were not found: ${missing.join(", ")}`);
 				}
 				await transaction.booth.updateMany({
-					where: { stationId: sectionId, workProcessId: { notIn: body.processIds } },
+					where: { sectionId: sectionId, workProcessId: { notIn: body.processIds } },
 					data: { workProcessId: null },
 				});
 				for (const processId of body.processIds) {
-					const booth = await transaction.booth.findFirst({ where: { stationId: sectionId, workProcessId: null } });
+					const booth = await transaction.booth.findFirst({ where: { sectionId: sectionId, workProcessId: null } });
 					if (booth) {
 						await transaction.booth.update({ where: { id: booth.id }, data: { workProcessId: processId } });
 					}
@@ -1329,18 +1371,21 @@ export function commandRouter(
 					where: { id: { notIn: body.processIds }, sectionId },
 					data: { sectionId: null },
 				});
+				for (const [index, processId] of body.processIds.entries()) {
+					await transaction.workProcess.update({ where: { id: processId }, data: { displayOrder: index } });
+				}
 				await recordCommandSuccess(transaction, req, "SECTION_PROCESSES_REPLACED", "Section", sectionId, { processCount: body.processIds.length });
 				// No ETag: Section rows carry no rowVersion validator (last-writer-wins, N/A per standard §9).
-				return { status: 200, body: { sectionId, processIds: body.processIds }, headers: { ...legacyStationHeaders(req) } };
+				return { status: 200, body: { sectionId, processIds: body.processIds }, headers: { Location: `/api/v1/sections/${sectionId}` } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
 	});
 
-	router.put(["/sections/order", "/stations/order"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.put("/sections/order", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, sectionOrderSchema);
-			const sectionIds = (body.sectionIds ?? body.stationIds)!;
+			const sectionIds = body.sectionIds;
 			const response = await executeCommand(database, req, "sectionOrderReorder", { sectionIds }, async (transaction) => {
 				const sections = await transaction.section.findMany({ where: { id: { in: sectionIds } } });
 				const foundIds = new Set(sections.map((s) => s.id));
@@ -1351,7 +1396,7 @@ export function commandRouter(
 				}
 				await recordCommandSuccess(transaction, req, "SECTIONS_REORDERED", "Section", sectionIds[0] ?? "", { sectionCount: sectionIds.length });
 				// No ETag: ordering carries no rowVersion validator (last-writer-wins, N/A per standard §9).
-				return { status: 200, body: { sectionIds }, headers: { ...legacyStationHeaders(req) } };
+				return { status: 200, body: { sectionIds }, headers: { Location: `/api/v1/sections` } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
@@ -1359,7 +1404,7 @@ export function commandRouter(
 
 	router.post("/work-processes", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const body = parseCommandBody(req, workProcessCreateSchema);
+			const body = parseCommandBody(req, workProcessCreateSchema) as typeof workProcessCreateSchema._type & { stationId?: string | null };
 			const sectionRef = body.sectionId ?? body.stationId ?? null;
 			let resolvedSubStageId = body.subStageId ?? null;
 			if (!resolvedSubStageId && sectionRef) {
@@ -1448,28 +1493,49 @@ export function commandRouter(
 		try {
 			const processId = req.params.processId;
 			const response = await executeCommand(database, req, "workProcessDelete", { processId }, async (transaction) => {
-				const process = await transaction.workProcess.findUnique({ where: { id: processId }, select: { id: true, name: true } });
-				if (!process) notFound("The requested work process was not found.");
-				// Collect all descendants to unassign (sectionId null) - they become orphaned roots
-				const toUnassign = new Set<string>([processId]);
-				const queue: string[] = [processId];
-				for (let i = 0; i < queue.length && i < 100; i++) {
-					const current = queue[i];
-					const children = await transaction.workProcess.findMany({ where: { parentProcessId: current }, select: { id: true } });
-					for (const child of children) {
-						if (!toUnassign.has(child.id)) {
-							toUnassign.add(child.id);
-							queue.push(child.id);
-						}
+			const process = await transaction.workProcess.findUnique({ where: { id: processId }, select: { id: true, name: true } });
+			if (!process) notFound("The requested work process was not found.");
+			// Station-screen lines are operational instances bound to a leaf
+			// process through a required FK. Deleting a process with lines
+			// would destroy floor evidence, so refuse explicitly (409) instead
+			// of tripping the FK into a 500.
+			const attachedLineCount = await transaction.line.count({ where: { processId } });
+			if (attachedLineCount > 0) conflict(`Cannot delete: ${attachedLineCount} line(s) attached. Disable and permanently delete those lines first.`);
+			// Collect all descendants to unassign (sectionId null) - they become orphaned roots.
+			// Direct children are additionally detached from the deleted parent
+			// (parentProcessId null); deeper levels keep their own parent links
+			// so the surviving subtree stays intact instead of tripping the
+			// self-referential FK into a 500.
+			const toUnassign = new Set<string>([processId]);
+			const queue: string[] = [processId];
+			const directChildIds: string[] = [];
+			for (let i = 0; i < queue.length && i < 100; i++) {
+				const current = queue[i];
+				const children = await transaction.workProcess.findMany({ where: { parentProcessId: current }, select: { id: true } });
+				for (const child of children) {
+					if (!toUnassign.has(child.id)) {
+						toUnassign.add(child.id);
+						queue.push(child.id);
+						if (current === processId) directChildIds.push(child.id);
 					}
 				}
-				// Unassign descendants from sections (keep them in catalog as unassigned, per UI "unassigned" contract)
-				// The parent itself will be deleted, so exclude it from unassign
-				const descendantIds = Array.from(toUnassign).filter((id) => id !== processId);
-				if (descendantIds.length > 0) {
-					await transaction.workProcess.updateMany({ where: { id: { in: descendantIds } }, data: { sectionId: null } });
-				}
-				await transaction.workProcess.delete({ where: { id: processId } });
+			}
+			// Unassign descendants from sections (keep them in catalog as unassigned, per UI "unassigned" contract)
+			// The parent itself will be deleted, so exclude it from unassign
+			const descendantIds = Array.from(toUnassign).filter((id) => id !== processId);
+			if (descendantIds.length > 0) {
+				await transaction.workProcess.updateMany({ where: { id: { in: descendantIds } }, data: { sectionId: null } });
+			}
+			if (directChildIds.length > 0) {
+				await transaction.workProcess.updateMany({ where: { id: { in: directChildIds } }, data: { parentProcessId: null } });
+			}
+			// Optional references survive the delete as detached rows: durable
+			// monitoring evidence keeps its denormalized labels while the FK is
+			// cleared, instead of tripping the FK into a 500.
+			await transaction.booth.updateMany({ where: { workProcessId: processId }, data: { workProcessId: null } });
+			await transaction.monitoringDailySheet.updateMany({ where: { workProcessId: processId }, data: { workProcessId: null } });
+			await transaction.monitoringStationBoard.updateMany({ where: { workProcessId: processId }, data: { workProcessId: null } });
+			await transaction.workProcess.delete({ where: { id: processId } });
 				await recordCommandSuccess(transaction, req, "WORK_PROCESS_DELETED", "WorkProcess", processId, { name: process.name });
 				return { status: 200, body: { processId }, headers: {} };
 			});
@@ -1477,20 +1543,196 @@ export function commandRouter(
 		} catch (error) { commandError(error, req, res, next); }
 	});
 
-	router.delete(["/sections/:sectionId", "/stations/:stationId"], requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.delete("/sections/:sectionId", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const sectionId = req.params.sectionId ?? req.params.stationId;
+			const sectionId = req.params.sectionId;
 			const response = await executeCommand(database, req, "sectionDelete", { sectionId }, async (transaction) => {
-				const section = await transaction.section.findUnique({ where: { id: sectionId }, select: { id: true, name: true, sectionCode: true } });
-				if (!section) notFound("The requested section was not found.");
-				await transaction.stationStep.deleteMany({ where: { stationId: sectionId } });
-				await transaction.booth.updateMany({ where: { stationId: sectionId }, data: { stationId: null } });
+			const section = await transaction.section.findUnique({ where: { id: sectionId }, select: { id: true, name: true, sectionCode: true } });
+			if (!section) notFound("The requested section was not found.");
+			// Station-screen lines belong to a section through a required FK.
+			// Refuse explicitly (409) instead of tripping the FK into a 500;
+			// processes are still unassigned below.
+			const attachedSectionLineCount = await transaction.line.count({ where: { sectionId } });
+			if (attachedSectionLineCount > 0) conflict(`Cannot delete: ${attachedSectionLineCount} line(s) in this section. Disable and permanently delete those lines first.`);
+			await transaction.stationStep.deleteMany({ where: { sectionId: sectionId } });
+				await transaction.booth.updateMany({ where: { sectionId: sectionId }, data: { sectionId: null } });
 				await transaction.workProcess.updateMany({ where: { sectionId }, data: { sectionId: null } });
 				await transaction.section.delete({ where: { id: sectionId } });
 				await recordCommandSuccess(transaction, req, "SECTION_DELETED", "Section", sectionId, { sectionCode: section.sectionCode });
 				// 200 with the deleted identifier (audit correlation) is the documented
 				// DELETE contract for this resource; repeat deletes return 404.
-				return { status: 200, body: { sectionId }, headers: { ...legacyStationHeaders(req) } };
+				return { status: 200, body: { sectionId }, headers: { Location: `/api/v1/sections/${sectionId}` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.post("/lines", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, lineCreateSchema);
+			const response = await executeCommand(database, req, "lineCreate", body, async (transaction) => {
+				const section = await transaction.section.findUnique({ where: { id: body.sectionId }, select: { id: true } });
+				if (!section) notFound("The requested section was not found.");
+				const process = await transaction.workProcess.findUnique({
+					where: { id: body.processId },
+					select: { id: true, isEnabled: true, sectionId: true },
+				});
+				if (!process) notFound("The requested work process was not found.");
+				if (!process.isEnabled) conflict("The requested work process is disabled.");
+				const childCount = await transaction.workProcess.count({ where: { parentProcessId: body.processId } });
+				if (childCount > 0) conflict("Lines attach to leaf processes only; parent counts roll up.");
+				const leader = await transaction.subject.findUnique({ where: { id: body.assignedLeaderId }, select: { id: true, status: true } });
+				if (!leader) notFound("The requested assigned leader was not found.");
+				if (leader.status !== "ACTIVE") conflict("The requested assigned leader is not an active subject.");
+				const order = body.displayOrder ?? await transaction.line.count({ where: { sectionId: body.sectionId } });
+				const line = await transaction.line.create({
+					data: {
+						sectionId: body.sectionId,
+						processId: body.processId,
+						lineCode: body.lineCode,
+						label: body.label ?? null,
+						assignedLeaderId: body.assignedLeaderId,
+						activeLeaderId: body.assignedLeaderId,
+						displayOrder: order,
+						isEnabled: true,
+					},
+				});
+				await recordCommandSuccess(transaction, req, "LINE_CREATED", "Line", line.id, { lineCode: line.lineCode, processId: line.processId, assignedLeaderId: line.assignedLeaderId });
+				return { status: 201, body: { lineId: line.id, lineCode: line.lineCode, sectionId: line.sectionId, processId: line.processId, assignedLeaderId: line.assignedLeaderId, activeLeaderId: line.activeLeaderId, displayOrder: line.displayOrder, isEnabled: line.isEnabled, rowVersion: line.rowVersion }, headers: { Location: `/api/v1/lines/${line.id}`, ETag: `"${line.rowVersion}"` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.patch("/lines/:lineId", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, linePatchSchema);
+			const lineId = req.params.lineId;
+			const response = await executeCommand(database, req, "lineUpdate", { lineId, ...body }, async (transaction) => {
+				const line = await transaction.line.findUnique({ where: { id: lineId } });
+				if (!line) notFound("The requested line was not found.");
+				const ifMatch = requireIfMatch(req, "Line");
+				if (ifMatch !== line.rowVersion) staleVersion();
+				if (body.assignedLeaderId !== undefined) {
+					const leader = await transaction.subject.findUnique({ where: { id: body.assignedLeaderId }, select: { id: true, status: true } });
+					if (!leader) notFound("The requested assigned leader was not found.");
+					if (leader.status !== "ACTIVE") conflict("The requested assigned leader is not an active subject.");
+				}
+				if (body.activeLeaderId !== undefined && body.activeLeaderId !== null) {
+					const active = await transaction.subject.findUnique({ where: { id: body.activeLeaderId }, select: { id: true, status: true } });
+					if (!active) notFound("The requested active leader was not found.");
+					if (active.status !== "ACTIVE") conflict("The requested active leader is not an active subject.");
+				}
+				const data: Record<string, unknown> = { rowVersion: { increment: 1 } };
+				if (body.label !== undefined) data.label = body.label;
+				if (body.lineCode !== undefined) data.lineCode = body.lineCode;
+				if (body.assignedLeaderId !== undefined) data.assignedLeaderId = body.assignedLeaderId;
+				if (body.activeLeaderId !== undefined) data.activeLeaderId = body.activeLeaderId;
+				if (body.displayOrder !== undefined) data.displayOrder = body.displayOrder;
+				if (body.isEnabled !== undefined) data.isEnabled = body.isEnabled;
+				const updated = await transaction.line.update({ where: { id: lineId }, data });
+				await recordCommandSuccess(transaction, req, "LINE_UPDATED", "Line", lineId, { lineCode: updated.lineCode, ...body });
+				return { status: 200, body: { lineId: updated.id, lineCode: updated.lineCode, label: updated.label, assignedLeaderId: updated.assignedLeaderId, activeLeaderId: updated.activeLeaderId, displayOrder: updated.displayOrder, isEnabled: updated.isEnabled, rowVersion: updated.rowVersion }, headers: { ETag: `"${updated.rowVersion}"` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.delete("/lines/:lineId", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const lineId = req.params.lineId;
+			const response = await executeCommand(database, req, "lineDelete", { lineId }, async (transaction) => {
+				const line = await transaction.line.findUnique({ where: { id: lineId }, select: { id: true, lineCode: true, rowVersion: true } });
+				if (!line) notFound("The requested line was not found.");
+				const ifMatch = requireIfMatch(req, "Line");
+				if (ifMatch !== line.rowVersion) staleVersion();
+				await transaction.lineOperatorAssignment.updateMany({ where: { lineId, status: "ACTIVE" }, data: { status: "ENDED", endedAt: new Date() } });
+				const updated = await transaction.line.update({ where: { id: lineId }, data: { isEnabled: false, rowVersion: { increment: 1 } } });
+			await recordCommandSuccess(transaction, req, "LINE_DISABLED", "Line", lineId, { lineCode: line.lineCode });
+			return { status: 200, body: { lineId, lineCode: updated.lineCode, isEnabled: updated.isEnabled, rowVersion: updated.rowVersion }, headers: { ETag: `"${updated.rowVersion}"` } };
+		});
+		respondCommand(res, response);
+	} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.delete("/lines/:lineId/permanent", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const lineId = req.params.lineId;
+			const response = await executeCommand(database, req, "lineHardDelete", { lineId }, async (transaction) => {
+				const line = await transaction.line.findUnique({ where: { id: lineId }, select: { id: true, lineCode: true, isEnabled: true, rowVersion: true } });
+				if (!line) notFound("The requested line was not found.");
+				const ifMatch = requireIfMatch(req, "Line");
+				if (ifMatch !== line.rowVersion) staleVersion();
+				// Hard-delete policy: only with no active operators — force
+				// disable first (DELETE /lines/:lineId ends assignments).
+				const activeCount = await transaction.lineOperatorAssignment.count({ where: { lineId, status: "ACTIVE" } });
+				if (activeCount > 0) conflict("Force disable the line before deleting.");
+				if (line.isEnabled) conflict("Disable the line before deleting.");
+				// ENDED assignments are line-scoped rows under a required FK, so
+				// they go down with the line. The audit record keeps the lineCode.
+				await transaction.lineOperatorAssignment.deleteMany({ where: { lineId } });
+				await transaction.line.delete({ where: { id: lineId } });
+				await recordCommandSuccess(transaction, req, "LINE_DELETED", "Line", lineId, { lineCode: line.lineCode });
+				return { status: 200, body: { lineId, lineCode: line.lineCode }, headers: {} };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.post("/operator-assignments", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, operatorAssignmentCreateSchema);
+			const response = await executeCommand(database, req, "operatorAssignmentCreate", body, async (transaction) => {
+				const line = await transaction.line.findUnique({ where: { id: body.lineId }, select: { id: true, lineCode: true, isEnabled: true, activeLeaderId: true, assignedLeaderId: true } });
+				if (!line) notFound("The requested line was not found.");
+				if (!line.isEnabled) conflict("The requested line is disabled.");
+				const caller = actorId(req);
+				const assignments: SubjectAssignmentRecord[] = (req as Request & { canonicalAssignments?: SubjectAssignmentRecord[] }).canonicalAssignments ?? [];
+				const isAdmin = hasCapability(assignments, "operations.manage");
+				if (!isAdmin && line.activeLeaderId !== caller && line.assignedLeaderId !== caller) {
+					forbidden("Only the line's active leader or an admin can assign operators to this line.");
+				}
+				const operator = await transaction.subject.findUnique({ where: { id: body.subjectId }, select: { id: true, status: true } });
+				if (!operator) notFound("The requested operator was not found.");
+				if (operator.status !== "ACTIVE") conflict("The requested operator is not an active subject.");
+				const existing = await transaction.lineOperatorAssignment.findFirst({ where: { subjectId: body.subjectId, status: "ACTIVE" }, select: { id: true, lineId: true } });
+				if (existing) {
+					conflict(existing.lineId === body.lineId
+						? "The operator is already assigned to this line."
+						: "The operator is still assigned to another line; end that assignment first.");
+				}
+				const assignment = await transaction.lineOperatorAssignment.create({
+					data: { lineId: body.lineId, subjectId: body.subjectId, reason: body.reason ?? null, status: "ACTIVE", actorSubjectId: caller },
+				});
+				await recordCommandSuccess(transaction, req, "OPERATOR_ASSIGNED", "LineOperatorAssignment", assignment.id, { lineId: body.lineId, subjectId: body.subjectId, reason: body.reason ?? null });
+				return { status: 201, body: { operatorAssignmentId: assignment.id, lineId: assignment.lineId, subjectId: assignment.subjectId, status: assignment.status, startedAt: assignment.startedAt.toISOString() }, headers: { Location: `/api/v1/operator-assignments/${assignment.id}` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.delete("/operator-assignments/:assignmentId", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const assignmentId = req.params.assignmentId;
+			const response = await executeCommand(database, req, "operatorAssignmentEnd", { assignmentId }, async (transaction) => {
+				const assignment = await transaction.lineOperatorAssignment.findUnique({
+					where: { id: assignmentId },
+					select: { id: true, lineId: true, subjectId: true, status: true, line: { select: { lineCode: true, activeLeaderId: true, assignedLeaderId: true } } },
+				});
+				if (!assignment) notFound("The requested operator assignment was not found.");
+				if (assignment.status !== "ACTIVE") conflict("The requested operator assignment is already ended.");
+				const caller = actorId(req);
+				const assignments: SubjectAssignmentRecord[] = (req as Request & { canonicalAssignments?: SubjectAssignmentRecord[] }).canonicalAssignments ?? [];
+				const isAdmin = hasCapability(assignments, "operations.manage");
+				if (!isAdmin && assignment.line.activeLeaderId !== caller && assignment.line.assignedLeaderId !== caller) {
+					forbidden("Only the line's active leader or an admin can end this assignment.");
+				}
+				const ended = await transaction.lineOperatorAssignment.update({
+					where: { id: assignmentId },
+					data: { status: "ENDED", endedAt: new Date() },
+				});
+				await recordCommandSuccess(transaction, req, "OPERATOR_ASSIGNMENT_ENDED", "LineOperatorAssignment", assignmentId, { lineId: assignment.lineId, subjectId: assignment.subjectId });
+				return { status: 200, body: { operatorAssignmentId: ended.id, lineId: ended.lineId, subjectId: ended.subjectId, status: ended.status, endedAt: ended.endedAt?.toISOString() ?? null }, headers: {} };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }

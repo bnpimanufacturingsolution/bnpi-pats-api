@@ -72,8 +72,10 @@ export const CLIENT_B251 = {
 		},
 		{
 			// Conflict: Inj/Inj Shot = Cola; Deco = ICE COFFEE; Assy mixed.
+			// Gate 0: null name + NEEDS_CONFIRMATION until a Document Control ECO
+			// names the winner. Per-tab evidence lives in nameConflict below.
 			modelNumber: "05",
-			modelName: "Cola / Ice Coffee",
+			modelName: null,
 			sourceStatus: "NEEDS_CONFIRMATION",
 			evidenceStatus: "PROVISIONAL",
 			parts: [

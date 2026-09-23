@@ -159,8 +159,13 @@ dashboard projection as business truth.
 
 ## Seed design
 
-Create a separate PATS seed orchestrator and leave the legacy `prisma/seed.ts` explicitly
-compatibility-only.
+The legacy Mongo compatibility/demo seed (`prisma/seed.ts` and `prisma/seeds/`)
+has been removed. It seeded the retired PMS domain (Workspace, Employee,
+WorkspaceMember, ProjectMember, Product) and is out of scope for the current
+app–API transition.
+
+The canonical PATS seed is `scripts/pats-seed.mjs`, invoked with
+`pnpm prisma:pats:seed`.
 
 Required behavior:
 

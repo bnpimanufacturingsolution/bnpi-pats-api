@@ -277,38 +277,35 @@ describe("evidence-backed catalog integration slice", () => {
 				.post("/api/v1/catalog/products")
 				.set("Authorization", "Bearer evidence-integration-token")
 				.set("Idempotency-Key", `product-${fixture.code}`)
-				.send({
-					productCode: fixture.code,
-					productName: `${fixture.code} analyzed source`,
-					evidenceStatus: fixture.evidenceStatus,
-					sourceEvidenceIds: [fixture.evidenceId],
-				});
+			.send({
+				productCode: fixture.code,
+				productName: `${fixture.code} analyzed source`,
+				sourceEvidenceIds: [fixture.evidenceId],
+			});
 			expect(product.status).to.equal(201);
 
 			const model = await request(app)
 				.post("/api/v1/catalog/models")
 				.set("Authorization", "Bearer evidence-integration-token")
 				.set("Idempotency-Key", `model-${fixture.code}`)
-				.send({
-					productId: product.body.id,
-					modelNumber: "01",
-					modelName: null,
-					evidenceStatus: fixture.evidenceStatus,
-					sourceEvidenceIds: [fixture.evidenceId],
-				});
+			.send({
+				productId: product.body.id,
+				modelNumber: "01",
+				modelName: null,
+				sourceEvidenceIds: [fixture.evidenceId],
+			});
 			expect(model.status).to.equal(201);
 
 			const part = await request(app)
 				.post("/api/v1/catalog/model-parts")
 				.set("Authorization", "Bearer evidence-integration-token")
 				.set("Idempotency-Key", `part-${fixture.code}`)
-				.send({
-					modelId: model.body.id,
-					partCode: fixture.partCode,
-					partName: "Source-derived part",
-					evidenceStatus: fixture.partStatus,
-					sourceEvidenceIds: [fixture.evidenceId],
-				});
+			.send({
+				modelId: model.body.id,
+				partCode: fixture.partCode,
+				partName: "Source-derived part",
+				sourceEvidenceIds: [fixture.evidenceId],
+			});
 			expect(part.status).to.equal(201);
 
 			const bom = await request(app)

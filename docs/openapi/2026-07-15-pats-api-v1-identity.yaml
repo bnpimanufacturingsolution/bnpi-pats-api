@@ -89,9 +89,9 @@ components:
       properties:
         username:
           type: string
-          minLength: 3
-          maxLength: 128
-          description: Lowercase-normalized PATS-local account username.
+          minLength: 1
+          maxLength: 254
+          description: Account username (lowercase-normalized) or account email (trimmed, case-insensitive); identifiers containing `@` resolve through the subject email snapshot.
         password:
           type: string
           minLength: 1

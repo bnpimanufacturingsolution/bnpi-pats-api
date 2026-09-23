@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
 	CanonicalEvidenceStatus,
 	CatalogLifecycleStatus,
+	Prisma,
 	PrismaClient as PatsPrismaClient,
 	ProductSourceStatus,
 } from "../../generated/pats-client";
@@ -18,21 +19,9 @@ import {
 
 type CatalogDatabase = Pick<
 	PatsPrismaClient,
-	"product" | "model" | "modelPart" | "sourceEvidence" | "canonicalEvidenceLink"
+	"product" | "model" | "modelPart" | "sourceEvidence" | "canonicalEvidenceLink" | "stage" | "subStage"
 >;
 
-const evidenceStatuses = [
-	"CONFIRMED",
-	"INFERRED",
-	"PROVISIONAL",
-	"SOURCE_ANOMALY",
-	"UNAVAILABLE_DEPENDENCY",
-	"NEEDS_CONFIRMATION",
-	"CONFLICTING",
-	"STALE",
-] as const;
-
-const evidenceStatusSchema = z.enum(evidenceStatuses);
 const sourceEvidenceIdsSchema = z
 	.array(z.string().trim().min(1).max(100))
 	.max(100)
@@ -42,7 +31,6 @@ const productCreateSchema = z
 	.object({
 		productCode: z.string().trim().min(1).max(120),
 		productName: z.string().trim().min(1).max(240),
-		evidenceStatus: evidenceStatusSchema.optional(),
 		sourceEvidenceIds: sourceEvidenceIdsSchema.optional(),
 	})
 	.strict();
@@ -51,7 +39,6 @@ const productPatchSchema = z
 	.object({
 		productCode: z.string().trim().min(1).max(120).optional(),
 		productName: z.string().trim().min(1).max(240).optional(),
-		evidenceStatus: evidenceStatusSchema.optional(),
 	})
 	.strict()
 	.refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
@@ -61,8 +48,6 @@ const modelCreateSchema = z
 		productId: z.string().trim().min(1).max(100),
 		modelNumber: z.string().trim().min(1).max(120),
 		modelName: z.string().trim().max(240).nullable().optional(),
-		skuCode: z.string().trim().max(120).nullable().optional(),
-		evidenceStatus: evidenceStatusSchema.optional(),
 		sourceEvidenceIds: sourceEvidenceIdsSchema.optional(),
 	})
 	.strict();
@@ -71,33 +56,48 @@ const modelPatchSchema = z
 	.object({
 		modelNumber: z.string().trim().min(1).max(120).optional(),
 		modelName: z.string().trim().max(240).nullable().optional(),
-		skuCode: z.string().trim().max(120).nullable().optional(),
 		pinned: z.boolean().optional(),
-		evidenceStatus: evidenceStatusSchema.optional(),
 	})
 	.strict()
 	.refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
+
+// Per-step planned cycle time map, keyed `stageId::subStageId` (empty subStageId
+// when stage-wide) — the same key shape route steps use. Never queried by value,
+// only read-then-computed, so a Json map is the honest store (cf. routingSteps).
+const plannedCycleTimesSchema = z
+	.record(z.string().trim().min(1).max(220), z.number().int().min(1).max(86400))
+	.nullable()
+	.optional()
+	.refine(
+		(value) => value === undefined || value === null || Object.keys(value).length <= 100,
+		"At most 100 step cycle times per part.",
+	);
 
 const modelPartCreateSchema = z
 	.object({
 		modelId: z.string().trim().min(1).max(100),
 		partCode: z.string().trim().min(1).max(120),
 		partName: z.string().trim().min(1).max(240),
-		evidenceStatus: evidenceStatusSchema.optional(),
+		plannedCycleTimes: plannedCycleTimesSchema,
 		sourceEvidenceIds: sourceEvidenceIdsSchema.optional(),
 	})
 	.strict();
+
+const routeStepSchema = z.object({
+	stageId: z.string().trim().min(1).max(100),
+	subStageId: z.string().trim().min(1).max(100).nullable(),
+});
 
 const modelPartPatchSchema = z
 	.object({
 		partCode: z.string().trim().min(1).max(120).optional(),
 		partName: z.string().trim().min(1).max(240).optional(),
-		evidenceStatus: evidenceStatusSchema.optional(),
+		plannedCycleTimes: plannedCycleTimesSchema,
+		routingSteps: z.array(routeStepSchema).max(50).optional(),
 	})
 	.strict()
 	.refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
 
-type EvidenceStatusValue = (typeof evidenceStatuses)[number];
 type EvidenceSubjectType = "PRODUCT" | "MODEL" | "MODEL_PART";
 
 class InMemoryCatalogIdempotencyStore implements IdempotencyStore {
@@ -198,12 +198,8 @@ function setVersionHeaders(res: Response, rowVersion: number): void {
 	res.setHeader("ETag", `"${rowVersion}"`);
 }
 
-function isEvidenceStatus(value: EvidenceStatusValue): value is CanonicalEvidenceStatus {
-	return Object.values(CanonicalEvidenceStatus).includes(value as CanonicalEvidenceStatus);
-}
-
-function evidenceStatus(value?: EvidenceStatusValue): CanonicalEvidenceStatus {
-	if (value && isEvidenceStatus(value)) return value;
+/** Server-side evidence default: callers cannot set ingest trust; links carry provenance. */
+function defaultEvidenceStatus(): CanonicalEvidenceStatus {
 	return CanonicalEvidenceStatus.NEEDS_CONFIRMATION;
 }
 
@@ -389,7 +385,7 @@ export function catalogFoundationRouter(
 								productCode: body.productCode,
 								productName: body.productName,
 								lifecycleStatus: CatalogLifecycleStatus.DRAFT,
-								evidenceStatus: evidenceStatus(body.evidenceStatus),
+								evidenceStatus: defaultEvidenceStatus(),
 								rowVersion: 1,
 							},
 						});
@@ -454,7 +450,7 @@ export function catalogFoundationRouter(
 					const model = await inTransaction(database, async (transaction) => {
 						const product = await transaction.product.findUnique({
 							where: { id: body.productId },
-							select: { id: true },
+							select: { id: true, productCode: true },
 						});
 						if (!product)
 							throw notFound("The requested catalog product was not found.");
@@ -464,10 +460,9 @@ export function catalogFoundationRouter(
 								productId: body.productId,
 								modelNumber: body.modelNumber,
 								modelName: body.modelName ?? null,
-								skuCode: body.skuCode ?? null,
 								sourceStatus: ProductSourceStatus.NEEDS_CONFIRMATION,
 								lifecycleStatus: CatalogLifecycleStatus.DRAFT,
-								evidenceStatus: evidenceStatus(body.evidenceStatus),
+								evidenceStatus: defaultEvidenceStatus(),
 								rowVersion: 1,
 							},
 						});
@@ -477,15 +472,15 @@ export function catalogFoundationRouter(
 							"MODEL",
 							created.id,
 						);
-						return created;
+						return { created, productCode: product.productCode };
 					});
 
 					return {
 						status: 201,
-						body: toModelResource(model, body.sourceEvidenceIds?.length ?? 0),
+						body: toModelResource(model.created, model.productCode, body.sourceEvidenceIds?.length ?? 0),
 						headers: {
-							Location: `/api/v1/catalog/models/${model.id}`,
-							ETag: `"${model.rowVersion}"`,
+							Location: `/api/v1/catalog/models/${model.created.id}`,
+							ETag: `"${model.created.rowVersion}"`,
 						},
 					};
 				},
@@ -541,9 +536,10 @@ export function catalogFoundationRouter(
 								modelId: body.modelId,
 								partCode: body.partCode,
 								partName: body.partName,
+								plannedCycleTimes: body.plannedCycleTimes ?? Prisma.JsonNull,
 								routingSteps: [],
 								lifecycleStatus: CatalogLifecycleStatus.DRAFT,
-								evidenceStatus: evidenceStatus(body.evidenceStatus),
+								evidenceStatus: defaultEvidenceStatus(),
 								rowVersion: 1,
 							},
 						});
@@ -614,9 +610,6 @@ export function catalogFoundationRouter(
 				data: {
 					...(body.productCode === undefined ? {} : { productCode: body.productCode }),
 					...(body.productName === undefined ? {} : { productName: body.productName }),
-					...(body.evidenceStatus === undefined
-						? {}
-						: { evidenceStatus: evidenceStatus(body.evidenceStatus) }),
 					rowVersion: { increment: 1 },
 				},
 			});
@@ -664,17 +657,18 @@ export function catalogFoundationRouter(
 				data: {
 					...(body.modelNumber === undefined ? {} : { modelNumber: body.modelNumber }),
 					...(body.modelName === undefined ? {} : { modelName: body.modelName }),
-					...(body.skuCode === undefined ? {} : { skuCode: body.skuCode }),
 					...(body.pinned === undefined ? {} : { pinned: body.pinned }),
-					...(body.evidenceStatus === undefined
-						? {}
-						: { evidenceStatus: evidenceStatus(body.evidenceStatus) }),
 					rowVersion: { increment: 1 },
 				},
 			});
+			const owningProduct = await database.product.findUnique({
+				where: { id: model.productId },
+				select: { productCode: true },
+			});
+			if (!owningProduct) throw notFound("The owning catalog product was not found.");
 			setVersionHeaders(res, model.rowVersion);
 			res.status(200).json(
-				toModelResource(model, await evidenceCount(database, "MODEL", model.id)),
+				toModelResource(model, owningProduct.productCode, await evidenceCount(database, "MODEL", model.id)),
 			);
 		} catch (error) {
 			handleRouteError(error, req, res, next);
@@ -712,15 +706,19 @@ export function catalogFoundationRouter(
 			if (!current) throw notFound("The requested catalog model part was not found.");
 			if (current.lifecycleStatus !== CatalogLifecycleStatus.DRAFT) throw publishedResource();
 			if (current.rowVersion !== expectedVersion) throw staleVersion();
+			if (body.routingSteps !== undefined) {
+				await assertRouteStepsExist(database, body.routingSteps);
+			}
 
 			const modelPart = await database.modelPart.update({
 				where: { id: current.id },
 				data: {
 					...(body.partCode === undefined ? {} : { partCode: body.partCode }),
 					...(body.partName === undefined ? {} : { partName: body.partName }),
-					...(body.evidenceStatus === undefined
+					...(body.plannedCycleTimes === undefined
 						? {}
-						: { evidenceStatus: evidenceStatus(body.evidenceStatus) }),
+						: { plannedCycleTimes: body.plannedCycleTimes ?? Prisma.JsonNull }),
+					...(body.routingSteps === undefined ? {} : { routingSteps: body.routingSteps }),
 					rowVersion: { increment: 1 },
 				},
 			});
@@ -775,7 +773,6 @@ function toProductResource(
 		productCode: string;
 		productName: string;
 		lifecycleStatus: CatalogLifecycleStatus;
-		evidenceStatus: CanonicalEvidenceStatus;
 		rowVersion: number;
 		createdAt: Date;
 		updatedAt: Date;
@@ -787,12 +784,16 @@ function toProductResource(
 		productCode: product.productCode,
 		productName: product.productName,
 		lifecycleStatus: product.lifecycleStatus,
-		evidenceStatus: product.evidenceStatus,
 		provenance: { sourceEvidenceCount },
 		rowVersion: product.rowVersion,
 		createdAt: product.createdAt.toISOString(),
 		updatedAt: product.updatedAt.toISOString(),
 	};
+}
+
+/** skuCode is derived, never stored: `${productCode}-${modelNumber}` (C-001). */
+export function deriveModelSkuCode(productCode: string, modelNumber: string): string {
+	return `${productCode}-${modelNumber}`;
 }
 
 function toModelResource(
@@ -801,15 +802,14 @@ function toModelResource(
 		productId: string;
 		modelNumber: string;
 		modelName: string | null;
-		skuCode: string | null;
 		pinned: boolean;
 		sourceStatus: ProductSourceStatus;
 		lifecycleStatus: CatalogLifecycleStatus;
-		evidenceStatus: CanonicalEvidenceStatus;
 		rowVersion: number;
 		createdAt: Date;
 		updatedAt: Date;
 	},
+	productCode: string,
 	sourceEvidenceCount: number,
 ) {
 	return {
@@ -817,16 +817,79 @@ function toModelResource(
 		productId: model.productId,
 		modelNumber: model.modelNumber,
 		modelName: model.modelName,
-		skuCode: model.skuCode,
+		skuCode: deriveModelSkuCode(productCode, model.modelNumber),
 		pinned: model.pinned,
 		sourceStatus: model.sourceStatus,
 		lifecycleStatus: model.lifecycleStatus,
-		evidenceStatus: model.evidenceStatus,
 		provenance: { sourceEvidenceCount },
 		rowVersion: model.rowVersion,
 		createdAt: model.createdAt.toISOString(),
 		updatedAt: model.updatedAt.toISOString(),
 	};
+}
+
+/** Coerce a stored Json CT map to the wire shape; anything else is honest null. */
+function ctMapOrNull(value: unknown): Record<string, number> | null {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+	const entries = Object.entries(value as Record<string, unknown>);
+	if (entries.length === 0) return null;
+	const out: Record<string, number> = {};
+	for (const [key, entry] of entries) {
+		if (typeof entry !== "number" || !Number.isInteger(entry) || entry < 1 || entry > 86400) {
+			return null;
+		}
+		out[key] = entry;
+	}
+	return out;
+}
+
+/** Reject route steps that name stages (or sub-stages) outside the catalog. */
+async function assertRouteStepsExist(
+	database: CatalogDatabase,
+	steps: Array<{ stageId: string; subStageId: string | null }>,
+): Promise<void> {
+	const stageIds = [...new Set(steps.map((step) => step.stageId))];
+	const subStageIds = [
+		...new Set(
+			steps.map((step) => step.subStageId).filter((id): id is string => id !== null),
+		),
+	];
+	const [stages, subStages] = await Promise.all([
+		stageIds.length > 0
+			? database.stage.findMany({ where: { id: { in: stageIds } }, select: { id: true } })
+			: [],
+		subStageIds.length > 0
+			? database.subStage.findMany({
+					where: { id: { in: subStageIds } },
+					select: { id: true, eligibleStages: { select: { stageId: true } } },
+				})
+			: [],
+	]);
+	const stageSet = new Set(stages.map((stage) => stage.id));
+	const subMap = new Map(
+		subStages.map((sub) => [sub.id, new Set(sub.eligibleStages.map((e) => e.stageId))]),
+	);
+	for (const step of steps) {
+		if (!stageSet.has(step.stageId)) {
+			throw new CatalogProblem(
+				422,
+				"urn:bandai:pats:problem:validation-error",
+				"Validation Failed",
+				`Unknown stage ${step.stageId} in route steps.`,
+			);
+		}
+		if (step.subStageId !== null) {
+			const eligible = subMap.get(step.subStageId);
+			if (!eligible || !eligible.has(step.stageId)) {
+				throw new CatalogProblem(
+					422,
+					"urn:bandai:pats:problem:validation-error",
+					"Validation Failed",
+					`Sub-stage ${step.subStageId} is not eligible under stage ${step.stageId}.`,
+				);
+			}
+		}
+	}
 }
 
 function toModelPartResource(
@@ -835,8 +898,8 @@ function toModelPartResource(
 		modelId: string;
 		partCode: string;
 		partName: string;
+		plannedCycleTimes: unknown;
 		lifecycleStatus: CatalogLifecycleStatus;
-		evidenceStatus: CanonicalEvidenceStatus;
 		rowVersion: number;
 		createdAt: Date;
 	},
@@ -847,8 +910,8 @@ function toModelPartResource(
 		modelId: modelPart.modelId,
 		partCode: modelPart.partCode,
 		partName: modelPart.partName,
+		plannedCycleTimes: ctMapOrNull(modelPart.plannedCycleTimes),
 		lifecycleStatus: modelPart.lifecycleStatus,
-		evidenceStatus: modelPart.evidenceStatus,
 		provenance: { sourceEvidenceCount },
 		rowVersion: modelPart.rowVersion,
 		createdAt: modelPart.createdAt.toISOString(),

@@ -27,10 +27,12 @@ const subject: SubjectRecord = {
 
 class FakeRepository implements SubjectRepository, LocalAccountRepository {
 	readonly credential: LocalCredentialRecord;
+	readonly email: string;
 	lastLoginAt?: Date;
 
-	constructor(passwordHash: string) {
+	constructor(passwordHash: string, email = "operator.one@pats.local") {
 		this.credential = { subjectId: subject.id, username: "operator.one", passwordHash };
+		this.email = email;
 	}
 
 	async resolve(_identity: VerifiedIdentity): Promise<SubjectRecord> {
@@ -47,6 +49,10 @@ class FakeRepository implements SubjectRepository, LocalAccountRepository {
 
 	async findByUsername(username: string): Promise<LocalCredentialRecord | null> {
 		return username === this.credential.username ? this.credential : null;
+	}
+
+	async findByEmail(email: string): Promise<LocalCredentialRecord | null> {
+		return email.trim().toLowerCase() === this.email ? this.credential : null;
 	}
 
 	async markLogin(_subjectId: string, occurredAt: Date): Promise<void> {
@@ -98,10 +104,29 @@ describe("PATS-local authentication", function () {
 		for (const credentials of [
 			{ username: "operator.one", password: "wrong-password" },
 			{ username: "missing.user", password: "wrong-password" },
+			{ username: "unknown@pats.local", password: "wrong-password" },
 		]) {
 			const response = await request(app).post("/api/v1/auth/login").send(credentials).expect(401);
 			assert.strictEqual(response.body.detail, "Invalid username or password.");
 		}
+	});
+
+	it("authenticates by email snapshot as well as username", async () => {
+		const passwordHash = await argon2.hash("correct-password", { timeCost: 2, memoryCost: 4096, parallelism: 1 });
+		const repository = new FakeRepository(passwordHash);
+		const localAuth = createLocalAuthDependencies(repository, repository, secret, { tokenTtlSeconds: 3600 });
+		const app = express();
+		app.use("/api/v1", canonicalRouter({ identity: localAuth, localAuth }));
+
+		const login = await request(app)
+			.post("/api/v1/auth/login")
+			.send({ username: "Operator.One@PATS.Local", password: "correct-password" })
+			.expect("Content-Type", /application\/json/)
+			.expect(200);
+
+		assert.strictEqual(login.body.tokenType, "Bearer");
+		const decoded = jwt.decode(login.body.accessToken) as Record<string, unknown>;
+		assert.strictEqual(decoded.sub, subject.id);
 	});
 
 	it("rejects malformed login input with canonical validation details", async () => {
