@@ -58,13 +58,47 @@ describe("label IR renderers", () => {
 		});
 		expect(zpl).to.include("INJECTION-MOLDING MANUAL");
 		expect(zpl).to.include("BNI-2606-001");
-		expect(zpl).to.include("FROM: INJECTION (MOLDING)");
+		expect(zpl).not.to.include("FROM: INJECTION (MOLDING)");
 		expect(zpl).not.to.include("TAMAGOTCHI PARADISE MEJIRUSHI ACCESSORY");
 		expect(zpl).to.include("QUANTITY");
 		expect(zpl).to.include("240 PCS");
 		expect(zpl).to.include("OPERATOR");
 		expect(zpl).to.include("RICO M.");
 		expect(zpl).to.include("MACHINE");
+	});
+
+	it("includes QR Code, project name, and Lot or serial number on the printed label", () => {
+		const zpl = renderZpl({
+			...ir,
+			widthMm: 100,
+			heightMm: 150,
+			projectName: "TAMAGOTCHI PARADISE",
+			codename: "TAMA-01",
+			serialNumber: "SN-999888",
+			lotCode: "LOT-2026-X",
+		});
+		expect(zpl).to.include("^BQN"); // QR code
+		expect(zpl).to.include("PROJECT: TAMAGOTCHI PARADISE");
+		expect(zpl).not.to.include("CODENAME: TAMA-01");
+		expect(zpl).to.include("LOT: LOT-2026-X");
+		expect(zpl).to.include("S/N: SN-999888");
+	});
+
+	it("omits Operator and Machine on non-injection stations", () => {
+		const zpl = renderZpl({
+			...ir,
+			widthMm: 100,
+			heightMm: 150,
+			atLabel: "Assembly Line",
+			fromStepLabel: "Decoration",
+			toStepLabel: "Warehouse",
+			operatorName: "Rico M.",
+			machineName: "Assembly Line (ASBL-77209-QRT)",
+		});
+		expect(zpl).to.include("QUANTITY");
+		expect(zpl).to.include("240 PCS");
+		expect(zpl).not.to.include("OPERATOR");
+		expect(zpl).not.to.include("MACHINE");
 	});
 
 	it("clamps requested width to the 104 mm Glory-L head", () => {

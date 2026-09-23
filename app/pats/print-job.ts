@@ -36,7 +36,15 @@ export type PrintJobStore = {
 			where: { id: string };
 			include: {
 				positionProjection: true;
-				lot: { select: { id: true; lotCode: true; partsListId: true; partName: true } };
+				lot: {
+					select: {
+						id: true;
+						lotCode: true;
+						partsListId: true;
+						partName: true;
+						project?: { select: { id: true; name: true; projectCode: true } };
+					};
+				};
 				parts: {
 					orderBy: { partId: "asc" };
 					take: 1;
@@ -131,7 +139,13 @@ export type PrintJobBatch = {
 		routeStepId: string | null;
 		quantityMagnitude: { toString(): string } | string | number | null;
 	} | null;
-	lot: { id: string; lotCode: string; partsListId: string; partName: string };
+	lot: {
+		id: string;
+		lotCode: string;
+		partsListId: string;
+		partName: string;
+		project?: { id: string; name: string; projectCode: string } | null;
+	};
 	parts: Array<{ partId: string; quantity: number; part: { partName: string; partCode: string } }>;
 };
 
@@ -210,8 +224,11 @@ export function buildLabelIr(input: {
 		barcodeValue: input.batch.barcodeValue,
 		batchCode: input.batch.batchCode,
 		lotCode: input.batch.lot.lotCode,
+		serialNumber: input.batch.barcodeValue,
 		partName: part?.part.partName ?? input.batch.lot.partName,
 		partCode: part?.part.partCode ?? "",
+		projectName: input.batch.lot.project?.name,
+		codename: input.batch.lot.project?.projectCode || part?.part.partCode,
 		quantity: input.quantity ?? quantityOf(input.batch),
 		fromStepLabel: input.fromStepLabel,
 		toStepLabel: input.toStepLabel,
@@ -234,7 +251,15 @@ export async function recordPrintJob(
 		where: { id: input.batchId },
 		include: {
 			positionProjection: true,
-			lot: { select: { id: true, lotCode: true, partsListId: true, partName: true } },
+			lot: {
+				select: {
+					id: true,
+					lotCode: true,
+					partsListId: true,
+					partName: true,
+					project: { select: { id: true, name: true, projectCode: true } },
+				},
+			},
 			parts: {
 				orderBy: { partId: "asc" },
 				take: 1,

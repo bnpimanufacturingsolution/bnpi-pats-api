@@ -25,6 +25,7 @@ import type { CommandTransaction } from "./command-support";
 import { assertQualityStageAllowed } from "./quality-stage-scope";
 import { recordPrintJob } from "./print-job";
 import { allowUnauthenticatedDeskPrint, deliverDeskLabel } from "./print-desk";
+import { GLORY_L_DEFAULTS } from "./label-ir";
 import { setDeprecationHeaders } from "../canonical/response-headers";
 
 // Station→Section rename (2026-09-16) transitional bridge. The canonical paths
@@ -157,6 +158,10 @@ const deskPrintSchema = z.object({
 	operatorName: z.string().trim().max(120).optional(),
 	machineName: z.string().trim().max(160).optional(),
 	qrValue: z.string().trim().max(600).optional(),
+	projectName: z.string().trim().max(160).optional(),
+	productLine: z.string().trim().max(160).optional(),
+	codename: z.string().trim().max(160).optional(),
+	serialNumber: z.string().trim().max(160).optional(),
 	widthMm: z.number().positive().optional(),
 	heightMm: z.number().positive().optional(),
 });
@@ -854,11 +859,15 @@ export function commandRouter(
 				operatorName: body.operatorName ?? "",
 				machineName: body.machineName ?? "",
 				qrValue: body.qrValue ?? body.barcodeValue,
+				projectName: body.projectName ?? body.productLine,
+				productLine: body.productLine ?? body.projectName,
+				codename: body.codename ?? body.partCode,
+				serialNumber: body.serialNumber ?? body.barcodeValue,
 				printedAt: new Date().toISOString(),
 				sequence: 1,
-				widthMm: body.widthMm ?? 102,
-				heightMm: body.heightMm ?? 152,
-				dpi: 300,
+				widthMm: body.widthMm ?? GLORY_L_DEFAULTS.widthMm,
+				heightMm: body.heightMm ?? GLORY_L_DEFAULTS.heightMm,
+				dpi: GLORY_L_DEFAULTS.dpi,
 			});
 			res.status(result.status === "FAILED" ? 503 : 200).json({
 				status: result.status,
