@@ -48,7 +48,7 @@ export interface LocalCredentialRecord {
 export interface LocalAccountRepository {
 	findByUsername(username: string): Promise<LocalCredentialRecord | null>;
 	/** Case-insensitive match against the subject's email snapshot. Used so the
-	 *  sign-in box accepts "username or email"; implementations must return the
+	 *  sign-in box accepts "Email"; implementations must return the
 	 *  same record shape as findByUsername and must not disclose whether the
 	 *  email exists (callers return the identical null on miss). */
 	findByEmail(email: string): Promise<LocalCredentialRecord | null>;

@@ -27,7 +27,7 @@ function identity(assignments: SubjectAssignmentRecord[]): IdentityDependencies 
 
 function appFor(
 	database: Record<string, unknown>,
-	assignments: SubjectAssignmentRecord[] = [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }],
+	assignments: SubjectAssignmentRecord[] = [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }],
 ) {
 	const app = express();
 	app.use("/api/v1", canonicalRouter({
@@ -262,6 +262,7 @@ describe("canonical PATS domain read contract", () => {
 							lotName: "July lot",
 							projectId: "project-1",
 							partsListId: "parts-list-1",
+							project: { status: "RELEASED" },
 						},
 						parts: [{
 							partId: "part-1",
@@ -317,6 +318,7 @@ describe("canonical PATS domain read contract", () => {
 					lotName: "July lot",
 					projectId: "project-1",
 					partsListId: "parts-list-1",
+					projectStatus: "RELEASED",
 				},
 				parts: [{
 					partId: "part-1",
@@ -680,9 +682,9 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.dailyThroughput[0].expected).to.equal(200);
 	});
 
-	it("allows planner to read the dashboard summary (dashboard.read, not execution.read)", async () => {
-		// Planner is the regression subject: it must read the dashboard even though it
-		// deliberately lacks execution.read for the full floor-directory ops surface.
+	it("allows dashboard.read without execution.read (capability-scoped subject)", async () => {
+		// Regression: dashboard summary must open with dashboard.read alone even though
+		// the subject deliberately lacks execution.read for the full floor-directory ops surface.
 		const app = appFor({
 			project: { count: async () => 4 },
 			batch: {
@@ -694,7 +696,7 @@ describe("canonical PATS domain read contract", () => {
 			routingViolation: { findMany: async () => [] },
 			qualityDecision: { count: async () => 0 },
 			inventoryTransaction: { count: async () => 0 },
-		}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+		}, [{ kind: "CAPABILITY", key: "dashboard.read", status: "ACTIVE" }]);
 
 		const response = await request(app)
 			.get("/api/v1/dashboard-summaries")
@@ -796,7 +798,7 @@ describe("canonical PATS domain read contract", () => {
 
 	it("fails print-job reads closed when the subject lacks execution.read", async () => {
 		const app = appFor({ printJob: { findMany: async () => [] } }, [
-			{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" },
+			{ kind: "ROLE_BUNDLE", key: "qi", status: "ACTIVE" },
 		]);
 
 		const response = await request(app)
