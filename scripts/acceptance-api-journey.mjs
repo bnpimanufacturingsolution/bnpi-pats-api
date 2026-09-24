@@ -77,13 +77,14 @@ async function main() {
 		unauth.headers["content-type"] ?? "missing",
 	);
 
-	const planner = await login("marco.villanueva");
+	// Planning/catalog journey uses admin (planner role removed 2026-09-24).
+	const planner = await login("admin");
 	if (!planner.token) {
-		rec("auth-login-planner", "FAIL", `${planner.res.status} ${planner.res.raw.slice(0, 200)}`);
+		rec("auth-login-admin", "FAIL", `${planner.res.status} ${planner.res.raw.slice(0, 200)}`);
 		finish();
 		process.exit(1);
 	}
-	rec("auth-login-planner", "PASS", "ok");
+	rec("auth-login-admin", "PASS", "ok");
 	const plannerAuth = { Authorization: `Bearer ${planner.token}` };
 
 	const operator = await login("joshua.reyes");
@@ -99,7 +100,7 @@ async function main() {
 
 	const caps = await api("GET", "/users/me/capabilities", { headers: plannerAuth });
 	const capList = caps.body?.capabilities ?? caps.body?.data ?? [];
-	rec("capabilities-planner", caps.status === 200 ? "PASS" : "FAIL", `count=${Array.isArray(capList) ? capList.length : "?"}`);
+	rec("capabilities-admin", caps.status === 200 ? "PASS" : "FAIL", `count=${Array.isArray(capList) ? capList.length : "?"}`);
 
 	if (operatorAuth) {
 		const opCaps = await api("GET", "/users/me/capabilities", { headers: operatorAuth });

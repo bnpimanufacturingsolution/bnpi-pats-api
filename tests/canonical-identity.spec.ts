@@ -65,7 +65,7 @@ describe("canonical identity boundary", () => {
 		const response = await request(
 			createTestApp(
 				createIdentity(verified, activeSubject, [
-					{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" },
+					{ kind: "ROLE_BUNDLE", key: "qi", status: "ACTIVE" },
 					{ kind: "CAPABILITY", key: "execution.read", status: "ACTIVE" },
 					{ kind: "CAPABILITY", key: "inventory.issue", status: "REVOKED" },
 					{ kind: "CAPABILITY", key: "unapproved.capability", status: "ACTIVE" },
@@ -78,20 +78,18 @@ describe("canonical identity boundary", () => {
 
 		assert.deepStrictEqual(response.body, {
 			capabilities: [
-				"catalog.read",
-				"dashboard.read",
 				"execution.read",
-				"material-requirement.manage",
 				"monitoring.read",
-				"planning.manage",
-				"planning.read",
+				"quality.read",
+				"quality.resolve",
+				"reconciliation.resolve",
 			],
 		});
-		assert.strictEqual(response.body.capabilities.includes("quality.read"), false);
-		assert.strictEqual(response.body.capabilities.includes("quality.resolve"), false);
+		assert.strictEqual(response.body.capabilities.includes("quality.read"), true);
+		assert.strictEqual(response.body.capabilities.includes("inventory.issue"), false);
 	});
 
-	it("exposes quality.read and quality.resolve for qi and admin, not planner", async () => {
+	it("exposes quality.read and quality.resolve for qi and admin, not unknown roles", async () => {
 		const quality = await request(
 			createTestApp(
 				createIdentity(verified, activeSubject, [{ kind: "ROLE_BUNDLE", key: "qi", status: "ACTIVE" }]),
@@ -117,21 +115,15 @@ describe("canonical identity boundary", () => {
 		assert.ok(admin.body.capabilities.includes("quality.resolve"));
 		assert.ok(admin.body.capabilities.includes("operations.manage"));
 
-		const planner = await request(
+		const retiredPlanner = await request(
 			createTestApp(
 				createIdentity(verified, activeSubject, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]),
 			),
 		)
 			.get("/api/v1/users/me/capabilities")
 			.expect(200);
-		assert.deepStrictEqual(planner.body.capabilities, [
-			"catalog.read",
-			"dashboard.read",
-			"material-requirement.manage",
-			"monitoring.read",
-			"planning.manage",
-			"planning.read",
-		]);
+		// planner role bundle removed 2026-09-24 — unknown keys expand to [].
+		assert.deepStrictEqual(retiredPlanner.body.capabilities, []);
 	});
 
 	it("grants admin every capability the canonical surface can require (no admin access gaps)", () => {
