@@ -117,6 +117,8 @@ const batchCreateSchema = z.object({
 	batchCode: z.string().trim().min(1).max(120),
 	barcodeValue: z.string().trim().min(1).max(240),
 	lotId: z.string().trim().min(1).max(100),
+	/** Physical line this batch is published to; omit/null = unassigned. */
+	lineId: z.string().trim().min(1).max(100).nullable().optional(),
 	plannedQuantity: z.number().int().positive(),
 	labelPackSize: z.number().int().positive(),
 	currentStageId: z.string().trim().min(1).max(100),
@@ -693,11 +695,73 @@ export function commandRouter(
 				if (!current) notFound("The requested production plan was not found.");
 				if (current.rowVersion !== expectedVersion) staleVersion();
 				if (current.status !== PlanLifecycleStatus.DRAFT && current.status !== PlanLifecycleStatus.READY) conflict("Only draft or ready production plans can be released.");
+				// Release = publish: mint missing tray-sized scan units so the floor
+				// queue is non-empty without a separate Create batches step.
+				const lots = await transaction.lot.findMany({
+					where: { projectId: current.id },
+					select: {
+						id: true,
+						lotCode: true,
+						requiredProductionQuantity: true,
+						labelPackSize: true,
+						partId: true,
+						batches: { select: { plannedQuantity: true } },
+					},
+					orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+				});
+				let mintedBatchCount = 0;
+				for (const lot of lots) {
+					const packSize = lot.labelPackSize > 0 ? lot.labelPackSize : 240;
+					const alreadyPlanned = lot.batches.reduce((sum, batch) => sum + batch.plannedQuantity, 0);
+					const remaining = Math.max(0, lot.requiredProductionQuantity - alreadyPlanned);
+					const batchCount = Math.ceil(remaining / packSize);
+					let left = remaining;
+					for (let index = 1; index <= batchCount; index += 1) {
+						const sequence = lot.batches.length + index;
+						const batchCode = `${lot.lotCode}-B${String(sequence).padStart(3, "0")}`;
+						const plannedQuantity = Math.min(packSize, left);
+						left -= plannedQuantity;
+						const batch = await transaction.batch.create({
+							data: {
+								batchCode,
+								barcodeValue: batchCode,
+								lotId: lot.id,
+								// Unassigned line until product/line ownership is modeled (null passes line filters).
+								lineId: null,
+								plannedQuantity,
+								labelPackSize: packSize,
+								// Pre-floor marker: next expected hop = route step 1.
+								currentStageId: "STG-PROJECTS",
+								status: BatchStatus.PLANNED,
+								createdBySubjectId: actorId(req),
+							},
+							select: { id: true },
+						});
+						await transaction.batchPartLine.create({
+							data: { batchId: batch.id, partId: lot.partId, quantity: plannedQuantity },
+						});
+						await transaction.batchPositionProjection.create({
+							data: {
+								batchId: batch.id,
+								stageId: "STG-PROJECTS",
+								quantityMagnitude: String(plannedQuantity),
+								quantityUom: "EA",
+							},
+						});
+						mintedBatchCount += 1;
+					}
+				}
 				const plan = await transaction.project.update({
 					where: { id: current.id },
 					data: { status: PlanLifecycleStatus.RELEASED, releasedAt: new Date(), releasedBySubjectId: actorId(req), rowVersion: { increment: 1 } },
 				});
-				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_RELEASED", "ProductionPlan", plan.id, { rowVersion: plan.rowVersion });
+				// Floor arrival queue only lists ACTIVE batches; releasing the plan activates
+				// its PLANNED batches (including just-minted trays) for the next-hop station.
+				await transaction.batch.updateMany({
+					where: { lot: { projectId: plan.id }, status: BatchStatus.PLANNED },
+					data: { status: BatchStatus.ACTIVE },
+				});
+				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_RELEASED", "ProductionPlan", plan.id, { rowVersion: plan.rowVersion, mintedBatchCount });
 				return { status: 200, body: planResponse(plan, req), headers: resourceHeaders(plan.id, plan.rowVersion, req) };
 			});
 			respondCommand(res, response);
@@ -806,6 +870,10 @@ export function commandRouter(
 			const response = await executeCommand(database, req, "batchCreate", body, async (transaction) => {
 				const lot = await transaction.lot.findUnique({ where: { id: body.lotId }, select: { id: true, projectId: true } });
 				if (!lot) notFound("The requested lot was not found.");
+				if (body.lineId) {
+					const line = await transaction.line.findUnique({ where: { id: body.lineId }, select: { id: true } });
+					if (!line) notFound("The requested production line was not found.");
+				}
 				const parts = body.parts ?? [];
 				const uniquePartIds = [...new Set(parts.map((part) => part.partId))];
 				const validParts = await transaction.part.findMany({ where: { id: { in: uniquePartIds }, projectId: lot.projectId }, select: { id: true } });
@@ -815,6 +883,7 @@ export function commandRouter(
 						batchCode: body.batchCode,
 						barcodeValue: body.barcodeValue,
 						lotId: body.lotId,
+						lineId: body.lineId ?? null,
 						plannedQuantity: body.plannedQuantity,
 						labelPackSize: body.labelPackSize,
 						currentStageId: body.currentStageId,
