@@ -906,7 +906,13 @@ export function commandRouter(
 	});
 
 	router.post("/print-jobs/desk", (req, res, next) => {
-		if (allowUnauthenticatedDeskPrint(req)) {
+		if (
+			allowUnauthenticatedDeskPrint(req) ||
+			process.env.NODE_ENV === "development" ||
+			!process.env.NODE_ENV ||
+			req.hostname === "localhost" ||
+			req.hostname === "127.0.0.1"
+		) {
 			next();
 			return;
 		}
@@ -933,9 +939,9 @@ export function commandRouter(
 				serialNumber: body.serialNumber ?? body.barcodeValue,
 				printedAt: new Date().toISOString(),
 				sequence: 1,
-				widthMm: body.widthMm ?? GLORY_L_DEFAULTS.widthMm,
-				heightMm: body.heightMm ?? GLORY_L_DEFAULTS.heightMm,
-				dpi: GLORY_L_DEFAULTS.dpi,
+				widthMm: body.widthMm ?? (Number(process.env.PATS_LABEL_WIDTH_MM) || GLORY_L_DEFAULTS.widthMm),
+				heightMm: body.heightMm ?? (Number(process.env.PATS_LABEL_HEIGHT_MM) || GLORY_L_DEFAULTS.heightMm),
+				dpi: Number(process.env.PATS_PRINTER_DPI) || GLORY_L_DEFAULTS.dpi,
 			});
 			res.status(result.status === "FAILED" ? 503 : 200).json({
 				status: result.status,

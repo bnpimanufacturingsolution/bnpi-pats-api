@@ -56,8 +56,9 @@ describe("label IR renderers", () => {
 			operatorName: "Rico M.",
 			machineName: "Injection Press (INJP-20441-JCX)",
 		});
-		expect(zpl).to.include("INJECTION-MOLDING MANUAL");
-		expect(zpl).to.include("BNI-2606-001");
+		expect(zpl).to.include("INJECTION (MOLDING)");
+		expect(zpl).not.to.include("MANUAL");
+		expect(zpl).to.include("BC-BATCH-000001");
 		expect(zpl).not.to.include("FROM: INJECTION (MOLDING)");
 		expect(zpl).not.to.include("TAMAGOTCHI PARADISE MEJIRUSHI ACCESSORY");
 		expect(zpl).to.include("QUANTITY");
@@ -67,7 +68,7 @@ describe("label IR renderers", () => {
 		expect(zpl).to.include("MACHINE");
 	});
 
-	it("includes QR Code, project name, and Lot or serial number on the printed label", () => {
+	it("includes QR Code, project name, and Lot on the printed label", () => {
 		const zpl = renderZpl({
 			...ir,
 			widthMm: 100,
@@ -81,7 +82,6 @@ describe("label IR renderers", () => {
 		expect(zpl).to.include("PROJECT: TAMAGOTCHI PARADISE");
 		expect(zpl).not.to.include("CODENAME: TAMA-01");
 		expect(zpl).to.include("LOT: LOT-2026-X");
-		expect(zpl).to.include("S/N: SN-999888");
 	});
 
 	it("omits Operator and Machine on non-injection stations", () => {

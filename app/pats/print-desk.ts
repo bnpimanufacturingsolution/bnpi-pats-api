@@ -22,12 +22,25 @@ export function isLoopbackRequest(req: Request): boolean {
 }
 
 export function allowUnauthenticatedDeskPrint(req: Request): boolean {
-	return process.env.ENABLE_TEST_MODE === "true" && isLoopbackRequest(req);
+	return (
+		(process.env.ENABLE_TEST_MODE === "true" ||
+			process.env.NODE_ENV === "development" ||
+			!process.env.NODE_ENV) &&
+		isLoopbackRequest(req)
+	);
 }
 
 export function deskStationFromEnv(): PrintJobStation {
-	const windowsName = process.env.PATS_PRINTER_WINDOWS_NAME?.trim() || null;
+	const envName = process.env.PATS_PRINTER_WINDOWS_NAME?.trim();
+	const windowsName = envName || null;
 	const network = process.env.PATS_PRINTER_ADDRESS?.trim() || null;
+	const envDpi = Number(process.env.PATS_PRINTER_DPI);
+	const defaultDpi =
+		Number.isFinite(envDpi) && envDpi > 0
+			? envDpi
+			: /hd100/i.test(windowsName || "")
+				? 203
+				: GLORY_L_DEFAULTS.dpi;
 	return {
 		id: "desk",
 		name: "Desk Glory-L",
@@ -35,7 +48,7 @@ export function deskStationFromEnv(): PrintJobStation {
 		printerConnection: windowsName ? "USB_AGENT" : network ? "NETWORK" : null,
 		printerAddress: windowsName ? `winspool:${windowsName}` : network,
 		printerLanguage: "ZPL",
-		printerDpi: GLORY_L_DEFAULTS.dpi,
+		printerDpi: defaultDpi,
 		labelWidthMm: GLORY_L_DEFAULTS.widthMm,
 		labelHeightMm: GLORY_L_DEFAULTS.heightMm,
 	};
