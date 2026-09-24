@@ -342,7 +342,7 @@ describe("Journey D quality stage allow-list", () => {
 	});
 
 	it("requires quality.read for the inspection list", async () => {
-		const app = readApp({}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+		const app = readApp({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 		const response = await request(app)
 			.get("/api/v1/quality-inspections")
 			.set("Authorization", "Bearer read-token");
@@ -351,11 +351,11 @@ describe("Journey D quality stage allow-list", () => {
 	});
 
 	it("requires quality.resolve for decide", async () => {
-		const app = commandApp({}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+		const app = commandApp({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 		const response = await request(app)
 			.post("/api/v1/quality-inspections/inspection-1/decisions")
 			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "qc-decide-planner")
+			.set("Idempotency-Key", "qc-decide-operator")
 			.set("If-Match", '"1"')
 			.send({ decision: "PASSED" });
 		expect(response.status).to.equal(403);

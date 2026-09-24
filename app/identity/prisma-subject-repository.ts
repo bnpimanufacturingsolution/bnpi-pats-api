@@ -122,6 +122,18 @@ export function prismaSubjectRepository(prisma: PatsPrismaClient): PrismaSubject
 			return rows[0] ?? null;
 		},
 
+		async findByEmail(email: string): Promise<LocalCredentialRecord | null> {
+			const rows = await prisma.$queryRaw<CredentialRow[]>(Prisma.sql`
+				SELECT c."subjectId", c."username", c."passwordHash"
+				FROM "SubjectCredential" AS c
+				JOIN "Subject" AS s ON s."id" = c."subjectId"
+				WHERE LOWER(s."emailSnapshot") = LOWER(${email})
+				LIMIT 1
+			`);
+
+			return rows[0] ?? null;
+		},
+
 		async markLogin(subjectId: string, occurredAt: Date): Promise<void> {
 			await prisma.$executeRaw(Prisma.sql`
 				UPDATE "SubjectCredential"

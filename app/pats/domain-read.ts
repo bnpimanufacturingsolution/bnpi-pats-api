@@ -5,6 +5,8 @@ import { actorId, CommandProblem, sendCommandProblem } from "./command-support";
 import { parseBatchResolveCode, resolveBatchByCode } from "./batch-resolve";
 import { parseResolveCode, resolveQualityInspectionByCode } from "./quality-resolve";
 import { listAllowedQualityStageIds } from "./quality-stage-scope";
+import { hasCapability } from "../identity/policy";
+import type { SubjectAssignmentRecord } from "../identity/types";
 import { setDeprecationHeaders } from "../canonical/response-headers";
 
 // Station→Section rename (2026-09-16) transitional bridge: /sections is
@@ -32,6 +34,9 @@ type DomainReadDatabase = Pick<
 	| "workInstruction"
 	| "workProcess"
 	| "booth"
+	| "line"
+	| "lineOperatorAssignment"
+	| "subject"
 	| "monitoringDailySheet"
 	| "monitoringStationBoard"
 	| "batch"
@@ -53,6 +58,7 @@ type DomainReadDatabase = Pick<
 const PROBLEM_TYPE = {
 	malformed: "urn:bandai:pats:problem:malformed-request",
 	notFound: "urn:bandai:pats:problem:not-found",
+	authorizationDenied: "urn:bandai:pats:problem:authorization-denied",
 	dependency: "urn:bandai:pats:problem:dependency-unavailable",
 } as const;
 
@@ -617,7 +623,8 @@ export function domainReadRouter(
 			]);
 			applyLegacyStationHeaders(req, res);
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(stations.map((s) => ({ ...s, stationCode: s.sectionCode })), page, totalItems));
-		} catch {
+		} catch (error) {
+			console.error("[domain-read] GET /sections failed:", error);
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS section configuration is unavailable.");
 		}
 	});
@@ -751,22 +758,22 @@ export function domainReadRouter(
 			const boundSteps = resolveStationBoundSteps(station);
 			const stepFilter = boundStepsOrFilter(boundSteps);
 
-			const [todaysPrints, printedHere, positions] = await Promise.all([
-				database.printJob.findMany({
-					where: {
-						stationId: station.id,
-						sequence: 1,
-						status: { in: ["SENT", "SIMULATED"] },
-						occurredAt: { gte: window.start, lt: window.end },
-					},
-					select: { id: true, batchId: true, quantity: true },
-				}),
-				database.printJob.findMany({
-					where: {
-						stationId: station.id,
-						sequence: 1,
-						status: { in: ["SENT", "SIMULATED"] },
-					},
+		const [todaysPrints, printedHere, positions] = await Promise.all([
+			database.printJob.findMany({
+				where: {
+					sectionId: station.id,
+					sequence: 1,
+					status: { in: ["SENT", "SIMULATED"] },
+					occurredAt: { gte: window.start, lt: window.end },
+				},
+				select: { id: true, batchId: true, quantity: true },
+			}),
+			database.printJob.findMany({
+				where: {
+					sectionId: station.id,
+					sequence: 1,
+					status: { in: ["SENT", "SIMULATED"] },
+				},
 					// PrintJob.batchId is a scalar — there is no Prisma `batch` relation.
 					select: { batchId: true, quantity: true },
 				}),
@@ -933,18 +940,20 @@ export function domainReadRouter(
 
 	router.get("/station-steps", requireCapability("execution.read"), async (req, res) => {
 		try {
-			const stationSteps = await database.stationStep.findMany({
-				orderBy: [{ stationId: "asc" }, { stageId: "asc" }, { id: "asc" }],
-				include: {
-					station: { select: { id: true, sectionCode: true, name: true } },
-					stage: { select: { id: true, name: true } },
-					subStage: { select: { id: true, name: true } },
-				},
-			});
-			const stationStepsResponse = stationSteps.map((step) => ({
-				...step,
-				station: { id: step.station.id, stationCode: step.station.sectionCode, name: step.station.name },
-			}));
+		const stationSteps = await database.stationStep.findMany({
+			orderBy: [{ sectionId: "asc" }, { stageId: "asc" }, { id: "asc" }],
+			include: {
+				section: { select: { id: true, sectionCode: true, name: true } },
+				stage: { select: { id: true, name: true } },
+				subStage: { select: { id: true, name: true } },
+			},
+		});
+		const stationStepsResponse = stationSteps.map((step) => ({
+			...step,
+			// Transitional `station` shape (§7) beside the canonical `section` shape.
+			station: { id: step.section.id, stationCode: step.section.sectionCode, name: step.section.name },
+			section: { id: step.section.id, sectionCode: step.section.sectionCode, name: step.section.name },
+		}));
 			res.setHeader("Cache-Control", "no-store").json({ data: stationStepsResponse });
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS station-step configuration is unavailable.");
@@ -1009,30 +1018,34 @@ export function domainReadRouter(
 
 	router.get("/booths", requireCapability("execution.read"), async (req, res) => {
 		try {
-			const requestQuery = query(req);
-			// `station_id` is canonical snake_case (§5); `stationId` is the TRANSITIONAL alias (§7).
-			const allowedKeys = new Set(["station_id", "stationId"]);
-			if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
-				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The booth query is invalid.");
-				return;
-			}
-			const stationIdRaw = requestQuery.station_id ?? requestQuery.stationId;
-			const stationId = Array.isArray(stationIdRaw)
-				? stationIdRaw[0]
-				: stationIdRaw;
-			const booths = await database.booth.findMany({
-				where: {
-					isEnabled: true,
-					...(stationId ? { stationId } : {}),
-				},
-				orderBy: [{ displayOrder: "asc" }, { boothCode: "asc" }],
-			});
-			res.setHeader("Cache-Control", "no-store").json({
-				data: booths.map((booth) => ({
-					id: booth.id,
-					boothCode: booth.boothCode,
-					label: booth.label,
-					stationId: booth.stationId,
+		const requestQuery = query(req);
+		// `section_id` is canonical snake_case (§5); `station_id` + `stationId` are
+		// the TRANSITIONAL aliases (§7). All three filter the renamed `sectionId` column.
+		const allowedKeys = new Set(["section_id", "station_id", "stationId"]);
+		if (Object.keys(requestQuery).some((key) => !allowedKeys.has(key))) {
+			problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The booth query is invalid.");
+			return;
+		}
+		const sectionIdRaw =
+			requestQuery.section_id ?? requestQuery.station_id ?? requestQuery.stationId;
+		const sectionId = Array.isArray(sectionIdRaw)
+			? sectionIdRaw[0]
+			: sectionIdRaw;
+		const booths = await database.booth.findMany({
+			where: {
+				isEnabled: true,
+				...(sectionId ? { sectionId } : {}),
+			},
+			orderBy: [{ displayOrder: "asc" }, { boothCode: "asc" }],
+		});
+		res.setHeader("Cache-Control", "no-store").json({
+			data: booths.map((booth) => ({
+				id: booth.id,
+				boothCode: booth.boothCode,
+				label: booth.label,
+				// Transitional `stationId` (§7) beside the canonical `sectionId`.
+				stationId: booth.sectionId,
+				sectionId: booth.sectionId,
 					stageId: booth.stageId,
 					subStageId: booth.subStageId,
 					workProcessId: booth.workProcessId,
@@ -1042,6 +1055,177 @@ export function domainReadRouter(
 			});
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS booth catalog is unavailable.");
+		}
+	});
+
+	// Line-screen catalog (1 line = 1 station screen). Admin sees all lines;
+	// everyone else sees only lines they are active leader or active operator on.
+	router.get("/lines", requireCapability("execution.read"), async (req, res) => {
+		const page = pagination(req, res, ["section_id", "process_id", "include_disabled"]);
+		if (!page) return;
+		try {
+			const requestQuery = query(req);
+			const single = (key: string) => {
+				const raw = requestQuery[key];
+				return Array.isArray(raw) ? raw[0] : raw;
+			};
+			const sectionId = single("section_id");
+			const processId = single("process_id");
+			const includeDisabled = single("include_disabled") === "true";
+			const subjectId = actorId(req);
+			const assignments: SubjectAssignmentRecord[] = (req as Request & { canonicalAssignments?: SubjectAssignmentRecord[] }).canonicalAssignments ?? [];
+			const isAdmin = hasCapability(assignments, "operations.manage");
+			const scopeFilter = isAdmin
+				? {}
+				: {
+						OR: [
+							{ activeLeaderId: subjectId },
+							{ assignedLeaderId: subjectId },
+							{ operatorAssignments: { some: { subjectId, status: "ACTIVE" as const } } },
+						],
+				  };
+			const where = {
+				...(includeDisabled ? {} : { isEnabled: true }),
+				...(sectionId ? { sectionId } : {}),
+				...(processId ? { processId } : {}),
+				...scopeFilter,
+			};
+			const [totalItems, lines] = await Promise.all([
+				database.line.count({ where }),
+				database.line.findMany({
+					where,
+					orderBy: [{ displayOrder: "asc" }, { lineCode: "asc" }],
+					skip: (page.page - 1) * page.limit,
+					take: page.limit,
+					include: {
+						workProcess: { select: { id: true, name: true } },
+						section: { select: { id: true, sectionCode: true, name: true } },
+						assignedLeader: { select: { id: true, displayNameSnapshot: true } },
+						activeLeader: { select: { id: true, displayNameSnapshot: true } },
+						operatorAssignments: {
+							where: { status: "ACTIVE" },
+							select: { id: true, subjectId: true, subject: { select: { id: true, displayNameSnapshot: true } } },
+						},
+					},
+				}),
+			]);
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(lines.map((line) => ({
+				id: line.id,
+				lineCode: line.lineCode,
+				label: line.label,
+				sectionId: line.sectionId,
+				sectionCode: line.section.sectionCode,
+				sectionName: line.section.name,
+				processId: line.workProcess.id,
+				processName: line.workProcess.name,
+				assignedLeader: { id: line.assignedLeader.id, name: line.assignedLeader.displayNameSnapshot },
+				activeLeader: line.activeLeader ? { id: line.activeLeader.id, name: line.activeLeader.displayNameSnapshot } : null,
+				operators: line.operatorAssignments.map((assignment) => ({
+					assignmentId: assignment.id,
+					subjectId: assignment.subjectId,
+					name: assignment.subject.displayNameSnapshot,
+				})),
+				displayOrder: line.displayOrder,
+				isEnabled: line.isEnabled,
+				rowVersion: line.rowVersion,
+			})), page, totalItems));
+		} catch (error) {
+			console.error("[domain-read] GET /lines failed:", error);
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS line catalog is unavailable.");
+		}
+	});
+
+	// Attention flags for the leader switcher red dot (L-12). Evidence-derived:
+	// open violations at the line's sub-stage, WIP parked at that sub-stage
+	// longer than 8h, and no daily sheet row for today for the line's process.
+	router.get("/lines/:lineId/attention", requireCapability("execution.read"), async (req, res) => {
+		try {
+			const line = await database.line.findUnique({
+				where: { id: req.params.lineId },
+				select: {
+					id: true,
+					lineCode: true,
+					isEnabled: true,
+					workProcess: { select: { id: true, subStageId: true } },
+				},
+			});
+			if (!line || !line.isEnabled) {
+				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested line was not found.");
+				return;
+			}
+			const subjectId = actorId(req);
+			const assignments: SubjectAssignmentRecord[] = (req as Request & { canonicalAssignments?: SubjectAssignmentRecord[] }).canonicalAssignments ?? [];
+			const isAdmin = hasCapability(assignments, "operations.manage");
+			if (!isAdmin) {
+				const activeOperatorAssignment = await database.lineOperatorAssignment.findFirst({
+					where: { subjectId, status: "ACTIVE", lineId: line.id },
+					select: { id: true },
+				});
+				const leadsLine = await database.line.findFirst({
+					where: { id: line.id, OR: [{ activeLeaderId: subjectId }, { assignedLeaderId: subjectId }] },
+					select: { id: true },
+				});
+				if (!activeOperatorAssignment && !leadsLine) {
+					problem(req, res, 403, PROBLEM_TYPE.authorizationDenied, "Forbidden", "The subject is not scoped to this line.");
+					return;
+				}
+			}
+			const subStageId = line.workProcess.subStageId;
+			const stuckThreshold = new Date(Date.now() - 8 * 60 * 60 * 1000);
+			const productionDate = new Date().toISOString().slice(0, 10);
+			const [openViolations, stuckWip, todaysSheets] = await Promise.all([
+				database.routingViolation.count({ where: { status: "OPEN", attemptedSubStageId: subStageId } }),
+				database.batchPositionProjection.count({ where: { subStageId, updatedAt: { lt: stuckThreshold } } }),
+				database.monitoringDailySheet.count({ where: { productionDate, workProcessId: line.workProcess.id } }),
+			]);
+			res.setHeader("Cache-Control", "no-store").json({
+				lineId: line.id,
+				lineCode: line.lineCode,
+				openViolations,
+				stuckWip,
+				unfilledHour: todaysSheets === 0,
+			});
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS line attention data is unavailable.");
+		}
+	});
+
+	// Subject directory for leader/operator pickers (admin identity.read).
+	router.get("/subjects", requireCapability("identity.read"), async (req, res) => {
+		const page = pagination(req, res, ["search", "status"]);
+		if (!page) return;
+		try {
+			const requestQuery = query(req);
+			const single = (key: string) => {
+				const raw = requestQuery[key];
+				return Array.isArray(raw) ? raw[0] : raw;
+			};
+			const search = single("search")?.trim() ?? "";
+			const status = single("status")?.trim();
+			const where = {
+				...(status ? { status: status as "ACTIVE" | "DISABLED" } : {}),
+				...(search.length > 0
+					? { displayNameSnapshot: { contains: search, mode: "insensitive" as const } }
+					: {}),
+			};
+			const [totalItems, subjects] = await Promise.all([
+				database.subject.count({ where }),
+				database.subject.findMany({
+					where,
+					orderBy: [{ displayNameSnapshot: "asc" }, { id: "asc" }],
+					skip: (page.page - 1) * page.limit,
+					take: page.limit,
+					select: {
+						id: true,
+						displayNameSnapshot: true,
+						emailSnapshot: true,
+						status: true,
+					},
+				}),
+			]);
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(subjects, page, totalItems));
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS subject directory is unavailable.");
 		}
 	});
 
@@ -1176,6 +1360,7 @@ export function domainReadRouter(
 							batchCode: true,
 							barcodeValue: true,
 							lotId: true,
+							lineId: true,
 							plannedQuantity: true,
 							labelPackSize: true,
 							status: true,
@@ -1190,6 +1375,9 @@ export function domainReadRouter(
 									partsListId: true,
 									requiredProductionQuantity: true,
 									labelPackSize: true,
+									// Floor release gate: operators lack planning.read, so the
+									// position row carries project status for the arrival queue.
+									project: { select: { status: true } },
 								},
 							},
 							parts: {
@@ -1227,6 +1415,15 @@ export function domainReadRouter(
 					batch: {
 						...position.batch,
 						createdAt: position.batch.createdAt.toISOString(),
+						lot: (() => {
+							const { project: projectRef, ...lot } = position.batch.lot;
+							return {
+								...lot,
+								// Floor release gate: operators lack planning.read, so the
+								// position row carries project status for the arrival queue.
+								projectStatus: projectRef?.status ?? null,
+							};
+						})(),
 						parts: position.batch.parts.map((part) => ({
 							...part,
 							quantityMagnitude: decimal(part.quantityMagnitude),

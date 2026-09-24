@@ -46,6 +46,108 @@ paths:
       x-required-capability: operations.manage
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' } }
+  /lines:
+    post:
+      operationId: lineCreate
+      summary: Register a station-screen line under a leaf work process
+      description: >
+        1 line = 1 station screen (L-1). The line must attach to a leaf WorkProcess; parent
+        counts roll up (L-2/L-4). assignedLeaderId is required at creation time (L-5); the
+        active leader defaults to the assigned leader. lineCode must be uppercase
+        alphanumeric with dashes (e.g. DEC-LS-01) and is unique across the deployment.
+      tags: [PATS Configuration]
+      x-required-capability: operations.manage
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '201': { $ref: '#/components/responses/CommandRead' }
+        '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
+        '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
+        '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }
+        '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' }
+  /lines/{lineId}:
+    patch:
+      operationId: linePatch
+      summary: Update a line (label, code, leaders, order, enable state)
+      description: >
+        Admin management of the line identity. The cover flip (sick-day active leader) is a
+        patch of activeLeaderId; the assigned leader assignment stays untouched (L-5).
+        Requires If-Match with the current rowVersion; 412 on mismatch.
+      tags: [PATS Configuration]
+      x-required-capability: operations.manage
+      parameters:
+        - name: lineId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+        - { $ref: '#/components/parameters/IfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { $ref: '#/components/responses/CommandRead' }
+        '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
+        '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
+        '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }
+        '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' }
+        '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' }
+    delete:
+      operationId: lineDelete
+      summary: Soft-disable a line and end its active operator assignments
+      description: >
+        Soft-hide (standard §6): the line row is disabled and its ACTIVE operator
+        assignments end; GET /lines no longer returns it and reads of attention return 404.
+        Evidence stays in audit. Requires If-Match.
+      tags: [PATS Configuration]
+      x-required-capability: operations.manage
+      parameters:
+        - name: lineId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+        - { $ref: '#/components/parameters/IfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { $ref: '#/components/responses/CommandRead' }
+        '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
+        '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
+        '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }
+        '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' }
+  /operator-assignments:
+    post:
+      operationId: operatorAssignmentCreate
+      summary: Assign an operator to a line (single-line invariant)
+      description: >
+        Leader-owned transfer (L-8): the line's active leader (or an admin) assigns an
+        ACTIVE operator. A subject already holding an ACTIVE assignment on another line
+        returns 409 until that assignment ends. The reason is a plain stamp, not a
+        charge-code system.
+      tags: [PATS Configuration]
+      x-required-capability: execution.write
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '201': { $ref: '#/components/responses/CommandRead' }
+        '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
+        '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
+        '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }
+        '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' }
+  /operator-assignments/{assignmentId}:
+    delete:
+      operationId: operatorAssignmentEnd
+      summary: End an operator's line assignment
+      description: >
+        Marks the assignment ENDED with endedAt evidence; rows are never rewritten beyond
+        ending. Only the line's active leader or an admin may end it.
+      tags: [PATS Configuration]
+      x-required-capability: execution.write
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { $ref: '#/components/responses/CommandRead' }
+        '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
+        '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
+        '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }
   /production-plans:
     post:
       operationId: productionPlanCreate
@@ -81,7 +183,7 @@ paths:
   /production-plans/{planId}/release:
     post:
       operationId: productionPlanRelease
-      summary: Release a draft or ready production plan
+      summary: Release a draft or ready production plan (mints missing tray batches, then activates PLANNED→ACTIVE)
       tags: [PATS Planning]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
@@ -97,7 +199,7 @@ paths:
   /batches:
     post:
       operationId: batchCreate
-      summary: Create a planned batch and initial position projection
+      summary: Create a planned batch and initial position projection (API/tests; UI releases mint automatically)
       tags: [PATS Execution]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]

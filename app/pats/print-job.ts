@@ -3,7 +3,7 @@ import { selectPrintPort, type PrintPort, type PrintPortResult } from "./print-p
 
 export type PrintJobCreateInput = {
 	batchId: string;
-	stationId: string;
+	sectionId: string;
 	reprintOf?: string | null;
 	/**
 	 * Actual pcs in the completed pack (label truth). Defaults to the planned
@@ -17,7 +17,7 @@ export type PrintJobCreateInput = {
 export type PrintJobRecord = {
 	id: string;
 	batchId: string;
-	stationId: string;
+	sectionId: string;
 	barcodeValue: string;
 	quantity: number;
 	sequence: number;
@@ -47,7 +47,7 @@ export type PrintJobStore = {
 	};
 	printJob: {
 		count: (args: {
-			where: { batchId: string; stationId: string; status?: { not: string } };
+			where: { batchId: string; sectionId: string; status?: { not: string } };
 		}) => Promise<number>;
 		findFirst: (args: {
 			where: { id: string; batchId: string };
@@ -55,7 +55,7 @@ export type PrintJobStore = {
 		create: (args: {
 			data: {
 				batchId: string;
-				stationId: string;
+				sectionId: string;
 				fromStageId: string;
 				fromSubStageId: string | null;
 				toStageId: string | null;
@@ -228,7 +228,7 @@ export async function recordPrintJob(
 	input: PrintJobCreateInput & { actor: string; actorSubjectId: string },
 	port?: PrintPort,
 ): Promise<PrintJobRecord> {
-	const station = await store.section.findUnique({ where: { id: input.stationId } });
+	const station = await store.section.findUnique({ where: { id: input.sectionId } });
 	if (!station) throw new Error("NOT_FOUND_STATION");
 	const batch = await store.batch.findUnique({
 		where: { id: input.batchId },
@@ -275,7 +275,7 @@ export async function recordPrintJob(
 
 	const fromStageId = batch.positionProjection?.stageId ?? batch.currentStageId;
 	const fromSubStageId = batch.positionProjection?.subStageId ?? batch.currentSubStageId;
-	const sequence = (await store.printJob.count({ where: { batchId: batch.id, stationId: station.id } })) + 1;
+	const sequence = (await store.printJob.count({ where: { batchId: batch.id, sectionId: station.id } })) + 1;
 	// Counted BEFORE this print is recorded: first SUCCESSFUL print issues (one
 	// ISSUANCE per pack, ever). A FAILED attempt consumes a sequence but never
 	// blocks the pack's issuance — its retry is a fresh print (seq 2+) and posts
@@ -283,7 +283,7 @@ export async function recordPrintJob(
 	const priorSuccessfulPrints = await store.printJob.count({
 		where: {
 			batchId: batch.id,
-			stationId: station.id,
+			sectionId: station.id,
 			status: { not: "FAILED" },
 		},
 	});
@@ -310,7 +310,7 @@ export async function recordPrintJob(
 	const created = await store.printJob.create({
 		data: {
 			batchId: batch.id,
-			stationId: station.id,
+			sectionId: station.id,
 			fromStageId,
 			fromSubStageId,
 			toStageId: nextStep?.stageId ?? null,
@@ -363,7 +363,7 @@ export async function recordPrintJob(
 	return {
 		id: created.id,
 		batchId: batch.id,
-		stationId: station.id,
+		sectionId: station.id,
 		barcodeValue: batch.barcodeValue,
 		quantity: ir.quantity,
 		sequence,

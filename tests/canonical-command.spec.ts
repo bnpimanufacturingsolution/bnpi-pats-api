@@ -19,7 +19,7 @@ function identity(assignments: SubjectAssignmentRecord[]): IdentityDependencies 
 	};
 }
 
-function appFor(database: Record<string, unknown>, assignments: SubjectAssignmentRecord[] = [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]) {
+function appFor(database: Record<string, unknown>, assignments: SubjectAssignmentRecord[] = [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]) {
 	const app = express();
 	app.use("/api/v1", canonicalRouter({
 		identity: identity(assignments),
@@ -101,8 +101,8 @@ describe("section identity mounting regression", () => {
 		{ method: "delete", path: "/sections/section-1", kind: "command" },
 		{ method: "put", path: "/sections/section-1/processes", kind: "command" },
 		{ method: "put", path: "/sections/order", kind: "command" },
-		{ method: "get", path: "/stations/section-1/history", kind: "read" },
-		{ method: "get", path: "/stations/section-1/support", kind: "read" },
+		{ method: "get", path: "/sections/section-1/history", kind: "read" },
+		{ method: "get", path: "/sections/section-1/support", kind: "read" },
 		{ method: "get", path: "/work-processes", kind: "read" },
 		{ method: "post", path: "/work-processes", kind: "command" },
 		{ method: "patch", path: "/work-processes/process-1", kind: "command" },
@@ -124,7 +124,7 @@ describe("section identity mounting regression", () => {
 				});
 			}
 			it(`${mount}: ${endpoint.method} ${endpoint.path} denies a verified subject without the capability`, async () => {
-				const { app, calls } = boundary(mount, endpoint.kind === "read" ? "planner" : "operator");
+				const { app, calls } = boundary(mount, endpoint.kind === "read" ? "qi" : "operator");
 				const response = await request(app)[endpoint.method](`/api/v1${endpoint.path}`)
 					.set("Authorization", "Bearer section-token")
 					.expect(403).expect("Content-Type", /application\/problem\+json/);
@@ -509,8 +509,8 @@ describe("canonical PATS command contract", () => {
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
 	});
 
-	it("keeps inventory issue behind inventory.issue (planner denied)", async () => {
-		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+	it("keeps inventory issue behind inventory.issue (read-only subject denied)", async () => {
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "qi", status: "ACTIVE" }]);
 		const response = await request(app)
 			.post("/api/v1/inventory-transactions")
 			.set("Authorization", "Bearer command-token")
@@ -575,8 +575,8 @@ describe("canonical PATS command contract", () => {
 		expect(response.body.status).to.equal("ACCEPTED");
 	});
 
-	it("routes RECEIVING behind inventory.receive (planner denied, 403)", async () => {
-		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+	it("routes RECEIVING behind inventory.receive (read-only subject denied, 403)", async () => {
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "qi", status: "ACTIVE" }]);
 		const response = await request(app)
 			.post("/api/v1/inventory-transactions")
 			.set("Authorization", "Bearer command-token")
@@ -616,6 +616,7 @@ describe("canonical PATS command contract", () => {
 		let clearedBooths: Record<string, unknown>[] = [];
 		let assignedBooth: Record<string, unknown> | null = null;
 		const ownershipWrites: Array<{ where: unknown; data: unknown }> = [];
+		const orderWrites: Array<{ where: unknown; data: unknown }> = [];
 		const database = {
 			idempotencyRecord: {
 				findUnique: async () => null,
@@ -630,6 +631,7 @@ describe("canonical PATS command contract", () => {
 			workProcess: {
 				findMany: async () => [{ id: "proc-1", name: "Process 1" }, { id: "proc-2", name: "Process 2" }],
 				updateMany: async ({ where, data }: { where: unknown; data: unknown }) => { ownershipWrites.push({ where, data }); return { count: 1 }; },
+				update: async ({ where, data }: { where: unknown; data: unknown }) => { orderWrites.push({ where, data }); return { id: "proc-1", ...(data as Record<string, unknown>) }; },
 			},
 			booth: {
 				updateMany: async ({ data }: { data: Record<string, unknown> }) => { clearedBooths.push(data); return { count: 1 }; },
@@ -655,6 +657,10 @@ describe("canonical PATS command contract", () => {
 		expect(ownershipWrites).to.deep.equal([
 			{ where: { id: { in: ["proc-1"] } }, data: { sectionId: "station-1" } },
 			{ where: { id: { notIn: ["proc-1"] }, sectionId: "station-1" }, data: { sectionId: null } },
+		]);
+		// Board order truth: listed processes take their board position as displayOrder.
+		expect(orderWrites).to.deep.equal([
+			{ where: { id: "proc-1" }, data: { displayOrder: 0 } },
 		]);
 	});
 
@@ -869,7 +875,7 @@ describe("canonical PATS command contract", () => {
 			auditRecord: { create: async () => undefined },
 			outboxMessage: { create: async () => undefined },
 		};
-		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
 		const response = await request(app)
 			.post("/api/v1/batches")
 			.set("Authorization", "Bearer command-token")
@@ -880,6 +886,172 @@ describe("canonical PATS command contract", () => {
 		expect(response.body).to.include({ batchId: "batch-1", batchCode: "B-1001" });
 		expect(response.headers.location).to.equal("/api/v1/batches/batch-1");
 		expect(response.headers.etag).to.equal('"1"');
+	});
+
+	it("activates PLANNED batches when the production plan is released", async () => {
+		const batchUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-release" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			project: {
+				findUnique: async () => ({
+					id: "proj-1",
+					status: "READY",
+					rowVersion: 1,
+					releasedBySubjectId: null,
+					releasedAt: null,
+				}),
+				update: async ({ data }: { data: Record<string, unknown> }) => ({
+					id: "proj-1",
+					projectCode: "PRJ-B251-2609-01",
+					name: "July run",
+					status: "RELEASED",
+					requiredProductionQuantity: 100,
+					productId: null,
+					rowVersion: 2,
+					...data,
+				}),
+			},
+			lot: {
+				findMany: async () => [],
+			},
+			batch: {
+				updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+					batchUpdates.push({ where, data });
+					return { count: 2 };
+				},
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/production-plans/proj-1/release")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "plan-release-1")
+			.set("If-Match", '"1"');
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.include({ planId: "proj-1", status: "RELEASED" });
+		expect(batchUpdates).to.have.lengthOf(1);
+		expect(batchUpdates[0].data).to.deep.equal({ status: "ACTIVE" });
+		expect(batchUpdates[0].where).to.deep.equal({
+			lot: { projectId: "proj-1" },
+			status: "PLANNED",
+		});
+	});
+
+	it("mints missing tray batches on release so the floor queue is non-empty", async () => {
+		const createdBatches: Array<Record<string, unknown>> = [];
+		const createdParts: Array<Record<string, unknown>> = [];
+		const createdPositions: Array<Record<string, unknown>> = [];
+		const batchUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
+		let nextBatchSeq = 0;
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-release-mint" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			project: {
+				findUnique: async () => ({
+					id: "proj-1",
+					status: "READY",
+					rowVersion: 1,
+					releasedBySubjectId: null,
+					releasedAt: null,
+				}),
+				update: async ({ data }: { data: Record<string, unknown> }) => ({
+					id: "proj-1",
+					projectCode: "PRJ-B251-2609-01",
+					name: "July run",
+					status: "RELEASED",
+					requiredProductionQuantity: 480,
+					productId: null,
+					rowVersion: 2,
+					...data,
+				}),
+			},
+			lot: {
+				findMany: async () => [
+					{
+						id: "lot-1",
+						lotCode: "MLT-001",
+						requiredProductionQuantity: 480,
+						labelPackSize: 240,
+						partId: "part-1",
+						batches: [],
+					},
+				],
+			},
+			batch: {
+				create: async ({ data }: { data: Record<string, unknown> }) => {
+					nextBatchSeq += 1;
+					const row = { id: `batch-mint-${nextBatchSeq}`, ...data };
+					createdBatches.push(row);
+					return { id: row.id };
+				},
+				updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+					batchUpdates.push({ where, data });
+					return { count: createdBatches.length };
+				},
+			},
+			batchPartLine: {
+				create: async ({ data }: { data: Record<string, unknown> }) => {
+					createdParts.push(data);
+					return data;
+				},
+			},
+			batchPositionProjection: {
+				create: async ({ data }: { data: Record<string, unknown> }) => {
+					createdPositions.push(data);
+					return data;
+				},
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/production-plans/proj-1/release")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "plan-release-mint")
+			.set("If-Match", '"1"');
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.include({ planId: "proj-1", status: "RELEASED" });
+		expect(createdBatches).to.have.lengthOf(2);
+		expect(createdBatches[0]).to.include({
+			batchCode: "MLT-001-B001",
+			barcodeValue: "MLT-001-B001",
+			lotId: "lot-1",
+			plannedQuantity: 240,
+			labelPackSize: 240,
+			currentStageId: "STG-PROJECTS",
+			status: "PLANNED",
+			lineId: null,
+		});
+		expect(createdBatches[1]).to.include({
+			batchCode: "MLT-001-B002",
+			plannedQuantity: 240,
+		});
+		expect(createdParts).to.have.lengthOf(2);
+		expect(createdParts[0]).to.deep.include({ partId: "part-1", quantity: 240 });
+		expect(createdPositions).to.have.lengthOf(2);
+		expect(createdPositions[0]).to.deep.include({
+			stageId: "STG-PROJECTS",
+			quantityMagnitude: "240",
+			quantityUom: "EA",
+		});
+		expect(batchUpdates).to.have.lengthOf(1);
+		expect(batchUpdates[0].data).to.deep.equal({ status: "ACTIVE" });
 	});
 
 	it("creates a sub-stage", async () => {
@@ -906,5 +1078,97 @@ describe("canonical PATS command contract", () => {
 
 		expect(response.status).to.equal(201);
 		expect(response.body).to.include({ subStageId: "substage-1", name: "New SubStage" });
+	});
+});
+
+describe("plan part cycle-time override (REQ-CT-1 S3)", () => {
+	function partApp(partRow: Record<string, unknown>, planStatus = "DRAFT") {
+		let stored = { ...partRow };
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-part-ct" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			part: {
+				findUnique: async () => ({ ...stored }),
+				update: async ({ data }: { data: Record<string, unknown> }) => {
+					stored = { ...stored, ...data, rowVersion: 2 };
+					return stored;
+				},
+			},
+			project: {
+				findUnique: async () => ({ id: "plan-1", status: planStatus }),
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		return appFor(database);
+	}
+
+	const basePart = { id: "part-1", projectId: "plan-1", plannedCycleTimes: { "STG-INJECTION::": 30 }, plannedCycleTimesOverride: null, rowVersion: 1 };
+
+	it("sets the finalization override with If-Match and bumps the version", async () => {
+		const app = partApp(basePart);
+		const response = await request(app)
+			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "part-ct-set-1")
+			.set("If-Match", '"1"')
+			.send({ plannedCycleTimesOverride: { "STG-INJECTION::": 25 } });
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.deep.include({ partId: "part-1" });
+		expect(response.body.plannedCycleTimes).to.deep.equal({ "STG-INJECTION::": 30 });
+		expect(response.body.plannedCycleTimesOverride).to.deep.equal({ "STG-INJECTION::": 25 });
+		expect(response.headers.etag).to.equal('"2"');
+	});
+
+	it("clears the override back to null (master fallback)", async () => {
+		const app = partApp({ ...basePart, plannedCycleTimesOverride: { "STG-INJECTION::": 25 } });
+		const response = await request(app)
+			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "part-ct-clear-1")
+			.set("If-Match", '"1"')
+			.send({ plannedCycleTimesOverride: null });
+
+		expect(response.status).to.equal(200);
+		expect(response.body.plannedCycleTimesOverride).to.equal(null);
+	});
+
+	it("refuses overrides on released plans", async () => {
+		const app = partApp(basePart, "RELEASED");
+		const response = await request(app)
+			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "part-ct-released-1")
+			.set("If-Match", '"1"')
+			.send({ plannedCycleTimesOverride: { "STG-INJECTION::": 25 } });
+
+		expect(response.status).to.equal(409);
+	});
+
+	it("rejects stale versions and invalid values", async () => {
+		const app = partApp(basePart);
+		const stale = await request(app)
+			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "part-ct-stale-1")
+			.set("If-Match", '"9"')
+			.send({ plannedCycleTimesOverride: { "STG-INJECTION::": 25 } });
+		expect(stale.status).to.equal(412);
+
+		for (const [key, bad] of [["zero", 0], ["negative", -3], ["fraction", 7.5]] as const) {
+			const response = await request(app)
+				.patch("/api/v1/projects/plan-1/parts/part-1")
+				.set("Authorization", "Bearer command-token")
+				.set("Idempotency-Key", `part-ct-bad-${key}`)
+				.set("If-Match", '"1"')
+				.send({ plannedCycleTimesOverride: { "STG-INJECTION::": bad } });
+			expect(response.status).to.equal(422);
+		}
 	});
 });

@@ -27,7 +27,7 @@ function identity(assignments: SubjectAssignmentRecord[]): IdentityDependencies 
 
 function appFor(
 	database: Record<string, unknown>,
-	assignments: SubjectAssignmentRecord[] = [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }],
+	assignments: SubjectAssignmentRecord[] = [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }],
 ) {
 	const app = express();
 	app.use("/api/v1", canonicalRouter({
@@ -193,7 +193,7 @@ describe("canonical PATS domain read contract", () => {
 							batchId: "batch-1",
 							stageId: "stage-assembly",
 							subStageId: null,
-							stationId: "station-qc",
+							sectionId: "station-qc",
 							inspectedQuantity: "25",
 							quantityUom: "PCS",
 							status: "OPEN",
@@ -262,6 +262,7 @@ describe("canonical PATS domain read contract", () => {
 							lotName: "July lot",
 							projectId: "project-1",
 							partsListId: "parts-list-1",
+							project: { status: "RELEASED" },
 						},
 						parts: [{
 							partId: "part-1",
@@ -317,6 +318,7 @@ describe("canonical PATS domain read contract", () => {
 					lotName: "July lot",
 					projectId: "project-1",
 					partsListId: "parts-list-1",
+					projectStatus: "RELEASED",
 				},
 				parts: [{
 					partId: "part-1",
@@ -391,11 +393,11 @@ describe("canonical PATS domain read contract", () => {
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
-			.get("/api/v1/stations/station-injection/history")
+			.get("/api/v1/sections/section-injection/history")
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
-		expect(response.body.station).to.deep.include({ id: "station-injection", stationCode: "ST-INJ-01", stageId: "stage-injection" });
+		expect(response.body.section).to.deep.include({ id: "station-injection", sectionCode: "ST-INJ-01", stageId: "stage-injection" });
 		expect(response.body.events[0]).to.deep.include({ batchId: "batch-1", batchCode: "BATCH-001", stepName: "Injection", actor: "Operator One" });
 		expect(response.body.openViolations[0]).to.deep.include({ batchCode: "BATCH-001", lotCode: "LOT-001", partCode: "PART-001", partName: "Main part", resolved: false });
 		expect(response.body.openViolations[0].attemptedStep).to.deep.equal({ stageId: "stage-injection", subStageId: null, stepName: "Injection" });
@@ -475,12 +477,12 @@ describe("canonical PATS domain read contract", () => {
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
-			.get("/api/v1/stations/station-deco-fs/support")
+			.get("/api/v1/sections/section-deco-fs/support")
 			.query({ date: day })
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
-		expect(response.body.stationId).to.equal("station-deco-fs");
+		expect(response.body.sectionId).to.equal("station-deco-fs");
 		expect(response.body.date).to.equal(day);
 		expect(response.body.todayOutput).to.deep.equal({
 			quantity: 80,
@@ -508,7 +510,7 @@ describe("canonical PATS domain read contract", () => {
 		]);
 		expect(response.body.staff).to.equal(null);
 		expect(response.body.expectedOutput).to.equal(null);
-		expect(printWhere).to.include({ stationId: "station-deco-fs", sequence: 1 });
+		expect(printWhere).to.include({ sectionId: "station-deco-fs", sequence: 1 });
 		expect(printSelect).to.deep.equal({ batchId: true, quantity: true });
 		expect(printSelect).to.not.have.property("batch");
 		expect(positionWhere).to.deep.equal({
@@ -542,7 +544,7 @@ describe("canonical PATS domain read contract", () => {
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
-			.get("/api/v1/stations/station-deco-fs/support")
+			.get("/api/v1/sections/section-deco-fs/support")
 			.query({ date: "2026-08-10" })
 			.set("Authorization", "Bearer read-contract-token");
 
@@ -561,7 +563,7 @@ describe("canonical PATS domain read contract", () => {
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
-			.get("/api/v1/stations/station-x/support")
+			.get("/api/v1/sections/section-x/support")
 			.query({ date: "10-08-2026" })
 			.set("Authorization", "Bearer read-contract-token");
 
@@ -680,9 +682,9 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body.dailyThroughput[0].expected).to.equal(200);
 	});
 
-	it("allows planner to read the dashboard summary (dashboard.read, not execution.read)", async () => {
-		// Planner is the regression subject: it must read the dashboard even though it
-		// deliberately lacks execution.read for the full floor-directory ops surface.
+	it("allows dashboard.read without execution.read (capability-scoped subject)", async () => {
+		// Regression: dashboard summary must open with dashboard.read alone even though
+		// the subject deliberately lacks execution.read for the full floor-directory ops surface.
 		const app = appFor({
 			project: { count: async () => 4 },
 			batch: {
@@ -694,7 +696,7 @@ describe("canonical PATS domain read contract", () => {
 			routingViolation: { findMany: async () => [] },
 			qualityDecision: { count: async () => 0 },
 			inventoryTransaction: { count: async () => 0 },
-		}, [{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" }]);
+		}, [{ kind: "CAPABILITY", key: "dashboard.read", status: "ACTIVE" }]);
 
 		const response = await request(app)
 			.get("/api/v1/dashboard-summaries")
@@ -741,7 +743,7 @@ describe("canonical PATS domain read contract", () => {
 							{
 								id: "pj-1",
 								batchId: "batch-1",
-								stationId: "station-inj-01",
+								sectionId: "station-inj-01",
 								sequence: 1,
 								occurredAt: new Date("2026-08-10T12:00:00.000Z"),
 							},
@@ -773,7 +775,7 @@ describe("canonical PATS domain read contract", () => {
 							{
 								id: "pj-2",
 								batchId: "batch-1",
-								stationId: "station-inj-01",
+								sectionId: "station-inj-01",
 								sequence: 1,
 								occurredAt: new Date("2026-08-10T13:00:00.000Z"),
 							},
@@ -796,7 +798,7 @@ describe("canonical PATS domain read contract", () => {
 
 	it("fails print-job reads closed when the subject lacks execution.read", async () => {
 		const app = appFor({ printJob: { findMany: async () => [] } }, [
-			{ kind: "ROLE_BUNDLE", key: "planner", status: "ACTIVE" },
+			{ kind: "ROLE_BUNDLE", key: "qi", status: "ACTIVE" },
 		]);
 
 		const response = await request(app)

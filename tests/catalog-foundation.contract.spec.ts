@@ -87,7 +87,7 @@ function database() {
 		model: {
 			create: async ({ data }: { data: Record<string, unknown> }) => ({ ...model, ...data }),
 			findUnique: async ({ where }: { where: { id: string } }) =>
-				where.id === model.id || where.id === product.id ? model : null,
+				where.id === model.id ? model : where.id === product.id ? product : null,
 			update: async ({ data }: { data: Record<string, unknown> }) => ({
 				...model,
 				...data,
@@ -112,6 +112,18 @@ function database() {
 		sourceEvidence: {
 			findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
 				where.id.in.map((id) => ({ id })),
+		},
+		stage: {
+			findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+				where.id.in
+					.filter((id) => ["STG-INJECTION", "STG-DECORATION"].includes(id))
+					.map((id) => ({ id })),
+		},
+		subStage: {
+			findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+				where.id.in
+					.filter((id) => id === "SUB-FULL-SPRAY")
+					.map((id) => ({ id, eligibleStages: [{ stageId: "STG-DECORATION" }] })),
 		},
 		canonicalEvidenceLink: {
 			createMany: async ({ data }: { data: Array<Record<string, unknown>> }) => {
@@ -158,7 +170,6 @@ describe("canonical catalog foundation writes", () => {
 			.send({
 				productCode: "B243",
 				productName: "Sanrio Characters Fruits Mejirushi Accessory",
-				evidenceStatus: "PROVISIONAL",
 				sourceEvidenceIds: ["evidence-b243-title"],
 			});
 
@@ -180,7 +191,6 @@ describe("canonical catalog foundation writes", () => {
 			.send({
 				productCode: "B243",
 				productName: "Sanrio Characters Fruits Mejirushi Accessory",
-				evidenceStatus: "PROVISIONAL",
 				sourceEvidenceIds: ["evidence-b243-title"],
 			});
 		expect(replay.status).to.equal(201);
@@ -260,5 +270,139 @@ describe("canonical catalog foundation writes", () => {
 
 		expect(response.status).to.equal(409);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:conflict");
+	});
+});
+
+describe("catalog model-part planned cycle time", () => {
+	function partApp() {
+		return appWith([{ kind: "CAPABILITY", key: "catalog.manage", status: "ACTIVE" }]);
+	}
+
+	it("creates a ModelPart with per-step planned cycle times", async () => {
+		const { app } = partApp();
+
+		const response = await request(app)
+			.post("/api/v1/catalog/model-parts")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("Idempotency-Key", "model-part-create-ct")
+			.send({
+				modelId: "model-b243-01",
+				partCode: "B243-01-CT",
+				partName: "Timed Part",
+				plannedCycleTimes: { "STG-INJECTION::": 25, "STG-DECORATION::SUB-FULL-SPRAY": 40 },
+			});
+
+		expect(response.status).to.equal(201);
+		expect(response.body.plannedCycleTimes).to.deep.equal({
+			"STG-INJECTION::": 25,
+			"STG-DECORATION::SUB-FULL-SPRAY": 40,
+		});
+	});
+
+	it("creates a ModelPart with null planned cycle times when unset (honest absence)", async () => {
+		const { app } = partApp();
+
+		const response = await request(app)
+			.post("/api/v1/catalog/model-parts")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("Idempotency-Key", "model-part-create-no-ct")
+			.send({
+				modelId: "model-b243-01",
+				partCode: "B243-01-NOCT",
+				partName: "Untimed Part",
+			});
+
+		expect(response.status).to.equal(201);
+		expect(response.body.plannedCycleTimes).to.equal(null);
+	});
+
+	it("patches and clears the planned cycle times through the guarded patch contract", async () => {
+		const { app } = partApp();
+
+		const updated = await request(app)
+			.patch("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"')
+			.send({ plannedCycleTimes: { "STG-INJECTION::": 30 } });
+
+		expect(updated.status).to.equal(200);
+		expect(updated.body.plannedCycleTimes).to.deep.equal({ "STG-INJECTION::": 30 });
+		expect(updated.headers.etag).to.equal('"2"');
+
+		const cleared = await request(app)
+			.patch("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"')
+			.send({ plannedCycleTimes: null });
+
+		expect(cleared.status).to.equal(200);
+		expect(cleared.body.plannedCycleTimes).to.equal(null);
+	});
+
+	it("rejects non-positive, non-integer, or oversized planned cycle times", async () => {
+		const { app } = partApp();
+
+		for (const [key, bad] of [
+			["zero", 0],
+			["negative", -5],
+			["fraction", 12.5],
+			["string", "30"],
+			["huge", 100000],
+		] as const) {
+			const response = await request(app)
+				.post("/api/v1/catalog/model-parts")
+				.set("Authorization", "Bearer foundation-test-token")
+				.set("Idempotency-Key", `model-part-create-bad-ct-${key}`)
+				.send({
+					modelId: "model-b243-01",
+					partCode: "B243-01-BAD",
+					partName: "Bad Part",
+					plannedCycleTimes: { "STG-INJECTION::": bad },
+				});
+
+			expect(response.status).to.equal(422);
+		}
+	});
+
+	it("saves route steps that name catalog stages", async () => {
+		const { app } = partApp();
+
+		const response = await request(app)
+			.patch("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"')
+			.send({
+				routingSteps: [
+					{ stageId: "STG-INJECTION", subStageId: null },
+					{ stageId: "STG-DECORATION", subStageId: "SUB-FULL-SPRAY" },
+				],
+			});
+
+		expect(response.status).to.equal(200);
+		// The write response echoes the stored route — clients must not need a
+		// re-GET to render the saved steps.
+		expect(response.body.routingSteps).to.deep.equal([
+			{ stageId: "STG-INJECTION", subStageId: null },
+			{ stageId: "STG-DECORATION", subStageId: "SUB-FULL-SPRAY" },
+		]);
+		expect(response.body.createdAt).to.equal(date.toISOString());
+	});
+
+	it("rejects route steps naming unknown or ineligible stages", async () => {
+		const { app } = partApp();
+
+		const unknown = await request(app)
+			.patch("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"')
+			.send({ routingSteps: [{ stageId: "STG-NOPE", subStageId: null }] });
+		expect(unknown.status).to.equal(422);
+
+		const ineligible = await request(app)
+			.patch("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"')
+			.send({ routingSteps: [{ stageId: "STG-INJECTION", subStageId: "SUB-FULL-SPRAY" }] });
+		expect(ineligible.status).to.equal(422);
 	});
 });

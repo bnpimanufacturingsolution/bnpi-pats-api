@@ -68,11 +68,71 @@ describe("PATS seed contract", () => {
     expect(clientFragment).to.contain("paintNumbers");
     expect(clientFragment).to.contain("sharedCapsule");
 
-    // The fabricated B308 "Street Food Friends" family was dropped (not client
-    // publication). The import and its family string must not survive.
+    // The fabricated B308 client-publication family was dropped: its fragment
+    // import and B308 business codes must not survive. Demo pack names are a
+    // separate, explicitly labeled category (user-approved mirror of the app
+    // demo fixtures — MANUAL source status, NEEDS_CONFIRMATION evidence, DRAFT
+    // lifecycle; never client publication), so they are allowed.
     expect(script).not.to.contain("CLIENT_B308");
-    expect(script).not.to.contain("Street Food Friends");
     expect(script).not.to.contain("B308-01-01");
+  });
+
+  it("seeds the B251 client-evidence catalog as DRAFT so the draft API can configure it", () => {
+    const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+
+    // Catalog product/model/part upserts must be DRAFT: the draft catalog API
+    // rejects non-DRAFT rows with 409, and the seeded B251 rows are the
+    // route-configuration working set in demo/UAT.
+    const catalogRegion = script.slice(
+      script.indexOf("Client-evidence catalog: B251"),
+      script.indexOf("BOM + process route for model 01"),
+    );
+    expect(catalogRegion).to.contain('lifecycleStatus: "DRAFT"');
+    expect(catalogRegion, "catalog upserts must not re-publish rows").to.not.contain(
+      'lifecycleStatus: "PUBLISHED"',
+    );
+    // BOM / process-route revisions keep their PUBLISHED seed state.
+    expect(script).to.contain('lifecycleStatus: "PUBLISHED"');
+  });
+
+  it("leaves paint-number ModelParts detached until the per-model mapping is confirmed", () => {
+    const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+
+    // Evidence stays (fragment still declares the workbook paint numbers) but
+    // no reseed may attach them while the multi-model spread is under review.
+    expect(script).to.contain("const SEED_PAINT_PARTS = false");
+    expect(script).to.contain("if (SEED_PAINT_PARTS)");
+  });
+
+  it("seeds labeled demo packs mirroring the app fixtures (never client publication)", () => {
+    const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+
+    for (const [code, name] of [
+      ["B252", "Street Food Friends"],
+      ["B253", "Mini Market Neighbors"],
+      ["B254", "Cozy Cafe Counter"],
+      ["B255", "Playground Pals"],
+      ["B256", "Night Market Charms"],
+    ]) {
+      expect(script, `seed is missing demo pack ${code}`).to.contain(`productCode: "${code}"`);
+      expect(script, `seed is missing demo pack ${name}`).to.contain(`productName: "${name}"`);
+      expect(script, `seed is missing pilot projects`).to.contain(
+        "PRJ-${pack.productCode}-PILOT",
+      );
+    }
+    // Demo labeling: manual source, needs-confirmation evidence, draft lifecycle,
+    // demo-fixture origin — distinct from the B251 client-parts-list contour.
+    expect(script).to.contain('sourceStatus: "MANUAL"');
+    expect(script).to.contain('origin: "demo-fixture"');
+    expect(script).to.contain("DEMO_TRAY_STANDARD");
+    // Spot-check fixture parity with bnpi-pats-app (codes, model/part names).
+    expect(script).to.contain("Taco Cart");
+    expect(script).to.contain("Boba Cup");
+    expect(script).to.contain("Fruit Vendor");
+    expect(script).to.contain("Cake Display");
+    expect(script).to.contain("Swing Set");
+    expect(script).to.contain("Lantern Seller");
+    expect(script).to.contain("Festival Drummer");
   });
 
   it("keeps writes additive by default and gates the destructive fresh-reset path", () => {
@@ -110,18 +170,25 @@ describe("PATS seed contract", () => {
     expect(script).not.to.match(/const freshReset\s*=\s*(true|1);?/);
   });
 
-  it("seeds marco.villanueva as a pure planner and karen.limjoco as QC-primary QI", () => {
+  it("seeds single-line operators and karen.limjoco as QC-primary QI (planner removed)", () => {
     const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
 
-    expect(script).to.contain("Pure planner: planning + read-only monitoring + catalog read. Not a QC account.");
-    expect(script).to.contain('["planner"]');
     expect(script).to.contain('["qi"]');
     expect(script).to.contain("[quality.id, [decorationStageId, injectionStageId]]");
     expect(script).to.contain("[admin.id, allCatalogStageIds]");
     expect(script).to.contain('status: "REVOKED"');
     expect(script).not.to.contain("[planner.id, allCatalogStageIds]");
+    expect(script).not.to.contain('["planner"]');
+    expect(script).not.to.contain('"marco.villanueva"');
     expect(script).not.to.contain("Demo shell convenience: planner can walk planning + floor + QC");
     expect(script).not.to.contain("planner/admin all stages = fat-shell convenience");
+    // Single-line navigation operators (one distinct ACTIVE line each).
+    expect(script).to.contain('"sofia.ramos"');
+    expect(script).to.contain('"diego.cruz"');
+    expect(script).to.contain('"camille.santos"');
+    expect(script).to.contain("line-op-sofia-inj-mo-01");
+    expect(script).to.contain("line-op-diego-dec-ls-01");
+    expect(script).to.contain("line-op-camille-asm-ma-01");
   });
 
   it("seeds the Injection desk bridge (sub-stage, work-process, bound step, ledger)", () => {
@@ -141,10 +208,18 @@ describe("PATS seed contract", () => {
     // The standalone grant must pass the policy KNOWN filter, not just the seed.
     expect(policy).to.contain(`"quality.read",`);
 
-    // Ledger evidence rows are part of the seed's writable (and wiped) surface.
-    expect(script).to.contain('batchIds["batch-fw-inj"]');
-    expect(script).to.contain('"printJob"');
-    expect(script).to.contain("workProcesses: 16,");
+// Ledger evidence rows are part of the seed's writable (and wiped) surface.
+		expect(script).to.contain('batchIds["batch-fw-inj"]');
+		expect(script).to.contain('"printJob"');
+		expect(script).to.contain("workProcesses: 17,");
+		// Floor layout: Injection 3 + Decoration 17 + Assembly 11 = 31 station-screen lines.
+		expect(script).to.contain('["INJ-MO-01", processInjMachineOpId, "Machine Operator #1"]');
+		expect(script).to.contain('["DEC-FS-MS-01", processFsManualId, "Manual Spray #1"]');
+		expect(script).to.contain('["DEC-LS-08", processLsMaskId, "Line Spray #8"]');
+		expect(script).to.contain('["DEC-TP-05", processTampoId, "Tampo #5"]');
+		expect(script).to.contain('["DEC-MK-01", processMimakiId, "Machine Printing #1"]');
+		expect(script).to.contain('["ASM-AST-02", processAsmAstId, "Assortment #2"]');
+		expect(script).to.contain("lineDefs.length");
   });
 
   it("documents the RBAC fixture subjects and the negative-path QI without scope", () => {
@@ -164,25 +239,27 @@ describe("PATS seed contract", () => {
     );
   });
 
-  it("uses realistic employee display names with proper-name usernames as fixtures", () => {
+it("uses realistic employee display names with proper-name usernames as fixtures", () => {
     const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
 
     // The RBAC fixture contract is the username — proper names, no demo prefix.
-    expect(script).to.contain('"marco.villanueva"');
-    expect(script).to.contain('"liza.delacruz"');
-    expect(script).to.contain('"paolo.garcia"');
     expect(script).to.contain('"joshua.reyes"');
     expect(script).to.contain('"aila.torres"');
     expect(script).to.contain('"karen.limjoco"');
+    expect(script).to.contain('"paolo.garcia"');
+    expect(script).to.contain('"sofia.ramos"');
+    expect(script).to.contain('"diego.cruz"');
+    expect(script).to.contain('"camille.santos"');
     expect(script).not.to.match(/\$\{profile\}\.(planner|operator|lineleader|quality|admin)/);
     // Display names are narrative-only and must not derive from the prefix.
     for (const name of [
-      "Liza Dela Cruz",
-      "Marco Villanueva",
       "Joshua Reyes",
       "Aila Torres",
       "Karen Limjoco",
       "Paolo Garcia",
+      "Sofia Ramos",
+      "Diego Cruz",
+      "Camille Santos",
     ]) {
       expect(script, `seed must assign ${name}`).to.contain(name);
     }
@@ -190,10 +267,14 @@ describe("PATS seed contract", () => {
     expect(script).not.to.contain("`${prefix} Admin`");
     expect(script).not.to.contain("`${prefix} Line Leader`");
     expect(script).not.to.contain("`${prefix} Operator`");
-    expect(script).not.to.contain("`${prefix} Quality");
+    expect(script).not.to.contain("`${prefix} Quality`");
     expect(script).not.to.contain("DEMO Line Leader");
     // Email snapshots stay bound to the username (Layer-1 identity anchor
     // asserted exactly in e2e/rbac/api-matrix.spec.ts) — narrative does not touch them.
     expect(script).to.contain('`${username}@pats.local`');
+    // The bootstrap admin account is the exception: it is the deployment
+    // super-user and carries the deployment email, not the per-username convention.
+    expect(script).to.contain('"admin@bnpipats.tech"');
+    expect(script).to.contain('"admin"');
   });
 });

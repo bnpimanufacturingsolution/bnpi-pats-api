@@ -6,6 +6,7 @@ import {
 	parseSort,
 	type SortField,
 } from "../canonical/collection";
+import { deriveModelSkuCode } from "./catalog-foundation";
 import { ObjectStorageNotFoundError, type ObjectStorage } from "../storage/object-storage";
 
 type PatsProductClient = Pick<PatsPrismaClient, "product">;
@@ -89,7 +90,6 @@ export function catalogProductCollectionController(patsPrisma: PatsProductClient
 						productCode: true,
 						productName: true,
 						lifecycleStatus: true,
-						evidenceStatus: true,
 						createdAt: true,
 						updatedAt: true,
 					},
@@ -101,7 +101,6 @@ export function catalogProductCollectionController(patsPrisma: PatsProductClient
 				productCode: product.productCode,
 				productName: product.productName,
 				lifecycleStatus: product.lifecycleStatus,
-				evidenceStatus: product.evidenceStatus,
 				createdAt: product.createdAt.toISOString(),
 				updatedAt: product.updatedAt.toISOString(),
 			}));
@@ -134,12 +133,14 @@ export function catalogController(
 				where: workspaceId
 					? { id: productId, projects: { some: { workspaceId } } }
 					: { id: productId },
-				include: {
-					models: {
-						orderBy: { modelNumber: "asc" },
-						include: { modelParts: true },
+			include: {
+				models: {
+					orderBy: { modelNumber: "asc" },
+					include: {
+						modelParts: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
 					},
 				},
+			},
 			});
 
 			if (!product) {
@@ -184,11 +185,10 @@ export function catalogController(
 					modelName: model.modelName,
 					sourceStatus: toApiSourceStatus(model.sourceStatus),
 					sourceReference,
-					skuCode: model.skuCode,
+					skuCode: deriveModelSkuCode(product.productCode, model.modelNumber),
 					...(options.canonical
 						? {
 								lifecycleStatus: model.lifecycleStatus,
-								evidenceStatus: model.evidenceStatus,
 								rowVersion: model.rowVersion,
 							}
 						: {}),
@@ -203,32 +203,39 @@ export function catalogController(
 						...(options.canonical
 							? {
 									lifecycleStatus: part.lifecycleStatus,
-									evidenceStatus: part.evidenceStatus,
 									rowVersion: part.rowVersion,
 								}
 							: {}),
 						routingSteps: normalizeRoutingSteps(part.routingSteps),
+						plannedCycleTimes: normalizeCycleTimeMap(part.plannedCycleTimes),
 					})),
 				};
 			}));
 
+			// Canonical envelope is `{ data }` (C-004); the transitional route
+			// keeps its legacy `{ success, data }` wrapper until retirement.
+			const detail = {
+				productId: product.id,
+				productCode: product.productCode,
+				productName: product.productName,
+				...(options.canonical
+					? {
+							lifecycleStatus: product.lifecycleStatus,
+							rowVersion: product.rowVersion,
+						}
+					: {}),
+				createdAt: product.createdAt.toISOString(),
+				updatedAt: product.updatedAt.toISOString(),
+				models,
+			};
+			if (options.canonical) {
+				res.status(200).json({ data: detail });
+				return;
+			}
+
 			res.status(200).json({
 				success: true,
-				data: {
-					productId: product.id,
-					productCode: product.productCode,
-					productName: product.productName,
-					...(options.canonical
-						? {
-								lifecycleStatus: product.lifecycleStatus,
-								evidenceStatus: product.evidenceStatus,
-								rowVersion: product.rowVersion,
-							}
-						: {}),
-					createdAt: product.createdAt.toISOString(),
-					updatedAt: product.updatedAt.toISOString(),
-					models,
-				},
+				data: detail,
 			});
 		} catch (error) {
 			if (error instanceof PatsCatalogStorageUnavailableError) {
@@ -288,6 +295,21 @@ function normalizeRoutingSteps(value: unknown): Array<{ stageId: string; subStag
 			subStageId: typeof step.subStageId === "string" ? step.subStageId : null,
 		}];
 	});
+}
+
+function normalizeCycleTimeMap(value: unknown): Record<string, number> | null {
+	if (!isRecord(value)) return null;
+	const entries = Object.entries(value);
+	if (entries.length === 0) return null;
+	const out: Record<string, number> = {};
+	for (const [key, entry] of entries) {
+		if (key.length === 0 || key.length > 220) return null;
+		if (typeof entry !== "number" || !Number.isInteger(entry) || entry < 1 || entry > 86400) {
+			return null;
+		}
+		out[key] = entry;
+	}
+	return out;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
