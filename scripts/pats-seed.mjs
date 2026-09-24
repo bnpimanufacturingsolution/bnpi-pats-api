@@ -61,6 +61,12 @@ if (freshReset) {
 }
 
 const profile = mode;
+// Paint-number ModelParts stay detached until the per-model paint mapping is
+// confirmed (the multi-model spread in `paintNumbers[].modelNumbers` is under
+// review). Evidence remains in pats-seed-client-b251.mjs; while this is false
+// the paint attach loop is skipped and the dependent m01 paint BOM lines
+// self-skip on the empty lookup — no reseed can reintroduce the rows.
+const SEED_PAINT_PARTS = false;
 // Relative-to-now anchor so every fresh seed is "recent" and plans/batches/QC
 // line up with the monitoring sheets (which snap to today) instead of a stale
 // frozen date. All offsets below spread from this single instant per run.
@@ -315,10 +321,7 @@ async function seedProfile(tx) {
 	// ── RBAC fixture subjects (Playwright ABAC/RBAC ground) ────────────────
 	// Every subject is a deliberate capability-matrix row. All share the single
 	// PATS_SEED_PASSWORD. stableId(key) entries keep re-seeds idempotent.
-	//   positive  liza.delacruz  — admin bundle; every capability true.
-	//   positive  marco.villanueva — pure planner (planning + read-only
-	//                                monitoring + catalog read). No QC,
-	//                                no floor ops, no day-sheet encode.
+	//   positive  admin          — admin bundle; every capability true.
 	//   positive  joshua.reyes     — floor execution + inventory.issue +
 	//                                station encode. DENIED: daily-sheet
 	//                                encode, QC, ops-admin, catalog-manage.
@@ -329,27 +332,25 @@ async function seedProfile(tx) {
 	//                                LL cannot resolve, only read).
 	//   positive  karen.limjoco    — qi bundle + quality-stage scope
 	//                                Decoration + Injection (QC-primary).
+	//   positive  sofia.ramos      — operator; ACTIVE line assignment INJ-MO-01
+	//                                (single-line landing fixture).
+	//   positive  diego.cruz       — operator; ACTIVE line assignment DEC-LS-01
+	//                                (single-line landing fixture).
+	//   positive  camille.santos   — operator; ACTIVE line assignment ASM-MA-01
+	//                                (single-line landing fixture).
 	//   negative  paolo.garcia     — qi bundle with NO quality-stage rows:
 	//                                Journey D must FAIL CLOSED (scope-
 	//                                dependent deny fixture).
 	// The operator-only deny path needs no separate user — joshua.reyes already
 	// is the operator without daily-metrics.encode. Extra guest accounts were
 	// considered and dropped: they add no distinct capability assertion.
+	// marco.villanueva / planner role removed 2026-09-24 (full planner removal).
 	//
 	// Display names and email snapshots are NARRATIVE ONLY (realistic employee
 	// names so surfaces read like a live factory). The proper-name usernames are the
 	// RBAC fixture contract — e2e/RBAC tests log in with them and must never be
 	// renamed. Re-seeding updates the display/email snapshots idempotently.
 
-	const planner = await upsertSubject(
-		tx,
-		"subject-planner",
-		"marco.villanueva",
-		"Marco Villanueva",
-		// Pure planner: planning + read-only monitoring + catalog read. Not a QC account.
-		["planner"],
-		passwordHash,
-	);
 	const operator = await upsertSubject(
 		tx,
 		"subject-operator",
@@ -399,6 +400,31 @@ async function seedProfile(tx) {
 		["admin"],
 		passwordHash,
 	);
+	// Single-line navigation operators (one distinct ACTIVE line each).
+	const navOperatorInj = await upsertSubject(
+		tx,
+		"subject-operator-inj",
+		"sofia.ramos",
+		"Sofia Ramos",
+		["operator"],
+		passwordHash,
+	);
+	const navOperatorDec = await upsertSubject(
+		tx,
+		"subject-operator-dec",
+		"diego.cruz",
+		"Diego Cruz",
+		["operator"],
+		passwordHash,
+	);
+	const navOperatorAsm = await upsertSubject(
+		tx,
+		"subject-operator-asm",
+		"camille.santos",
+		"Camille Santos",
+		["operator"],
+		passwordHash,
+	);
 	// The admin account is the bootstrap super-user: its email snapshot is the
 	// deployment address, not the `${username}@pats.local` convention.
 	await tx.subject.update({
@@ -407,6 +433,11 @@ async function seedProfile(tx) {
 	});
 
 	// ── Client-evidence catalog: B251 ────────────────────────────────────────
+	// Catalog rows seed DRAFT (not PUBLISHED): seed values are PROVISIONAL
+	// evidence, and the draft catalog API only mutates DRAFT rows — this keeps
+	// route/cycle-time configuration writable in demo/UAT. Publish/retire
+	// transitions remain a Gate 1 design item; BOM/process-route revisions below
+	// keep their PUBLISHED seed state.
 	const productB251Id = stableId("product-b251");
 	const modelIds = {};
 	const partIds = {};
@@ -415,7 +446,7 @@ async function seedProfile(tx) {
 		where: { id: productB251Id },
 		update: {
 			productName: CLIENT_B251.productName,
-			lifecycleStatus: "PUBLISHED",
+			lifecycleStatus: "DRAFT",
 			evidenceStatus: "PROVISIONAL",
 			rowVersion: 1,
 		},
@@ -423,7 +454,7 @@ async function seedProfile(tx) {
 			id: productB251Id,
 			productCode: code(CLIENT_B251.productCode),
 			productName: CLIENT_B251.productName,
-			lifecycleStatus: "PUBLISHED",
+			lifecycleStatus: "DRAFT",
 			evidenceStatus: "PROVISIONAL",
 		},
 	});
@@ -438,7 +469,7 @@ async function seedProfile(tx) {
 				modelNumber: model.modelNumber,
 				modelName: model.modelName,
 				sourceStatus: model.sourceStatus,
-				lifecycleStatus: "PUBLISHED",
+				lifecycleStatus: "DRAFT",
 				evidenceStatus: model.evidenceStatus,
 				sourceReference: {
 					seedProfile: profile,
@@ -454,7 +485,7 @@ async function seedProfile(tx) {
 				modelNumber: model.modelNumber,
 				modelName: model.modelName,
 				sourceStatus: model.sourceStatus,
-				lifecycleStatus: "PUBLISHED",
+				lifecycleStatus: "DRAFT",
 				evidenceStatus: model.evidenceStatus,
 				sourceReference: {
 					seedProfile: profile,
@@ -473,7 +504,7 @@ async function seedProfile(tx) {
 			where: { modelId_partCode: { modelId, partCode } },
 			update: {
 				partName,
-				lifecycleStatus: "PUBLISHED",
+				lifecycleStatus: "DRAFT",
 				evidenceStatus: "PROVISIONAL",
 				routingSteps: [],
 				plannedCycleTimes: null,
@@ -483,7 +514,7 @@ async function seedProfile(tx) {
 				modelId,
 				partCode,
 				partName,
-				lifecycleStatus: "PUBLISHED",
+				lifecycleStatus: "DRAFT",
 				evidenceStatus: "PROVISIONAL",
 				routingSteps: [],
 				plannedCycleTimes: null,
@@ -516,7 +547,7 @@ async function seedProfile(tx) {
 			where: { modelId_partCode: { modelId, partCode } },
 			update: {
 				partName,
-				lifecycleStatus: "PUBLISHED",
+				lifecycleStatus: "DRAFT",
 				evidenceStatus: "PROVISIONAL",
 				routingSteps: [],
 				plannedCycleTimes: null,
@@ -526,7 +557,7 @@ async function seedProfile(tx) {
 				modelId,
 				partCode,
 				partName,
-				lifecycleStatus: "PUBLISHED",
+				lifecycleStatus: "DRAFT",
 				evidenceStatus: "PROVISIONAL",
 				routingSteps: [],
 				plannedCycleTimes: null,
@@ -574,17 +605,168 @@ async function seedProfile(tx) {
 	}
 
 	// Paint nos — attach per model membership (same PN may appear on multiple models)
-	for (const paint of CLIENT_B251.paintNumbers) {
-		const displayName = paintPartDisplayName(paint);
-		for (const modelNumber of paint.modelNumbers) {
-			const id = await upsertModelPartRow(tx, {
-				modelNumber,
-				partCode: paint.partCode,
-				partName: displayName,
-				seedKey: `model-part-paint-${modelNumber}-${paint.partCode}`,
+	if (SEED_PAINT_PARTS) {
+		for (const paint of CLIENT_B251.paintNumbers) {
+			const displayName = paintPartDisplayName(paint);
+			for (const modelNumber of paint.modelNumbers) {
+				const id = await upsertModelPartRow(tx, {
+					modelNumber,
+					partCode: paint.partCode,
+					partName: displayName,
+					seedKey: `model-part-paint-${modelNumber}-${paint.partCode}`,
+				});
+				paintPartIds[`${modelNumber}:${paint.partCode}`] = id;
+				paintPartCount += 1;
+			}
+		}
+	}
+
+	// ── Demo product packs (mirror bnpi-pats-app demo fixtures) ───────────────
+	// Labeled demo data only: MANUAL source status, NEEDS_CONFIRMATION evidence,
+	// DRAFT lifecycle. Never client publication. Mirrors the app's B252–B256
+	// fixtures so API mode offers the same packs; part codes follow the same
+	// `${productCode}-${modelNumber}-${NN}` derivation as the app.
+	const DEMO_PACKS = [
+		{
+			productCode: "B252",
+			productName: "Street Food Friends",
+			models: [
+				{ modelNumber: "01", modelName: "Taco Cart", parts: ["Taco Shell", "Counter", "Chef Hat"] },
+				{ modelNumber: "02", modelName: "Hotdog Stand", parts: ["Bun", "Sausage", "Stand Sign"] },
+				{ modelNumber: "03", modelName: "Boba Stall", parts: ["Boba Cup", "Straw", "Stall Tray"] },
+			],
+		},
+		{
+			productCode: "B253",
+			productName: "Mini Market Neighbors",
+			models: [
+				{ modelNumber: "01", modelName: "Market Clerk", parts: ["Apron", "Basket", "Name Tag"] },
+				{ modelNumber: "02", modelName: "Fruit Vendor", parts: ["Fruit Crate", "Cap", "Display Stand"] },
+				{ modelNumber: "03", modelName: "Bakery Shelf", parts: ["Bread Tray", "Tongs", "Shelf Unit"] },
+			],
+		},
+		{
+			productCode: "B254",
+			productName: "Cozy Cafe Counter",
+			models: [
+				{ modelNumber: "01", modelName: "Coffee Server", parts: ["Coffee Cup", "Apron", "Counter Tray"] },
+				{ modelNumber: "02", modelName: "Cake Display", parts: ["Cake Slice", "Display Case", "Serving Plate"] },
+				{ modelNumber: "03", modelName: "Cafe Sign", parts: ["Sign Board", "Menu Card", "Support Stand"] },
+			],
+		},
+		{
+			productCode: "B255",
+			productName: "Playground Pals",
+			models: [
+				{ modelNumber: "01", modelName: "Swing Set", parts: ["Swing Seat", "Chain Pair", "Frame"] },
+				{ modelNumber: "02", modelName: "Slide Time", parts: ["Slide", "Ladder", "Safety Mat"] },
+				{ modelNumber: "03", modelName: "Sandbox Crew", parts: ["Sandbox", "Bucket", "Toy Shovel"] },
+			],
+		},
+		{
+			productCode: "B256",
+			productName: "Night Market Charms",
+			models: [
+				{ modelNumber: "01", modelName: "Lantern Seller", parts: ["Lantern", "Vendor Cart", "Hanging Hook"] },
+				{ modelNumber: "02", modelName: "Noodle Bar", parts: ["Noodle Bowl", "Chopsticks", "Bar Counter"] },
+				{ modelNumber: "03", modelName: "Festival Drummer", parts: ["Drum", "Drumsticks", "Festival Sash"] },
+			],
+		},
+	];
+	const demoModelIds = {};
+	const demoPartIds = {};
+	let demoProductCount = 0;
+	let demoModelCount = 0;
+	let demoPartCount = 0;
+	for (const pack of DEMO_PACKS) {
+		const packKey = pack.productCode.toLowerCase();
+		const demoProductId = stableId(`product-${packKey}`);
+		await tx.product.upsert({
+			where: { id: demoProductId },
+			update: {
+				productName: pack.productName,
+				lifecycleStatus: "DRAFT",
+				evidenceStatus: "NEEDS_CONFIRMATION",
+				rowVersion: 1,
+			},
+			create: {
+				id: demoProductId,
+				productCode: code(pack.productCode),
+				productName: pack.productName,
+				lifecycleStatus: "DRAFT",
+				evidenceStatus: "NEEDS_CONFIRMATION",
+			},
+		});
+		demoProductCount += 1;
+		for (const model of pack.models) {
+			const demoModelId = stableId(`demo-model-${packKey}-${model.modelNumber}`);
+			demoModelIds[`${pack.productCode}:${model.modelNumber}`] = demoModelId;
+			await tx.model.upsert({
+				where: { id: demoModelId },
+				update: {
+					productId: demoProductId,
+					modelNumber: model.modelNumber,
+					modelName: model.modelName,
+					sourceStatus: "MANUAL",
+					lifecycleStatus: "DRAFT",
+					evidenceStatus: "NEEDS_CONFIRMATION",
+					sourceReference: {
+						seedProfile: profile,
+						origin: "demo-fixture",
+						productCode: pack.productCode,
+						modelNumber: model.modelNumber,
+					},
+				},
+				create: {
+					id: demoModelId,
+					productId: demoProductId,
+					modelNumber: model.modelNumber,
+					modelName: model.modelName,
+					sourceStatus: "MANUAL",
+					lifecycleStatus: "DRAFT",
+					evidenceStatus: "NEEDS_CONFIRMATION",
+					sourceReference: {
+						seedProfile: profile,
+						origin: "demo-fixture",
+						productCode: pack.productCode,
+						modelNumber: model.modelNumber,
+					},
+				},
 			});
-			paintPartIds[`${modelNumber}:${paint.partCode}`] = id;
-			paintPartCount += 1;
+			demoModelCount += 1;
+			let partIndex = 1;
+			for (const partName of model.parts) {
+				const partCode = `${pack.productCode}-${model.modelNumber}-${String(partIndex).padStart(2, "0")}`;
+				const demoPartId = stableId(`demo-model-part-${packKey}-${model.modelNumber}-${partIndex}`);
+				demoPartIds[`${pack.productCode}:${partCode}`] = demoPartId;
+				await tx.modelPart.upsert({
+					where: { modelId_partCode: { modelId: demoModelId, partCode } },
+					update: {
+						partName,
+						lifecycleStatus: "DRAFT",
+						evidenceStatus: "NEEDS_CONFIRMATION",
+						routingSteps: [],
+						plannedCycleTimes: null,
+					},
+					create: {
+						id: demoPartId,
+						modelId: demoModelId,
+						partCode,
+						partName,
+						lifecycleStatus: "DRAFT",
+						evidenceStatus: "NEEDS_CONFIRMATION",
+						routingSteps: [],
+						plannedCycleTimes: null,
+					},
+				});
+				const resolved = await tx.modelPart.findUnique({
+					where: { modelId_partCode: { modelId: demoModelId, partCode } },
+					select: { id: true },
+				});
+				if (resolved) demoPartIds[`${pack.productCode}:${partCode}`] = resolved.id;
+				demoPartCount += 1;
+				partIndex += 1;
+			}
 		}
 	}
 
@@ -857,9 +1039,8 @@ async function seedProfile(tx) {
 	}
 
 	// Journey D allowedStages (v1 stage grain). Fail closed without these rows.
-	// karen.limjoco = Decoration + Injection (QC-primary QI). liza.delacruz = all catalog stages
+	// karen.limjoco = Decoration + Injection (QC-primary QI). admin = all catalog stages
 	// so admin quality caps are not fail-closed on empty scope.
-	// marco.villanueva is a pure planner — no QC capabilities and no stage rows.
 	// paolo.garcia is the negative fixture — qi bundle but NO scope rows
 	// here on purpose; any leaked rows from an earlier seed get revoked below.
 	const qualityWorkspaceId = process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS";
@@ -890,9 +1071,30 @@ async function seedProfile(tx) {
 		}
 	}
 	// Re-seed must slim leftover fat scope (additive-mode hardening):
-	// marco.villanueva never holds QC scope, and paolo.garcia must never
-	// gain scope, so any stalker rows are revoked to preserve the deny fixture.
-	const leftoverNoScopeSubjects = [planner.id, qualityNoScope.id];
+	// paolo.garcia must never gain scope, so any stalker rows are revoked to
+	// preserve the deny fixture. Revokes retired planner subject rows too.
+	const leftoverNoScopeSubjects = [qualityNoScope.id];
+	// Retired planner subject (removed 2026-09-24): revoke leftover assignments
+	// and QC scope on additive re-seed so marco.villanueva cannot linger active.
+	const retiredPlannerSubject = await tx.subject.findUnique({
+		where: { id: stableId("subject-planner") },
+		select: { id: true },
+	});
+	if (retiredPlannerSubject) {
+		leftoverNoScopeSubjects.push(retiredPlannerSubject.id);
+		await tx.subjectAssignment.updateMany({
+			where: { subjectId: retiredPlannerSubject.id },
+			data: { status: "REVOKED" },
+		});
+		await tx.subjectCredential.updateMany({
+			where: { subjectId: retiredPlannerSubject.id },
+			data: { status: "REVOKED" },
+		});
+		await tx.subject.update({
+			where: { id: retiredPlannerSubject.id },
+			data: { status: "REVOKED" },
+		});
+	}
 	for (const subjectId of leftoverNoScopeSubjects) {
 		const leftoverScope = await tx.qualityStageAssignment.findMany({
 			where: { subjectId, workspaceId: qualityWorkspaceId, status: "ACTIVE" },
@@ -1167,7 +1369,7 @@ async function seedProfile(tx) {
 	// Leaders are drawn round-robin from the seeded leader subjects so each
 	// line has a distinct assigned leader (the controller refuses to demote
 	// the last owner and forbids assigning a non-leader).
-	const leaderSubjects = [lineLeader.id, operator.id, planner.id];
+	const leaderSubjects = [lineLeader.id, operator.id];
 	const lineDefs = [
 		// [lineCode, processId, label]
 		// ── Injection (3) ──
@@ -1233,7 +1435,9 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// Operator-on-line fixture: joshua.reyes runs the first Manual Spray line (ACTIVE).
+	// Operator-on-line fixtures: joshua.reyes runs the first Manual Spray line (ACTIVE).
+	// Single-line navigation operators each get exactly one distinct line so
+	// line-scoped landing resolves without a picker (2026-09-24).
 	const manualSprayLineId = stableId("line-DEC-FS-MS-01");
 	await tx.lineOperatorAssignment.upsert({
 		where: { id: stableId("line-op-joshua-dec-fs-ms-01") },
@@ -1246,6 +1450,25 @@ async function seedProfile(tx) {
 			actorSubjectId: lineLeader.id,
 		},
 	});
+	const singleLineOperatorFixtures = [
+		["line-op-sofia-inj-mo-01", "line-INJ-MO-01", navOperatorInj.id],
+		["line-op-diego-dec-ls-01", "line-DEC-LS-01", navOperatorDec.id],
+		["line-op-camille-asm-ma-01", "line-ASM-MA-01", navOperatorAsm.id],
+	];
+	for (const [fixtureKey, lineKey, subjectId] of singleLineOperatorFixtures) {
+		const lineId = stableId(lineKey);
+		await tx.lineOperatorAssignment.upsert({
+			where: { id: stableId(fixtureKey) },
+			update: { status: "ACTIVE", endedAt: null },
+			create: {
+				id: stableId(fixtureKey),
+				lineId,
+				subjectId,
+				status: "ACTIVE",
+				actorSubjectId: lineLeader.id,
+			},
+		});
+	}
 
 	// Quality Inspection is Journey D. Remount leftover Quality Check hops (additive — no deletes).
 	await tx.qualityInspection.updateMany({
@@ -1372,7 +1595,7 @@ async function seedProfile(tx) {
 			requiredProductionQuantity: planQty,
 			status: "RELEASED",
 			releasedAt: seedClock,
-			releasedBySubjectId: planner.id,
+			releasedBySubjectId: admin.id,
 			productId: productB251Id,
 		},
 		create: {
@@ -1384,7 +1607,7 @@ async function seedProfile(tx) {
 			productId: productB251Id,
 			status: "RELEASED",
 			releasedAt: seedClock,
-			releasedBySubjectId: planner.id,
+			releasedBySubjectId: admin.id,
 			createdAt: seedClock,
 		},
 	});
@@ -1667,6 +1890,139 @@ async function seedProfile(tx) {
 		},
 	});
 
+	// ── Demo pack pilot projects (planning linkage only) ─────────────────────
+	// One DRAFT pilot project per demo pack: spec + model allocations + plan
+	// part snapshots. No lots/batches/prints — execution realism stays B251.
+	const DEMO_TRAY_STANDARD = 240; // demo assumption, mirrors the B251 tray standard
+	let demoProjectCount = 0;
+	let demoPlanPartCount = 0;
+	for (const pack of DEMO_PACKS) {
+		const packKey = pack.productCode.toLowerCase();
+		const demoProjectId = stableId(`demo-project-${packKey}`);
+		const demoProductId = stableId(`product-${packKey}`);
+		await tx.project.upsert({
+			where: { id: demoProjectId },
+			update: {
+				workspaceId: "PATS",
+				projectCode: code(`PRJ-${pack.productCode}-PILOT`),
+				name: `${pack.productName} — pilot`,
+				requiredProductionQuantity: pack.models.length * DEMO_TRAY_STANDARD,
+				productId: demoProductId,
+				status: "DRAFT",
+			},
+			create: {
+				id: demoProjectId,
+				workspaceId: "PATS",
+				projectCode: code(`PRJ-${pack.productCode}-PILOT`),
+				name: `${pack.productName} — pilot`,
+				requiredProductionQuantity: pack.models.length * DEMO_TRAY_STANDARD,
+				productId: demoProductId,
+				status: "DRAFT",
+				createdAt: seedClock,
+			},
+		});
+		await tx.productSpecification.upsert({
+			where: { projectId: demoProjectId },
+			update: {
+				skuCode: code(`${pack.productCode}-SKU`),
+				productName: pack.productName,
+				trayQuantityStandard: DEMO_TRAY_STANDARD,
+				sourceRevisionRef: "demo-fixture-1.0",
+			},
+			create: {
+				id: stableId(`demo-product-spec-${packKey}`),
+				projectId: demoProjectId,
+				skuCode: code(`${pack.productCode}-SKU`),
+				productName: pack.productName,
+				trayQuantityStandard: DEMO_TRAY_STANDARD,
+				sourceRevisionRef: "demo-fixture-1.0",
+				createdAt: seedClock,
+			},
+		});
+		for (const model of pack.models) {
+			const demoModelId = demoModelIds[`${pack.productCode}:${model.modelNumber}`];
+			await tx.projectModelAllocation.upsert({
+				where: {
+					projectId_modelId: { projectId: demoProjectId, modelId: demoModelId },
+				},
+				update: {
+					plannedQuantity: DEMO_TRAY_STANDARD,
+					quantityMagnitude: `${DEMO_TRAY_STANDARD}.000000`,
+					quantityUom: "piece",
+					lifecycleStatus: "COMMITTED",
+				},
+				create: {
+					id: stableId(`demo-pma-${packKey}-${model.modelNumber}`),
+					projectId: demoProjectId,
+					modelId: demoModelId,
+					plannedQuantity: DEMO_TRAY_STANDARD,
+					quantityMagnitude: `${DEMO_TRAY_STANDARD}.000000`,
+					quantityUom: "piece",
+					lifecycleStatus: "COMMITTED",
+				},
+			});
+			await tx.planDemandAllocation.upsert({
+				where: { id: stableId(`demo-pda-${packKey}-${model.modelNumber}`) },
+				update: {
+					projectId: demoProjectId,
+					modelId: demoModelId,
+					marketRegion: "JP",
+					demandPurpose: "production",
+					quantityMagnitude: `${DEMO_TRAY_STANDARD}.000000`,
+					quantityUom: "piece",
+					usageBasis: "finished product",
+					sourceRevisionRef: "demo-fixture-1.0",
+					lifecycleStatus: "COMMITTED",
+				},
+				create: {
+					id: stableId(`demo-pda-${packKey}-${model.modelNumber}`),
+					projectId: demoProjectId,
+					modelId: demoModelId,
+					marketRegion: "JP",
+					demandPurpose: "production",
+					quantityMagnitude: `${DEMO_TRAY_STANDARD}.000000`,
+					quantityUom: "piece",
+					usageBasis: "finished product",
+					sourceRevisionRef: "demo-fixture-1.0",
+					lifecycleStatus: "COMMITTED",
+					createdAt: seedClock,
+				},
+			});
+			let partIndex = 1;
+			for (const partName of model.parts) {
+				const partCode = `${pack.productCode}-${model.modelNumber}-${String(partIndex).padStart(2, "0")}`;
+				const planPartId = stableId(`demo-plan-part-${packKey}-${model.modelNumber}-${partIndex}`);
+				await tx.part.upsert({
+					where: { id: planPartId },
+					update: {
+						projectId: demoProjectId,
+						partCode,
+						partName,
+						plannedCycleTimes: null,
+						sourceModelId: demoModelId,
+						sourceModelPartId: demoPartIds[`${pack.productCode}:${partCode}`],
+						lifecycleStatus: "PUBLISHED",
+						variancePercentThreshold: 0.05,
+					},
+					create: {
+						id: planPartId,
+						projectId: demoProjectId,
+						partCode,
+						partName,
+						plannedCycleTimes: null,
+						sourceModelId: demoModelId,
+						sourceModelPartId: demoPartIds[`${pack.productCode}:${partCode}`],
+						lifecycleStatus: "PUBLISHED",
+						variancePercentThreshold: 0.05,
+					},
+				});
+				demoPlanPartCount += 1;
+				partIndex += 1;
+			}
+		}
+		demoProjectCount += 1;
+	}
+
 	// Lots: required pcs = seeded batches for that lot × tray size (240).
 	const lotDefs = [
 		["lot-avocado", "LOT-B251-01", "B251 Avocado Burger — Lot 01", "01", 4 * tray],
@@ -1762,18 +2118,30 @@ async function seedProfile(tx) {
 		["batch-fw-inj", "BNI-2607-015", "04", "B251-01-16", tray, injectionStageId, null, "ACTIVE"],
 	];
 
+	// Physical line for published floor batches (line filter on station/line queues).
+	// Unassigned (null) still passes every line filter — only a differing lineId is excluded.
+	const stageDefaultLineCode = {
+		[injectionStageId]: "INJ-MO-01",
+		[decorationStageId]: "DEC-LS-01",
+		[assemblyStageId]: "ASM-MA-01",
+		[warehouseStageId]: null,
+	};
+
 	const batchIds = {};
 	for (const [key, batchCode, modelNumber, partCode, qty, stageId, subStageId, status] of batchDefs) {
 		const id = stableId(key);
 		batchIds[key] = id;
 		const lotId = lotIds[modelNumber];
 		const allocId = lotAllocIds[`${modelNumber}:${partCode}`];
+		const lineCode = stageDefaultLineCode[stageId] ?? null;
+		const lineId = lineCode ? stableId(`line-${lineCode}`) : null;
 		await tx.batch.upsert({
 			where: { id },
 			update: {
 				batchCode: code(batchCode),
 				barcodeValue: code(batchCode),
 				lotId,
+				lineId,
 				plannedQuantity: qty,
 				labelPackSize: CLIENT_B251.trayQuantityStandard,
 				currentStageId: stageId,
@@ -1786,6 +2154,7 @@ async function seedProfile(tx) {
 				batchCode: code(batchCode),
 				barcodeValue: code(batchCode),
 				lotId,
+				lineId,
 				plannedQuantity: qty,
 				labelPackSize: CLIENT_B251.trayQuantityStandard,
 				currentStageId: stageId,
@@ -1908,7 +2277,7 @@ async function seedProfile(tx) {
 				name,
 				requiredProductionQuantity: storyQty,
 				status,
-				...(released ? { releasedAt: seedClock, releasedBySubjectId: planner.id } : {}),
+				...(released ? { releasedAt: seedClock, releasedBySubjectId: admin.id } : {}),
 				productId: productB251Id,
 			},
 			create: {
@@ -1919,7 +2288,7 @@ async function seedProfile(tx) {
 				requiredProductionQuantity: storyQty,
 				productId: productB251Id,
 				status,
-				...(released ? { releasedAt: seedClock, releasedBySubjectId: planner.id } : {}),
+				...(released ? { releasedAt: seedClock, releasedBySubjectId: admin.id } : {}),
 				createdAt: seedClock,
 			},
 		});
@@ -2182,12 +2551,15 @@ async function seedProfile(tx) {
 			const subStageId = subKey === "-" ? null : (storySubStage[subKey] ?? null);
 			const lotId = storyLotIds[lotSuffix];
 			const allocId = storyAllocIds[`${lotSuffix}:${partCode}`];
+			const lineCode = stageDefaultLineCode[stageId] ?? null;
+			const lineId = lineCode ? stableId(`line-${lineCode}`) : null;
 			await tx.batch.upsert({
 				where: { id },
 				update: {
 					batchCode: code(batchCode),
 					barcodeValue: code(batchCode),
 					lotId,
+					lineId,
 					plannedQuantity: tray,
 					labelPackSize: CLIENT_B251.trayQuantityStandard,
 					currentStageId: stageId,
@@ -2200,6 +2572,7 @@ async function seedProfile(tx) {
 					batchCode: code(batchCode),
 					barcodeValue: code(batchCode),
 					lotId,
+					lineId,
 					plannedQuantity: tray,
 					labelPackSize: CLIENT_B251.trayQuantityStandard,
 					currentStageId: stageId,
@@ -2653,7 +3026,7 @@ async function seedProfile(tx) {
 	await tx.auditRecord.upsert({
 		where: { id: stableId("audit-seed-b251-release") },
 		update: {
-			actorSubjectId: planner.id,
+			actorSubjectId: admin.id,
 			action: "seed.release-plan",
 			resourceType: "ProductionPlan",
 			resourceId: projectId,
@@ -2670,7 +3043,7 @@ async function seedProfile(tx) {
 		},
 		create: {
 			id: stableId("audit-seed-b251-release"),
-			actorSubjectId: planner.id,
+			actorSubjectId: admin.id,
 			action: "seed.release-plan",
 			resourceType: "ProductionPlan",
 			resourceId: projectId,
@@ -2954,7 +3327,7 @@ async function seedProfile(tx) {
 
 	return {
 		profile,
-		subjects: 6,
+		subjects: 8,
 		primaryProduct: CLIENT_B251.productCode,
 		productName: CLIENT_B251.productName,
 		models: CLIENT_B251.models.length,
@@ -2963,8 +3336,13 @@ async function seedProfile(tx) {
 		paintParts: paintPartCount,
 		capsuleAttachments: capsuleAttachmentCount,
 		catalogModelParts: injPartCount + decoPartCount + paintPartCount + capsuleAttachmentCount,
+		demoProducts: demoProductCount,
+		demoModels: demoModelCount,
+		demoParts: demoPartCount,
+		demoProjects: demoProjectCount,
+		demoPlanParts: demoPlanPartCount,
 		planParts: Object.keys(planPartIds).length,
-		plans: 1 + storyProjects.length,
+		plans: 1 + storyProjects.length + demoProjectCount,
 		lots: lotDefs.length + Object.values(storyLots).reduce((sum, lots) => sum + lots.length, 0),
 		batches:
 			batchDefs.length +
@@ -2980,7 +3358,7 @@ async function seedProfile(tx) {
 		adminUsername: "admin",
 		adminEmail: "admin@bnpipats.tech",
 		evidenceNote:
-			"B251 client-parts-list (PROVISIONAL) + monitoring encode seed — fabricated B308 family dropped; not Drive-approved",
+			"B251 client-parts-list (PROVISIONAL) + B252–B256 demo packs (MANUAL/NEEDS_CONFIRMATION/DRAFT, mirror app fixtures) + monitoring encode seed — fabricated B308 family dropped; not Drive-approved",
 	};
 }
 

@@ -183,7 +183,7 @@ paths:
   /production-plans/{planId}/release:
     post:
       operationId: productionPlanRelease
-      summary: Release a draft or ready production plan
+      summary: Release a draft or ready production plan (mints missing tray batches, then activates PLANNED→ACTIVE)
       tags: [PATS Planning]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
@@ -199,7 +199,7 @@ paths:
   /batches:
     post:
       operationId: batchCreate
-      summary: Create a planned batch and initial position projection
+      summary: Create a planned batch and initial position projection (API/tests; UI releases mint automatically)
       tags: [PATS Execution]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]

@@ -1260,6 +1260,7 @@ export function domainReadRouter(
 							batchCode: true,
 							barcodeValue: true,
 							lotId: true,
+							lineId: true,
 							plannedQuantity: true,
 							labelPackSize: true,
 							status: true,
@@ -1274,6 +1275,9 @@ export function domainReadRouter(
 									partsListId: true,
 									requiredProductionQuantity: true,
 									labelPackSize: true,
+									// Floor release gate: operators lack planning.read, so the
+									// position row carries project status for the arrival queue.
+									project: { select: { status: true } },
 								},
 							},
 							parts: {
@@ -1311,6 +1315,15 @@ export function domainReadRouter(
 					batch: {
 						...position.batch,
 						createdAt: position.batch.createdAt.toISOString(),
+						lot: (() => {
+							const { project: projectRef, ...lot } = position.batch.lot;
+							return {
+								...lot,
+								// Floor release gate: operators lack planning.read, so the
+								// position row carries project status for the arrival queue.
+								projectStatus: projectRef?.status ?? null,
+							};
+						})(),
 						parts: position.batch.parts.map((part) => ({
 							...part,
 							quantityMagnitude: decimal(part.quantityMagnitude),

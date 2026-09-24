@@ -509,7 +509,7 @@ export function catalogFoundationRouter(
 	 *       - $ref: '#/components/parameters/IdempotencyKey'
 	 *     responses:
 	 *       201:
-	 *         description: Draft model part created
+	 *         description: Draft model part created. The body echoes the stored representation, including routingSteps (possibly []).
 	 *       404:
 	 *         description: Parent model not found
 	 *       422:
@@ -692,7 +692,7 @@ export function catalogFoundationRouter(
 	 *       - $ref: '#/components/parameters/IfMatch'
 	 *     responses:
 	 *       200:
-	 *         description: Updated draft model part
+	 *         description: Updated draft model part. The body echoes the stored representation, including routingSteps — no re-GET is required to render the saved route.
 	 *       412:
 	 *         description: Stale or missing If-Match
 	 */
@@ -843,6 +843,26 @@ function ctMapOrNull(value: unknown): Record<string, number> | null {
 	return out;
 }
 
+/**
+ * Coerce stored Json route steps to the GET wire shape (`{ stageId, subStageId }`).
+ * Unknown rows are dropped, matching the catalog detail projection — write
+ * responses must echo the same shape so clients never render a stale route.
+ */
+function wireRouteSteps(value: unknown): Array<{ stageId: string; subStageId: string | null }> {
+	if (!Array.isArray(value)) return [];
+	return value.flatMap((step) => {
+		if (typeof step !== "object" || step === null || Array.isArray(step)) return [];
+		const candidate = step as { stageId?: unknown; subStageId?: unknown };
+		if (typeof candidate.stageId !== "string") return [];
+		return [
+			{
+				stageId: candidate.stageId,
+				subStageId: typeof candidate.subStageId === "string" ? candidate.subStageId : null,
+			},
+		];
+	});
+}
+
 /** Reject route steps that name stages (or sub-stages) outside the catalog. */
 async function assertRouteStepsExist(
 	database: CatalogDatabase,
@@ -899,6 +919,7 @@ function toModelPartResource(
 		partCode: string;
 		partName: string;
 		plannedCycleTimes: unknown;
+		routingSteps: unknown;
 		lifecycleStatus: CatalogLifecycleStatus;
 		rowVersion: number;
 		createdAt: Date;
@@ -911,6 +932,7 @@ function toModelPartResource(
 		partCode: modelPart.partCode,
 		partName: modelPart.partName,
 		plannedCycleTimes: ctMapOrNull(modelPart.plannedCycleTimes),
+		routingSteps: wireRouteSteps(modelPart.routingSteps),
 		lifecycleStatus: modelPart.lifecycleStatus,
 		provenance: { sourceEvidenceCount },
 		rowVersion: modelPart.rowVersion,

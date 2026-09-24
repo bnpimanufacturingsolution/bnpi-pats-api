@@ -58,6 +58,8 @@ describe("PATS Prisma boundary", () => {
     expect(schema).to.match(/plannedQuantity\s+Int/);
     expect(schema).to.match(/labelPackSize\s+Int/);
     expect(schema).to.match(/enum BatchStatus[\s\S]*?\bPLANNED\b/);
+    expect(schema).to.match(/model Batch \{[\s\S]*?lineId\s+String\?/);
+    expect(schema).to.match(/model Batch \{[\s\S]*?line\s+Line\?/);
     expect(schema).to.match(/enum SourceRunStatus[\s\S]*?\bPARTIAL\b/);
     expect(schema).to.match(/enum SourceArtifactType[\s\S]*?\bPDF\b/);
     expect(schema).to.match(/enum SourceExtractionStatus[\s\S]*?\bFAILED\b/);

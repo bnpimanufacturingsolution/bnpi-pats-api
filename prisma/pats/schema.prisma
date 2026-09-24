@@ -598,6 +598,9 @@ model Batch {
   barcodeValue             String                   @unique
   lotId                    String
   lot                      Lot                      @relation(fields: [lotId], references: [id])
+  /** Physical line this batch is published to; null = not yet assigned to a line. */
+  lineId                   String?
+  line                     Line?                    @relation(fields: [lineId], references: [id])
   plannedQuantity          Int
   labelPackSize            Int
   projectModelAllocationId String?
@@ -616,6 +619,7 @@ model Batch {
   @@index([lotId])
   @@index([projectModelAllocationId])
   @@index([currentStageId])
+  @@index([lineId])
 }
 
 // Batch <-> Part cardinality is unconfirmed (domain foundation, Section 8) — modeled
@@ -865,6 +869,7 @@ model Line {
   displayOrder     Int
   isEnabled        Boolean  @default(true)
   operatorAssignments LineOperatorAssignment[]
+  batches          Batch[]
   rowVersion       Int      @default(1)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

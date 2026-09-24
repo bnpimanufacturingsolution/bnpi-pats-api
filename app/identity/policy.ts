@@ -3,30 +3,18 @@ import type { SubjectAssignmentRecord } from "./types";
 /**
  * Role-bundle → capability expansion (ABAC-lite).
  *
- * Four roles (2026-08 design):
+ * Three roles (planner removed 2026-09-24):
  * - admin   — full access (absorbs former catalog-manager + inventory-controller)
- * - planner — planning + read monitoring + catalog read
  * - qi      — quality inspector (IQC + QC): quality + reconciliation resolve
  * - operator— floor staff: execution, inventory, station encode
  *
  * Line Leader is NOT a role — operator + daily-metrics.encode via LineLeaderAssignment.
+ * Unknown bundle keys expand to [] (fail closed).
  *
  * Quality staging (Journey D): stage scope is QualityStageAssignment (fail-closed),
  * not this map.
  */
 export const ROLE_BUNDLE_CAPABILITIES: Readonly<Record<string, readonly string[]>> = Object.freeze({
-	planner: [
-		"planning.read",
-		"planning.manage",
-		"material-requirement.manage",
-		// Planner may enter Manufacturing for read monitoring; encode stays off by default.
-		"monitoring.read",
-		"catalog.read",
-		// Production summary read (dashboard / line report) — planner is a read-mostly
-		// planning + monitoring role that views the production picture, not the full
-		// floor-directory execution.read surface.
-		"dashboard.read",
-	],
 	admin: [
 		// Catalog (former catalog-manager)
 		"catalog.read",

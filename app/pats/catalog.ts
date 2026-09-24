@@ -133,12 +133,14 @@ export function catalogController(
 				where: workspaceId
 					? { id: productId, projects: { some: { workspaceId } } }
 					: { id: productId },
-				include: {
-					models: {
-						orderBy: { modelNumber: "asc" },
-						include: { modelParts: true },
+			include: {
+				models: {
+					orderBy: { modelNumber: "asc" },
+					include: {
+						modelParts: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
 					},
 				},
+			},
 			});
 
 			if (!product) {

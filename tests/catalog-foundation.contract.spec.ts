@@ -379,6 +379,13 @@ describe("catalog model-part planned cycle time", () => {
 			});
 
 		expect(response.status).to.equal(200);
+		// The write response echoes the stored route — clients must not need a
+		// re-GET to render the saved steps.
+		expect(response.body.routingSteps).to.deep.equal([
+			{ stageId: "STG-INJECTION", subStageId: null },
+			{ stageId: "STG-DECORATION", subStageId: "SUB-FULL-SPRAY" },
+		]);
+		expect(response.body.createdAt).to.equal(date.toISOString());
 	});
 
 	it("rejects route steps naming unknown or ineligible stages", async () => {
