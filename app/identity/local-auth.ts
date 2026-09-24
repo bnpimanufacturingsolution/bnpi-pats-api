@@ -101,7 +101,7 @@ export function createLocalAuthDependencies(
 				return null;
 			}
 
-			// The sign-in box accepts "username or email": an identifier containing
+			// The sign-in box accepts "Email": an identifier containing
 			// `@` resolves through the subject email snapshot, everything else
 			// through the credential username. Both miss shapes return the same
 			// null so existence stays undisclosed either way.
