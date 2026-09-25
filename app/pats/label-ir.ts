@@ -11,6 +11,9 @@ export type LabelIr = {
 	operatorName?: string;
 	machineName?: string;
 	productLine?: string;
+	projectName?: string;
+	codename?: string;
+	serialNumber?: string;
 	qrValue?: string;
 	printedAt: string;
 	sequence: number;
@@ -88,13 +91,16 @@ export function renderZpl(ir: LabelIr): string {
 	const barcode = zplSafe(ir.barcodeValue);
 	const qrPayload = zplQrSafe(ir.qrValue || ir.barcodeValue);
 	const batch = zplSafe(ir.batchCode || ir.barcodeValue);
+	const lot = zplSafe(ir.lotCode || "").toUpperCase();
+	const serial = zplSafe(ir.serialNumber || ir.barcodeValue || "").toUpperCase();
 	const part = zplSafe(ir.partName || ir.partCode).toUpperCase();
 	const at = zplSafe(ir.atLabel || ir.toStepLabel || "STATION")
 		.toUpperCase()
 		.replace(/[^A-Z0-9]+/g, "-")
 		.replace(/(^-|-$)/g, "");
 	const from = zplSafe(ir.fromStepLabel || "EXTERNAL").toUpperCase();
-	const productLine = ir.productLine ? zplSafe(ir.productLine) : "";
+	const projectName = zplSafe(ir.projectName || ir.productLine || "").toUpperCase();
+	const codename = zplSafe(ir.codename || "").toUpperCase();
 	const operator = zplSafe((ir.operatorName || "—").toUpperCase());
 	const machine = zplSafe((ir.machineName || "—").toUpperCase());
 	const header = `${at} MANUAL`;
@@ -104,11 +110,11 @@ export function renderZpl(ir: LabelIr): string {
 	if (heightMm >= 100) {
 		const labelWidth = mm(widthMm);
 		const labelHeight = mm(heightMm);
-		// On HPRT Glory-L, qrMag=5 produces ~35mm QR code (matching 35% in UI preview)
+		// On HPRT Glory-L, qrMag=7 produces ~35mm QR code (matching 35% in UI preview)
 		const qrMag = 7; 
 		const qrX = Math.round((labelWidth - mm(35)) / 2); // Center a 35mm QR code
 
-		return [
+		const lines: string[] = [
 			"^XA",
 			`^PW${labelWidth}`,
 			`^LL${labelHeight}`,
@@ -118,33 +124,63 @@ export function renderZpl(ir: LabelIr): string {
 			`^FO0,${mm(8)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FD${header}^FS`,
 			`^FO${mm(6)},${mm(14)}^GB${mm(widthMm - 12)},${mm(0.3)},2^FS`,
 			
-			// QR Code (centered)
-			`^FO${qrX},${mm(20)}^BQN,2,${qrMag}^FDQA,${qrPayload}^FS`,
-			
-			// Identity Block (Centered, matching UI flex layout Y-coordinates)
-			`^FO0,${mm(60)}^FB${labelWidth},1,0,C^A0N,${mm(4)},${mm(4)}^FD${batch}^FS`,
-			`^FO0,${mm(66)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FDFROM: ${from}^FS`,
-			productLine
-				? `^FO0,${mm(72)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FD${productLine}^FS`
-				: "",
-			
-			// Part Name
-			`^FO0,${mm(78)}^FB${labelWidth},2,5,C^A0N,${mm(5)},${mm(5)}^FD${part}^FS`,
-			
-			// Grid Border
+			// QR Code (centered, moved down for balanced vertical distribution)
+			`^FO${qrX},${mm(24)}^BQN,2,${qrMag}^FDQA,${qrPayload}^FS`,
+		];
+
+		let currentY = 64;
+
+		// 1. Batch Code
+		lines.push(`^FO0,${mm(currentY)}^FB${labelWidth},1,0,C^A0N,${mm(4)},${mm(4)}^FD${batch}^FS`);
+		currentY += 5.5;
+
+		// 2. Lot and Serial Number
+		const lotText = lot ? `LOT: ${lot}` : "";
+		const snText = serial && serial !== batch ? `S/N: ${serial}` : "";
+		if (lotText && snText) {
+			lines.push(`^FO0,${mm(currentY)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FD${lotText}   |   ${snText}^FS`);
+			currentY += 5;
+		} else if (lotText) {
+			lines.push(`^FO0,${mm(currentY)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FD${lotText}^FS`);
+			currentY += 5;
+		} else if (snText) {
+			lines.push(`^FO0,${mm(currentY)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FD${snText}^FS`);
+			currentY += 5;
+		}
+
+		// 3. Project Name
+		if (projectName) {
+			lines.push(`^FO0,${mm(currentY)}^FB${labelWidth},1,0,C^A0N,${mm(3.5)},${mm(3.5)}^FDPROJECT: ${projectName}^FS`);
+			currentY += 6;
+		}
+
+		// 4. Part Name
+		lines.push(`^FO0,${mm(currentY)}^FB${labelWidth},2,5,C^A0N,${mm(5)},${mm(5)}^FD${part}^FS`);
+
+		// Bottom Grid Border & Metadata
+		lines.push(
 			`^FO${mm(6)},${mm(125)}^GB${mm(widthMm - 12)},${mm(0.3)},2^FS`,
-			
-			// Bottom Grid Data (Restored)
 			`^FO${mm(L.pad)},${mm(130)}^A0N,${mm(3)},${mm(3)}^FDQUANTITY^FS`,
 			`^FO${mm(L.pad)},${mm(135)}^A0N,${mm(6)},${mm(6)}^FD${qty}^FS`,
-			
-			`^FO${mm(L.col2X)},${mm(130)}^A0N,${mm(3)},${mm(3)}^FDOPERATOR^FS`,
-			`^FO${mm(L.col2X)},${mm(134)}^A0N,${mm(4)},${mm(4)}^FD${operator}^FS`,
-			
-			`^FO${mm(L.pad)},${mm(142)}^A0N,${mm(3)},${mm(3)}^FDMACHINE^FS`,
-			`^FO${mm(L.pad)},${mm(146)}^A0N,${mm(4)},${mm(4)}^FD${machine}^FS`,
-			"^XZ",
-		].join("\n");
+		);
+
+		const isInjectionLabel =
+			/injection/i.test(ir.atLabel ?? "") ||
+			/injection/i.test(ir.toStepLabel ?? "") ||
+			/injection/i.test(ir.fromStepLabel ?? "");
+
+		if (isInjectionLabel && (ir.operatorName || ir.machineName)) {
+			lines.push(
+				`^FO${mm(L.col2X)},${mm(130)}^A0N,${mm(3)},${mm(3)}^FDOPERATOR^FS`,
+				`^FO${mm(L.col2X)},${mm(134)}^A0N,${mm(4)},${mm(4)}^FD${operator}^FS`,
+				`^FO${mm(L.pad)},${mm(142)}^A0N,${mm(3)},${mm(3)}^FDMACHINE^FS`,
+				`^FO${mm(L.pad)},${mm(146)}^A0N,${mm(4)},${mm(4)}^FD${machine}^FS`,
+			);
+		}
+
+		lines.push("^XZ");
+
+		return lines.join("\n");
 	}
 
 	const width = mm(widthMm);
@@ -155,18 +191,36 @@ export function renderZpl(ir: LabelIr): string {
 	const title = Math.min(48, Math.max(24, Math.round(height * 0.12)));
 	const body = Math.min(28, Math.max(18, Math.round(height * 0.08)));
 
-	return [
+	const smallCommands: string[] = [
 		"^XA",
 		`^PW${width}`,
 		`^LL${height}`,
 		"^CI28",
-		`^FO${margin},${margin}^BQN,2,${qrMag}^FDQA,${barcode}^FS`,
+		`^FO${margin},${margin}^BQN,2,${qrMag}^FDQA,${qrPayload}^FS`,
 		`^FO${textX},${margin}^A0N,${title},${title}^FD${batch}^FS`,
-		`^FO${textX},${margin + title + 6}^A0N,${body},${body}^FD${from}^FS`,
-		`^FO${textX},${margin + title + body + 12}^A0N,${body},${body}^FD${part}^FS`,
-		`^FO${textX},${margin + title + body * 2 + 18}^A0N,${title},${title}^FD${qty}^FS`,
+	];
+
+	let subY = margin + title + 4;
+	if (lot) {
+		smallCommands.push(`^FO${textX},${subY}^A0N,${body},${body}^FDLOT: ${lot}^FS`);
+		subY += body + 4;
+	}
+	if (projectName) {
+		smallCommands.push(`^FO${textX},${subY}^A0N,${body},${body}^FDPROJECT: ${projectName}^FS`);
+		subY += body + 4;
+	}
+	if (codename) {
+		smallCommands.push(`^FO${textX},${subY}^A0N,${body},${body}^FDCODE: ${codename}^FS`);
+		subY += body + 4;
+	}
+	smallCommands.push(
+		`^FO${textX},${subY}^A0N,${body},${body}^FD${from}^FS`,
+		`^FO${textX},${subY + body + 4}^A0N,${body},${body}^FD${part}^FS`,
+		`^FO${textX},${subY + body * 2 + 8}^A0N,${title},${title}^FD${qty}^FS`,
 		"^XZ",
-	].join("\n");
+	);
+
+	return smallCommands.join("\n");
 }
 
 export function renderTspl(ir: LabelIr): string {
@@ -176,9 +230,12 @@ export function renderTspl(ir: LabelIr): string {
 	const part = tsplSafe(ir.partName || ir.partCode);
 	const from = tsplSafe(ir.fromStepLabel);
 	const to = tsplSafe(ir.toStepLabel);
+	const projectName = tsplSafe(ir.projectName || ir.productLine || "");
+	const codename = tsplSafe(ir.codename || "");
+	const serial = tsplSafe(ir.serialNumber || ir.barcodeValue || "");
 
 	const widthMm = clampGloryLWidthMm(ir.widthMm);
-	return [
+	const lines = [
 		`SIZE ${widthMm} mm, ${ir.heightMm} mm`,
 		"GAP 2 mm, 0",
 		"DENSITY 8",
@@ -186,14 +243,18 @@ export function renderTspl(ir: LabelIr): string {
 		"CLS",
 		`QRCODE 20,20,L,6,A,0,"${barcode}"`,
 		`TEXT 220,20,"3",0,1,1,"${batch}"`,
-		`TEXT 220,60,"2",0,1,1,"${lot}"`,
-		`TEXT 220,90,"2",0,1,1,"${part}"`,
-		`TEXT 220,120,"3",0,1,1,"${ir.quantity} PCS"`,
+		lot ? `TEXT 220,48,"2",0,1,1,"LOT: ${lot}"` : "",
+		serial && serial !== batch ? `TEXT 220,68,"2",0,1,1,"S/N: ${serial}"` : "",
+		projectName ? `TEXT 220,88,"2",0,1,1,"PROJECT: ${projectName}"` : "",
+		codename ? `TEXT 220,108,"2",0,1,1,"CODENAME: ${codename}"` : "",
+		`TEXT 220,128,"2",0,1,1,"${part}"`,
+		`TEXT 220,155,"3",0,1,1,"${ir.quantity} PCS"`,
 		`TEXT 20,160,"2",0,1,1,"${from}"`,
 		`TEXT 20,190,"2",0,1,1,"${to}"`,
 		"PRINT 1",
 		"",
-	].join("\n");
+	];
+	return lines.filter(Boolean).join("\n");
 }
 
 export function renderLabel(language: string, ir: LabelIr): string {

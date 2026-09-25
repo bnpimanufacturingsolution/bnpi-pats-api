@@ -87,3 +87,22 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Start the application
 CMD ["node", "dist/server.js"]
+
+# DB init image: schema-push job for appliance Postgres (no app runtime).
+# Provides the `db-init` build target referenced by appliance/docker-compose.yml
+# and appliance/docker-compose.environments.yml. Push-only by contract: never
+# seed or pass --accept-data-loss on appliance DBs.
+FROM base AS db-init
+
+RUN apk add --no-cache libc6-compat openssl
+
+COPY package.json pnpm-lock.yaml ./
+
+# Full install (not --prod): the Prisma CLI is a devDependency and is required
+# for `prisma db push`.
+RUN pnpm install --frozen-lockfile --ignore-scripts --shamefully-hoist
+
+COPY prisma/ ./prisma/
+COPY scripts/ ./scripts/
+
+CMD ["npm", "run", "prisma-postgres:push"]

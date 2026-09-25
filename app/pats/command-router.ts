@@ -28,6 +28,33 @@ import type { SubjectAssignmentRecord } from "../identity/types";
 import { assertQualityStageAllowed } from "./quality-stage-scope";
 import { recordPrintJob } from "./print-job";
 import { allowUnauthenticatedDeskPrint, deliverDeskLabel } from "./print-desk";
+import { GLORY_L_DEFAULTS } from "./label-ir";
+import { setDeprecationHeaders } from "../canonical/response-headers";
+
+// Station→Section rename (2026-09-16) transitional bridge. The canonical paths
+// are /sections + sectionId/sectionCode; the legacy /stations + stationId/
+// stationCode aliases below are TRANSITIONAL per the endpoint design standard
+// §7 and emit Deprecation/Sunset headers. Sunset is ≥90 days after first
+// release of the canonical paths. Request bodies accept both spellings and
+// prefer the canonical one when both are present.
+const SECTION_LEGACY_SUNSET = new Date("2027-06-30T00:00:00Z");
+
+function legacyStationHeaders(req: Request, extra: Record<string, string> = {}): Record<string, string> {
+	if (!isLegacyStationPath(req)) return { ...extra };
+	const target = {
+		headers: {} as Record<string, string>,
+		setHeader(name: string, value: string) {
+			this.headers[name] = value;
+		},
+	};
+	setDeprecationHeaders(target, SECTION_LEGACY_SUNSET);
+	return { ...extra, ...target.headers };
+}
+
+function isLegacyStationPath(req: Request): boolean {
+	const path = req.baseUrl + req.path;
+	return /(^|\/)stations(\/|$)/.test(path);
+}
 
 const decimalString = z.string().trim().regex(/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/, "Must be a non-negative decimal with up to 6 places.");
 
@@ -134,6 +161,10 @@ const deskPrintSchema = z.object({
 	operatorName: z.string().trim().max(120).optional(),
 	machineName: z.string().trim().max(160).optional(),
 	qrValue: z.string().trim().max(600).optional(),
+	projectName: z.string().trim().max(160).optional(),
+	productLine: z.string().trim().max(160).optional(),
+	codename: z.string().trim().max(160).optional(),
+	serialNumber: z.string().trim().max(160).optional(),
 	widthMm: z.number().positive().optional(),
 	heightMm: z.number().positive().optional(),
 });
@@ -965,11 +996,15 @@ export function commandRouter(
 				operatorName: body.operatorName ?? "",
 				machineName: body.machineName ?? "",
 				qrValue: body.qrValue ?? body.barcodeValue,
+				projectName: body.projectName ?? body.productLine,
+				productLine: body.productLine ?? body.projectName,
+				codename: body.codename ?? body.partCode,
+				serialNumber: body.serialNumber ?? body.barcodeValue,
 				printedAt: new Date().toISOString(),
 				sequence: 1,
-				widthMm: body.widthMm ?? 102,
-				heightMm: body.heightMm ?? 152,
-				dpi: 300,
+				widthMm: body.widthMm ?? GLORY_L_DEFAULTS.widthMm,
+				heightMm: body.heightMm ?? GLORY_L_DEFAULTS.heightMm,
+				dpi: GLORY_L_DEFAULTS.dpi,
 			});
 			res.status(result.status === "FAILED" ? 503 : 200).json({
 				status: result.status,
