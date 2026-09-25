@@ -1,6 +1,6 @@
 import { afterEach } from "mocha";
 import { expect } from "chai";
-import { deliverDeskLabel } from "../app/pats/print-desk";
+import { deliverDeskLabel, deskStationFromEnv } from "../app/pats/print-desk";
 import { GLORY_L_DEFAULTS } from "../app/pats/label-ir";
 
 describe("deliverDeskLabel", () => {
@@ -12,6 +12,14 @@ describe("deliverDeskLabel", () => {
 		else process.env.PATS_PRINTER_WINDOWS_NAME = previousWin;
 		if (previousNet === undefined) delete process.env.PATS_PRINTER_ADDRESS;
 		else process.env.PATS_PRINTER_ADDRESS = previousNet;
+	});
+
+	it("uses GLORY_L_DEFAULTS for default paper dimensions", () => {
+		const station = deskStationFromEnv();
+		expect(station.labelWidthMm).to.equal(GLORY_L_DEFAULTS.widthMm);
+		expect(station.labelHeightMm).to.equal(GLORY_L_DEFAULTS.heightMm);
+		expect(station.labelWidthMm).to.equal(100);
+		expect(station.labelHeightMm).to.equal(150);
 	});
 
 	it("fails closed when no desk printer is configured", async () => {
