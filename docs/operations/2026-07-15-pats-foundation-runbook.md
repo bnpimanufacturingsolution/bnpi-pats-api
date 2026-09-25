@@ -28,8 +28,32 @@ Apply the isolated PATS migration before using persistence-backed identity or ca
 
 ```powershell
 $env:PATS_DATABASE_URL = "postgresql://pats:pats@localhost:55432/pats"
-pnpm exec prisma migrate deploy --schema prisma/pats/schema.prisma
+pnpm exec prisma migrate deploy --schema prisma/pats
 ```
+
+Before applying the app-backed Demand/PMRS retirement migration
+`20260925160000_retire_unused_demand_pmrs`, take a coordinated backup and record the rows that it
+will delete or detach. D-038 authorizes retirement, but does not make an uninspected database safe
+to migrate:
+
+```sql
+SELECT 'PlanDemandAllocation' AS source_table, count(*) AS row_count FROM "PlanDemandAllocation"
+UNION ALL
+SELECT 'Pmrs', count(*) FROM "Pmrs"
+UNION ALL
+SELECT 'MaterialRequirement', count(*) FROM "MaterialRequirement";
+
+SELECT count(*) AS linked_inventory_transactions
+FROM "InventoryTransaction"
+WHERE "materialRequirementId" IS NOT NULL;
+
+SELECT count(*) AS model_allocations_with_demand_dimensions
+FROM "ProjectModelAllocation"
+WHERE "marketRegion" IS NOT NULL OR "demandPurpose" IS NOT NULL;
+```
+
+If counts show records beyond the disposable/provisional seed scope, stop and reconcile/export those
+records before applying the migration. The migration has not been applied by this work.
 
 Local accounts are created only through the explicit operator bootstrap command. There is no
 automatic administrator or SSO/OIDC bootstrap:

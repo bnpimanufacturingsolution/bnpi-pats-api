@@ -85,6 +85,18 @@ paths:
       tags: [PATS Configuration]
       x-required-capability: execution.read
       responses: { '200': { $ref: '#/components/responses/CollectionRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
+  /production-lines:
+    get:
+      operationId: productionLineCollectionGet
+      summary: Read production-line umbrellas for the Section tree
+      description: A ProductionLine owns Sections; multiple Sections may belong to one line. The collection carries no Station identity; a StationScreen is the published state of a Line.
+      tags: [PATS Configuration]
+      x-required-capability: execution.read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - { name: search, in: query, schema: { type: string, minLength: 1 } }
+      responses: { '200': { $ref: '#/components/responses/PaginatedRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
   /lines:
     get:
       operationId: lineCollectionGet
@@ -138,6 +150,7 @@ paths:
     get:
       operationId: productionPlanGet
       summary: Read a production plan and its planning snapshot
+      description: Returns the active Project snapshot, model quantities, Parts, Parts List versions, Lot, and execution lineage. Demand allocation, PMRS placeholder, and MaterialRequirement properties were removed by the user-approved 2026-09-25 v1 scope amendment.
       tags: [PATS Planning]
       x-required-capability: planning.read
       parameters: [{ $ref: '#/components/parameters/PlanId' }]

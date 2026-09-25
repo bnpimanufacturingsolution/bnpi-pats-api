@@ -329,5 +329,113 @@
       "hasSearchParam": false,
       "hasSortParams": false
     }
+  },
+  {
+    "id": "productionLineCollectionGet",
+    "method": "GET",
+    "url": "/production-lines",
+    "summary": "Read production-line umbrellas for the Section tree",
+    "description": "A ProductionLine owns Sections; multiple Sections may belong to one line. The collection carries no Station identity; a StationScreen is the published state of a Line.",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "page",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      {
+        "name": "limit",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      {
+        "name": "search",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "Paginated production-line summaries",
+        "contentTypes": []
+      },
+      "400": {
+        "description": "Malformed or incomplete collection query",
+        "contentTypes": []
+      },
+      "403": {
+        "description": "execution.read capability required",
+        "contentTypes": []
+      },
+      "503": {
+        "description": "Production-line data unavailable",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": true,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "productionLineCreate",
+    "method": "POST",
+    "url": "/production-lines",
+    "summary": "Create a production-line umbrella for the Section tree",
+    "description": "A ProductionLine owns Sections; multiple Sections may belong to one line. The created line has no Stations yet. Line codes are unique within the deployment.",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "description": "Production line created",
+        "contentTypes": []
+      },
+      "403": {
+        "description": "operations.manage capability required",
+        "contentTypes": []
+      },
+      "409": {
+        "description": "Duplicate line code or idempotency conflict",
+        "contentTypes": []
+      },
+      "422": {
+        "description": "Invalid production-line payload",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
   }
 ]

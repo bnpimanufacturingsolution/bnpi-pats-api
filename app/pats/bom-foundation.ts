@@ -441,6 +441,8 @@ export function bomFoundationRouter(
 	 *   post:
 	 *     operationId: catalogBomDefinitionCreate
 	 *     summary: Create a draft BOM revision
+	 *     description: Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.
+	 *     deprecated: true
 	 *     tags: [PATS Catalog]
 	 *     security:
 	 *       - bearerAuth: []
@@ -516,6 +518,8 @@ export function bomFoundationRouter(
 	 *   post:
 	 *     operationId: catalogBomLineCreate
 	 *     summary: Add an ordered model-part line to a draft BOM
+	 *     description: Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.
+	 *     deprecated: true
 	 *     tags: [PATS Catalog]
 	 *     security:
 	 *       - bearerAuth: []
@@ -616,6 +620,8 @@ export function bomFoundationRouter(
 	 *   patch:
 	 *     operationId: catalogBomDefinitionPatch
 	 *     summary: Update draft BOM evidence status
+	 *     description: Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.
+	 *     deprecated: true
 	 *     tags: [PATS Catalog]
 	 *     security:
 	 *       - bearerAuth: []
@@ -668,6 +674,8 @@ export function bomFoundationRouter(
 	 *   patch:
 	 *     operationId: catalogBomLinePatch
 	 *     summary: Correct a draft BOM line without silent quantity conversion
+	 *     description: Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.
+	 *     deprecated: true
 	 *     tags: [PATS Catalog]
 	 *     security:
 	 *       - bearerAuth: []

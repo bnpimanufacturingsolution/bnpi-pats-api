@@ -440,6 +440,8 @@ export function processRouteFoundationRouter(
 	 *   post:
 	 *     operationId: catalogProcessRouteCreate
 	 *     summary: Create a draft process route revision
+	 *     description: Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.
+	 *     deprecated: true
 	 *     tags: [PATS Catalog]
 	 *     security:
 	 *       - bearerAuth: []
@@ -510,6 +512,8 @@ export function processRouteFoundationRouter(
 	 *   post:
 	 *     operationId: catalogRouteStageCreate
 	 *     summary: Add an ordered stage to a draft process route
+	 *     description: Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.
+	 *     deprecated: true
 	 *     tags: [PATS Catalog]
 	 *     security:
 	 *       - bearerAuth: []
@@ -587,6 +591,8 @@ export function processRouteFoundationRouter(
 	 *   patch:
 	 *     operationId: catalogProcessRoutePatch
 	 *     summary: Update draft process route evidence status
+	 *     description: Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.
+	 *     deprecated: true
 	 *     tags: [PATS Catalog]
 	 *     security:
 	 *       - bearerAuth: []
@@ -638,6 +644,8 @@ export function processRouteFoundationRouter(
 	 *   patch:
 	 *     operationId: catalogRouteStagePatch
 	 *     summary: Correct draft route stage order or metadata
+	 *     description: Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.
+	 *     deprecated: true
 	 *     tags: [PATS Catalog]
 	 *     security:
 	 *       - bearerAuth: []

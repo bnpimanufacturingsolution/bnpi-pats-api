@@ -49,10 +49,10 @@ type DomainReadDatabase = Pick<
 	| "qualityDecision"
 	| "qualityStageAssignment"
 	| "printJob"
-	| "planDemandAllocation"
 	| "lot"
 	| "part"
 	| "section"
+	| "productionLine"
 >;
 
 const PROBLEM_TYPE = {
@@ -140,6 +140,11 @@ function dashboardProgress(
 	openViolationRows: Array<{ batchId: string; attemptedStageId: string }>,
 ) {
 	const blockedBatchIds = new Set(openViolationRows.map((violation) => violation.batchId));
+	// Only real floor stages count toward progress. Release-minted batches sit at
+	// the STG-PROJECTS pre-floor marker (no Stage row); counting them as active
+	// yields segment-less rows (or 100% "Not started") that crowd out projects
+	// with real stage progress in the top-5 widget slice.
+	const knownStageIds = new Set(stageRows.map((stage) => stage.id));
 	const projects = new Map<
 		string,
 		{
@@ -166,6 +171,7 @@ function dashboardProgress(
 		const quantity = Number(batch.positionProjection?.quantityMagnitude ?? batch.plannedQuantity);
 		const stageId = batch.positionProjection?.stageId;
 		if (!stageId || !Number.isFinite(quantity)) continue;
+		if (!knownStageIds.has(stageId)) continue;
 		const stage = project.stages.get(stageId) ?? { healthy: 0, blocked: 0 };
 		const isBlocked = blockedBatchIds.has(batch.id);
 		if (isBlocked) stage.blocked += quantity;
@@ -194,7 +200,12 @@ function dashboardProgress(
 			if (remaining > 0) segments.push({ kind: "remaining", stageId: "remaining", stageName: "Not started", quantity: remaining });
 			return { projectId, projectName: project.projectName, productName: project.productName, plannedQuantity: project.plannedQuantity, activeQuantity: project.activeQuantity, activeBatchCount: project.activeBatchCount, segments };
 		})
-		.sort((left, right) => right.activeBatchCount - left.activeBatchCount || left.productName.localeCompare(right.productName));
+		.filter((row) => row.segments.length > 0)
+		.sort((left, right) => {
+			const leftProgress = left.segments.some((segment) => segment.kind !== "remaining") ? 1 : 0;
+			const rightProgress = right.segments.some((segment) => segment.kind !== "remaining") ? 1 : 0;
+			return rightProgress - leftProgress || right.activeBatchCount - left.activeBatchCount || left.productName.localeCompare(right.productName);
+		});
 }
 
 function reportDateKey(value: Date): string {
@@ -299,7 +310,7 @@ export function domainReadRouter(
 						createdAt: true,
 						releasedAt: true,
 						product: { select: { productName: true } },
-						lots: { select: { id: true } },
+						lot: { select: { id: true } },
 					},
 				}),
 			]);
@@ -313,7 +324,7 @@ export function domainReadRouter(
 					requiredProductionQuantity: plan.requiredProductionQuantity,
 					productId: plan.productId,
 					productName: plan.product?.productName ?? null,
-					lotCount: plan.lots.length,
+					lotCount: plan.lot ? 1 : 0,
 					rowVersion: plan.rowVersion,
 					createdAt: plan.createdAt.toISOString(),
 					releasedAt: date(plan.releasedAt),
@@ -342,13 +353,9 @@ export function domainReadRouter(
 					product: { select: { id: true, productCode: true, productName: true } },
 					productSpecification: true,
 					modelAllocations: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { model: { select: { id: true, modelNumber: true, modelName: true } } } },
-					demandAllocations: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { model: { select: { id: true, modelNumber: true, modelName: true } } } },
-					materialRequirements: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
 					parts: { orderBy: [{ partCode: "asc" }, { id: "asc" }] },
 					partsLists: { orderBy: [{ version: "desc" }, { id: "asc" }], include: { steps: { orderBy: [{ stepOrder: "asc" }, { id: "asc" }], include: { part: { select: { partCode: true, partName: true } } } } } },
-					pmrs: true,
-					lots: {
-						orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+					lot: {
 						include: {
 							partAllocations: { include: { part: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
 							batches: { include: { parts: true, positionProjection: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
@@ -387,17 +394,6 @@ export function domainReadRouter(
 					lifecycleStatus: allocation.lifecycleStatus,
 					rowVersion: allocation.rowVersion,
 				})),
-				allocations: plan.demandAllocations.map((allocation) => ({
-					allocationId: allocation.id,
-					modelId: allocation.modelId,
-					model: allocation.model,
-					marketRegion: allocation.marketRegion,
-					demandPurpose: allocation.demandPurpose,
-					quantityMagnitude: decimal(allocation.quantityMagnitude),
-					quantityUom: allocation.quantityUom,
-					usageBasis: allocation.usageBasis,
-					lifecycleStatus: allocation.lifecycleStatus,
-				})),
 				parts: plan.parts,
 				partsListVersions: plan.partsLists.map((partsList) => ({
 					partsListVersionId: partsList.id,
@@ -406,34 +402,25 @@ export function domainReadRouter(
 					publishedAt: date(partsList.publishedAt),
 					routeSteps: partsList.steps.map(routeResource),
 				})),
-				materialRequirements: plan.materialRequirements.map((requirement) => ({
-					materialRequirementId: requirement.id,
-					partId: requirement.partId,
-					quantityMagnitude: decimal(requirement.quantityMagnitude),
-					quantityUom: requirement.quantityUom,
-					status: requirement.status,
-					externalReference: requirement.externalReference,
-				})),
-				pmrsReference: plan.pmrs,
-				lots: plan.lots.map((lot) => ({
-					lotId: lot.id,
-					lotCode: lot.lotCode,
-					lotName: lot.lotName,
-					partsListId: lot.partsListId,
-					partsListVersion: lot.partsListVersion,
-					status: lot.status,
-					requiredProductionQuantity: lot.requiredProductionQuantity,
-					labelPackSize: lot.labelPackSize,
-					quantityMagnitude: decimal(lot.quantityMagnitude),
-					quantityUom: lot.quantityUom,
-					partAllocations: lot.partAllocations.map((allocation) => ({
+				lots: plan.lot ? [{
+					lotId: plan.lot.id,
+					lotCode: plan.lot.lotCode,
+					lotName: plan.lot.lotName,
+					partsListId: plan.lot.partsListId,
+					partsListVersion: plan.lot.partsListVersion,
+					status: plan.lot.status,
+					requiredProductionQuantity: plan.lot.requiredProductionQuantity,
+					labelPackSize: plan.lot.labelPackSize,
+					quantityMagnitude: decimal(plan.lot.quantityMagnitude),
+					quantityUom: plan.lot.quantityUom,
+					partAllocations: plan.lot.partAllocations.map((allocation) => ({
 						lotPartAllocationId: allocation.id,
 						partId: allocation.partId,
 						partCode: allocation.part.partCode,
 						quantityMagnitude: decimal(allocation.quantityMagnitude),
 						quantityUom: allocation.quantityUom,
 					})),
-					batches: lot.batches.map((batch) => ({
+					batches: plan.lot.batches.map((batch) => ({
 						batchId: batch.id,
 						batchCode: batch.batchCode,
 						barcodeValue: batch.barcodeValue,
@@ -442,7 +429,7 @@ export function domainReadRouter(
 						parts: batch.parts,
 						position: batch.positionProjection,
 					})),
-				})),
+				}] : [],
 			});
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production plan data is unavailable.");
@@ -518,14 +505,79 @@ export function domainReadRouter(
 							orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
 							skip,
 							take: page.limit,
-							include: { boundSteps: true },
+							include: { boundSteps: true, productionLine: { select: { id: true, lineCode: true, name: true } } },
 					  }),
 			]);
 			applyLegacyStationHeaders(req, res);
-			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(stations.map((s) => ({ ...s, stationCode: s.sectionCode })), page, totalItems));
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(stations.map((s) => ({ ...s, stationCode: s.sectionCode, productionLineId: (s as { productionLineId?: string | null }).productionLineId ?? null })), page, totalItems));
 		} catch (error) {
 			console.error("[domain-read] GET /sections failed:", error);
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS section configuration is unavailable.");
+		}
+	});
+
+	/**
+	 * @openapi
+	 * /api/v1/production-lines:
+	 *   get:
+	 *     operationId: productionLineCollectionGet
+	 *     summary: List production-line umbrellas for the Section tree
+	 *     description: A ProductionLine owns Sections; multiple Sections may belong to one line. The collection carries no Station identity.
+	 *     tags: [PATS Floor]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: query
+	 *         name: search
+	 *         schema: { type: string }
+	 *       - in: query
+	 *         name: page
+	 *         schema: { type: integer, minimum: 1, default: 1 }
+	 *       - in: query
+	 *         name: limit
+	 *         schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+	 *     responses:
+	 *       200: { description: Paginated production-line summaries }
+	 *       400: { description: Malformed or incomplete collection query }
+	 *       401: { description: Authentication required }
+	 *       403: { description: operations.manage capability required }
+	 *       503: { description: Production-line data unavailable }
+	 */
+	router.get("/production-lines", requireCapability("execution.read"), async (req, res) => {
+		const page = pagination(req, res, ["search"]);
+		if (!page) return;
+		try {
+			const requestQuery = query(req);
+			const searchRaw = requestQuery.search;
+			const searchText = (Array.isArray(searchRaw) ? searchRaw[0] : searchRaw)?.toString().trim() ?? "";
+			const skip = (page.page - 1) * page.limit;
+			const whereClause = searchText
+				? {
+						OR: [
+							{ name: { contains: searchText, mode: "insensitive" as const } },
+							{ lineCode: { contains: searchText, mode: "insensitive" as const } },
+						],
+				  }
+				: undefined;
+			const [totalItems, lines] = await Promise.all([
+				database.productionLine.count({ where: whereClause }),
+				database.productionLine.findMany({
+					where: whereClause,
+					orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+					skip,
+					take: page.limit,
+					select: { id: true, lineCode: true, name: true, displayOrder: true, isEnabled: true },
+				}),
+			]);
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(lines.map((line) => ({
+				productionLineId: line.id,
+				lineCode: line.lineCode,
+				name: line.name,
+				displayOrder: line.displayOrder,
+				isEnabled: line.isEnabled,
+			})), page, totalItems));
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production-line data is unavailable.");
 		}
 	});
 
@@ -904,7 +956,7 @@ export function domainReadRouter(
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(processes.map((p) => ({
 				id: p.id,
 				subStageId: p.subStageId,
-				subStageName: "subStage" in p ? p.subStage.name : p.subStageName,
+				subStageName: "subStage" in p ? (p.subStage?.name ?? null) : p.subStageName,
 				name: p.name,
 				displayOrder: p.displayOrder,
 				isEnabled: p.isEnabled,
@@ -1028,6 +1080,7 @@ export function domainReadRouter(
 				displayOrder: line.displayOrder,
 				isEnabled: line.isEnabled,
 				rowVersion: line.rowVersion,
+				stationScreen: line.isEnabled && Boolean(line.activeLeader ?? line.assignedLeader),
 			})), page, totalItems));
 		} catch (error) {
 			console.error("[domain-read] GET /lines failed:", error);
@@ -1074,8 +1127,8 @@ export function domainReadRouter(
 			const stuckThreshold = new Date(Date.now() - 8 * 60 * 60 * 1000);
 			const productionDate = new Date().toISOString().slice(0, 10);
 			const [openViolations, stuckWip, todaysSheets] = await Promise.all([
-				database.routingViolation.count({ where: { status: "OPEN", attemptedSubStageId: subStageId } }),
-				database.batchPositionProjection.count({ where: { subStageId, updatedAt: { lt: stuckThreshold } } }),
+				subStageId ? database.routingViolation.count({ where: { status: "OPEN", attemptedSubStageId: subStageId } }) : Promise.resolve(0),
+				subStageId ? database.batchPositionProjection.count({ where: { subStageId, updatedAt: { lt: stuckThreshold } } }) : Promise.resolve(0),
 				database.monitoringDailySheet.count({ where: { productionDate, workProcessId: line.workProcess.id } }),
 			]);
 			res.setHeader("Cache-Control", "no-store").json({

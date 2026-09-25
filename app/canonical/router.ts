@@ -15,6 +15,9 @@ import {
 import type { LocalAuthDependencies } from "../identity/local-auth";
 import { effectiveCapabilities } from "../identity/policy";
 import { hasCapability } from "../identity/policy";
+import { setDeprecationHeaders } from "./response-headers";
+
+const CATALOG_ROUTE_SUNSET = new Date("2027-01-01T00:00:00.000Z");
 
 const PROBLEM_TYPES = {
 	internalError: "urn:bandai:pats:problem:internal-error",
@@ -339,6 +342,19 @@ function sendCanonicalError(error: unknown, req: Request, res: Response): void {
 
 export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 	const router = Router();
+	const catalogRouteDeprecationHeaders: RequestHandler = (_req, res, next) => {
+		setDeprecationHeaders(res, CATALOG_ROUTE_SUNSET);
+		next();
+	};
+	router.use(
+		[
+			"/catalog/bom-definitions",
+			"/catalog/bom-lines",
+			"/catalog/process-routes",
+			"/catalog/route-stages",
+		],
+		catalogRouteDeprecationHeaders,
+	);
 	const healthHandler =
 		options.healthHandler ??
 		((_req: Request, res: Response) => {
@@ -662,6 +678,8 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 		 *   get:
 		 *     operationId: catalogBomDefinitionCollectionGet
 		 *     summary: List BOM definition revisions for a model
+		 *     description: Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.
+		 *     deprecated: true
 		 *     tags: [PATS Catalog]
 		 *     security:
 		 *       - bearerAuth: []
@@ -710,6 +728,8 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 		 *   get:
 		 *     operationId: catalogBomDefinitionGet
 		 *     summary: Read a BOM definition revision with ordered lines
+		 *     description: Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.
+		 *     deprecated: true
 		 *     tags: [PATS Catalog]
 		 *     security:
 		 *       - bearerAuth: []
@@ -745,6 +765,7 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 		const domainReadPrefixes = [
 			"/projects",
 			"/production-plans",
+			"/production-lines",
 			"/workflow-groups",
 			"/stages",
 			"/sub-stages",
@@ -785,6 +806,7 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 		const domainCommandPrefixes = [
 			"/projects",
 			"/production-plans",
+			"/production-lines",
 			"/stages",
 			"/sub-stages",
 			"/sections",

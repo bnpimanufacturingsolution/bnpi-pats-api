@@ -2602,6 +2602,8 @@
       "post": {
         "operationId": "catalogBomDefinitionCreate",
         "summary": "Create a draft BOM revision",
+        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
+        "deprecated": true,
         "tags": [
           "PATS Catalog"
         ],
@@ -2633,6 +2635,8 @@
       "get": {
         "operationId": "catalogBomDefinitionCollectionGet",
         "summary": "List BOM definition revisions for a model",
+        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
+        "deprecated": true,
         "tags": [
           "PATS Catalog"
         ],
@@ -2701,6 +2705,8 @@
       "post": {
         "operationId": "catalogBomLineCreate",
         "summary": "Add an ordered model-part line to a draft BOM",
+        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
+        "deprecated": true,
         "tags": [
           "PATS Catalog"
         ],
@@ -2734,6 +2740,8 @@
       "patch": {
         "operationId": "catalogBomDefinitionPatch",
         "summary": "Update draft BOM evidence status",
+        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
+        "deprecated": true,
         "tags": [
           "PATS Catalog"
         ],
@@ -2767,6 +2775,8 @@
       "get": {
         "operationId": "catalogBomDefinitionGet",
         "summary": "Read a BOM definition revision with ordered lines",
+        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
+        "deprecated": true,
         "tags": [
           "PATS Catalog"
         ],
@@ -2808,6 +2818,8 @@
       "patch": {
         "operationId": "catalogBomLinePatch",
         "summary": "Correct a draft BOM line without silent quantity conversion",
+        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
+        "deprecated": true,
         "tags": [
           "PATS Catalog"
         ],
@@ -2843,6 +2855,8 @@
       "post": {
         "operationId": "catalogProcessRouteCreate",
         "summary": "Create a draft process route revision",
+        "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
+        "deprecated": true,
         "tags": [
           "PATS Catalog"
         ],
@@ -2876,6 +2890,8 @@
       "post": {
         "operationId": "catalogRouteStageCreate",
         "summary": "Add an ordered stage to a draft process route",
+        "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
+        "deprecated": true,
         "tags": [
           "PATS Catalog"
         ],
@@ -2909,6 +2925,8 @@
       "patch": {
         "operationId": "catalogProcessRoutePatch",
         "summary": "Update draft process route evidence status",
+        "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
+        "deprecated": true,
         "tags": [
           "PATS Catalog"
         ],
@@ -2944,6 +2962,8 @@
       "patch": {
         "operationId": "catalogRouteStagePatch",
         "summary": "Correct draft route stage order or metadata",
+        "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
+        "deprecated": true,
         "tags": [
           "PATS Catalog"
         ],
@@ -3984,6 +4004,75 @@
           },
           "404": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422"
+          }
+        }
+      }
+    },
+    "/production-lines": {
+      "get": {
+        "operationId": "productionLineCollectionGet",
+        "summary": "Read production-line umbrellas for the Section tree",
+        "description": "A ProductionLine owns Sections; multiple Sections may belong to one line. The collection carries no Station identity; a StationScreen is the published state of a Line.",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedRead"
+          },
+          "400": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      },
+      "post": {
+        "operationId": "productionLineCreate",
+        "summary": "Create a production-line umbrella for the Section tree",
+        "description": "A ProductionLine owns Sections; multiple Sections may belong to one line. The created line has no Stations yet. Line codes are unique within the deployment.",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "operations.manage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
           },
           "409": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"

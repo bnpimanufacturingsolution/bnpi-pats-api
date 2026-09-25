@@ -170,6 +170,8 @@ describe("canonical BOM relationship writes", () => {
 			});
 
 		expect(definitionResponse.status).to.equal(201);
+		expect(definitionResponse.headers.deprecation).to.equal("true");
+		expect(definitionResponse.headers.sunset).to.equal("Fri, 01 Jan 2027 00:00:00 GMT");
 		expect(definitionResponse.body).to.include({
 			modelId: "model-a",
 			revision: 1,

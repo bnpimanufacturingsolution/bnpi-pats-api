@@ -133,7 +133,7 @@ in the cross-cutting design apply unless a row states a narrower rule.
 | Product writes and configuration publish/retire | Catalog | `catalog.manage`; object ownership and lifecycle | `201/204`; `If-Match` for mutable resources | Audit/outbox; published immutability and station mapping are D-005/D-008 |
 | `GET/POST /production-plans`, member/patch operations | Planning | `planning.read/author`; deployment-owned plan | `200/201/204`; `If-Match` and idempotency for create | Audit/outbox; aggregate noun is D-024 |
 | Parts-list versions and route steps | Planning | `planning.author/release`; plan ownership | `200/201`; release uses `If-Match` and idempotency | Published versions immutable; route publication rules remain open |
-| Lots | Planning | `planning.author`; plan and allocation lineage | `200/201`; create is idempotent | Audit/outbox; cardinality/timing are D-010 |
+| Lots | Planning | `planning.author`; plan and allocation lineage | `200/201`; create is idempotent; at most one Lot per plan and a second distinct create returns `409` | Audit/outbox; D-037 cardinality is confirmed; D-010 creation timing remains open |
 | Batches | Execution | `execution.read/record`; lot, plan, station, and deployment ownership | `200/201/204`; create is idempotent; lifecycle uses `If-Match` | Audit/outbox; terminal/rework policy is D-009 |
 | Stage events | Execution | `execution.record`; batch/route/station eligibility | `200/201`; idempotency required; append-only | Event, violation, audit, outbox, and position projection are atomic |
 | Inventory transactions | Inventory and Traceability | `inventory.record`; source/target and quantity policy | `200/201`; idempotency required; append-only | Ledger, variance, audit, outbox, and projection are atomic; D-020/D-021 |
@@ -437,3 +437,80 @@ or subject-preference/walkthrough persistence.
 - Any future schema implementation must use the reviewed expand/contract sequence: Gate 0 freeze,
   approved Prisma design, preflight/recovery evidence, additive expand, compatibility/backfill
   reconciliation, enforce, and only then contract. This pass authorizes none of those changes.
+
+## Project–Lot cardinality endpoint review (2026-09-25)
+
+- **Resource and scope:** `GET /api/v1/lots?production_plan_id={planId}` and
+  `POST /api/v1/production-plans/{planId}/lots` remain canonical Planning resources in the
+  server-resolved deployment context. The response contains zero or one Lot for a plan before
+  the accepted creation trigger and exactly one after it.
+- **Method and relationship:** `POST` creates the single Lot resource; a second distinct Lot
+  creation returns `409 Conflict`. Same-key/same-payload retries replay the original `201`
+  response. No verb path or second-level nesting is introduced.
+- **Contract and errors:** Creation remains `201 Created` with `Location`; the conflict is
+  RFC 9457 `application/problem+json` with a stable cardinality-conflict problem type. Read
+  authorization remains `planning.read`; create authorization remains `planning.author` with
+  plan ownership and deployment-scope checks.
+- **Concurrency and idempotency:** Lot creation uses `Idempotency-Key`; Lot lifecycle mutation,
+  if exposed later, uses `If-Match` and returns `412` on a stale version. The unique plan/Lot
+  database constraint is the final race-safe guard.
+- **Standards checked:** v1.2.1 §2.1 resource naming/identifiers, §3 method semantics, §4.1
+  shallow relationships, §5 collection filtering/pagination, §6 success/error/RFC 9457
+  responses, §7 versioning, §8 authorization, §9 concurrency, §10 JSON conventions, §11
+  idempotency, and §12 observability. No exception is required.
+- **OpenAPI and tests:** The implementation contract must update the Lot create conflict and
+  cardinality semantics, then validate focused success, duplicate-conflict, authorization,
+  retry replay, and same-key/different-payload cases before release.
+
+## BOM resource retirement (2026-09-25)
+
+The BOM UI and app adapter are dormant and removed from `bnpi-pats-app`. The server routes remain
+available during the transition period because they are public `/api/v1` resources and other
+consumers have not been ruled out.
+
+| Resource operations | Status | Deprecation behavior | Sunset |
+|---|---|---|---|
+| `GET /catalog/bom-definitions?model_id=...` | `TRANSITIONAL` | `Deprecation: true`; OpenAPI `deprecated: true` | 2027-01-01T00:00:00Z |
+| `GET /catalog/bom-definitions/{bomDefinitionId}` | `TRANSITIONAL` | `Deprecation: true`; OpenAPI `deprecated: true` | 2027-01-01T00:00:00Z |
+| `POST /catalog/bom-definitions`, `PATCH /catalog/bom-definitions/{bomDefinitionId}` | `TRANSITIONAL` | Existing auth, object checks, idempotency/ETag behavior; deprecation headers | 2027-01-01T00:00:00Z |
+| `POST /catalog/bom-lines`, `PATCH /catalog/bom-lines/{bomLineId}` | `TRANSITIONAL` | Existing cross-model checks, idempotency/ETag behavior; deprecation headers | 2027-01-01T00:00:00Z |
+
+The sunset provides more than the required 90-day window. BOM tables, enums, seed records, and
+evidence links remain until sunset and database preflight. No historical migration is edited; a
+later migration must explicitly reconcile/export existing rows before dropping the retired tables.
+The reviewed checklist and handoff are recorded in
+`docs/decisions/2026-09-25-bom-api-retirement-decision.md`.
+
+## Model ProcessRoute resource retirement (2026-09-25)
+
+The active app writes product route templates through `ModelPart.routingSteps` and plan execution
+routes through `PartsList` versions. It has no active consumer for the separate model-level
+`ProcessRoute`/`ProcessRouteStage` resource family. The API family remains temporarily available
+under the standard retirement window:
+
+| Resource operations | Status | Deprecation behavior | Sunset |
+|---|---|---|---|
+| `POST/PATCH /catalog/process-routes` | `TRANSITIONAL` | `Deprecation: true`; OpenAPI `deprecated: true` | 2027-01-01T00:00:00Z |
+| `POST/PATCH /catalog/route-stages` | `TRANSITIONAL` | `Deprecation: true`; OpenAPI `deprecated: true` | 2027-01-01T00:00:00Z |
+
+Operational `Stage`/`SubStage` resources remain active manufacturing route/execution identities;
+they are distinct from the app floor hierarchy Section → Process → Sub-process. After the sunset,
+removal of ProcessRoute tables/evidence enum values requires a separate migration preflight. D-039
+records the app evidence and review condition.
+
+## App-backed Project contract scope amendment (2026-09-25)
+
+Project remains active. The current Project detail contract retains product/specification,
+model-quantity allocations, Parts, Parts List versions, the single Lot, and execution lineage. It no
+longer exposes the unwired Demand/PMRS/MaterialRequirement projections.
+
+| Operation | Contract amendment | Unchanged behavior |
+|---|---|---|
+| `GET /api/v1/production-plans/{planId}` | Remove `allocations`, `materialRequirements`, and `pmrsReference` response properties | `200`, ETag, `planning.read`, Project/Lot/Parts List fields remain |
+| `POST /api/v1/production-plans/{planId}/model-allocations` | Remove `marketRegion` and `demandPurpose` request properties | Model identity, planned quantity/UOM/usage basis, `If-Match`, idempotency, auth remain |
+| `POST /api/v1/inventory-transactions` | Remove optional `materialRequirementId` request property | Receiving/Issuance transaction fields, authorization, append-only behavior, and idempotency remain |
+
+This is a user-approved case-specific exception to REST standard v1.2.1 §7 for these exact v1
+fields. Other v1 breaking changes still require a major version or their own explicit exception.
+The decision, consumer evidence, migration impact, and review condition are recorded as D-038 in
+`docs/decisions/2026-07-14-pats-api-design-decision-register.md`.

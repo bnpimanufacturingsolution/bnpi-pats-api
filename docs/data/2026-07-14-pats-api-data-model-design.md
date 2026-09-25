@@ -93,15 +93,14 @@ package uses `ProductionPlan`. This is a contract identity conflict, not a wordi
 | PartsListVersion | Planning | Opaque version ID; plan + monotonically increasing version | Inherits plan | Draft, published, superseded; published versions immutable |
 | RouteStep | Planning | Opaque step ID; parts-list version + plan part + positive order | Inherits route version | Immutable after version publication |
 | PlanPart | Planning | Opaque part ID; plan + part code unique; optional catalog lineage | Inherits plan | Draft, committed, retired; no mutation when referenced by active execution |
-| Lot | Planning | Opaque lot ID; immutable lot code; plan relation and route-version reference | Inherits plan | Planned, active, held, completed, cancelled |
-| LotPartAllocation | Planning | Opaque allocation ID; lot + plan-part relation; quantity and unit | Inherits lot | Planned, committed, closed; decision-neutral cardinality boundary |
+| Lot | Planning | Opaque lot ID; immutable lot code; exactly one plan relation and route-version reference | Inherits plan | Planned, active, held, completed, cancelled |
+| LotPartAllocation | Planning | Opaque allocation ID; lot + plan-part relation; quantity and unit | Inherits lot | Planned, committed, closed; controlled multi-Part grouping boundary |
 
-`LotPartAllocation` is the decision-neutral conceptual boundary for D-010. It permits a Lot to
-group one or more planned Parts with explicit quantities without pretending that the current
-draft's required `partId` is final. If stakeholders accept exactly one Part per Lot, the future
-schema can enforce one allocation; if controlled multi-part grouping is accepted, the same
-relation remains the source of truth. No write endpoint may expose either behavior as canonical
-until D-010 is accepted.
+Each Project/ProductionPlan has one Lot identity and at most one persisted Lot; a Lot always
+belongs to exactly one Project/ProductionPlan. The zero-Lot state is allowed only before the
+accepted Lot-creation trigger. `LotPartAllocation` remains the source of truth for a Lot's
+one or more planned Parts and their quantities. The current draft's required `Lot.partId` is not
+part of the target model.
 
 ### Execution
 
@@ -158,8 +157,8 @@ Catalog Product -> Models -> ModelParts
 WorkflowGroup -> Stages <-> SubStages
 Deployment context -> Catalog and Stations -> StationSteps
 PlanningAggregate -> allocations, specification snapshot, PMRS reference,
-                     PartsListVersions -> RouteSteps -> PlanParts,
-                     Lots -> LotPartAllocations
+                      PartsListVersions -> RouteSteps -> PlanParts,
+                      Lot -> LotPartAllocations
 Lot -> Batches -> BatchPartLines and StageEvents
 StageEvent -> RoutingViolation (zero or one source violation)
 Batch/Lot/PlanPart -> InventoryTransactions
@@ -246,6 +245,15 @@ The existing draft's required `Lot.partId`, denormalized `partName`, mutable `Ba
 JSON routing templates, `String actor`, and missing audit/outbox/asset records are not accepted as
 the final model. They require a reviewed migration design after the decisions above are accepted.
 No schema change is authorized by this document.
+
+## App-backed Project scope amendment (2026-09-25)
+
+The current app actively uses Project, model quantities, Parts, Parts List routes, Lots, and
+execution lineage. It does not use the separate demand allocation, PMRS placeholder, or
+MaterialRequirement workflows. Under user-confirmed D-038, those persistence relations and their
+v1 wire fields are removed while Project and its active run/route relationships remain. The
+original Gate 0 target rows remain historical evidence; the D-038 decision register entry and
+retirement migration define the current implementation scope.
 
 ## Canonical naming reconciliation
 

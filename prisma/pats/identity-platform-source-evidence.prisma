@@ -1,0 +1,341 @@
+enum AuditOutcome {
+  SUCCESS
+  FAILURE
+}
+
+enum OutboxMessageStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+  DEAD_LETTERED
+}
+
+enum IdempotencyRecordStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+enum SourceEvidenceLocatorType {
+  WORKBOOK_CELL
+  WORKBOOK_RANGE
+  PDF_PAGE
+  PDF_TEXT
+  OTHER
+}
+
+enum CanonicalEvidenceSubjectType {
+  PRODUCT
+  MODEL
+  MODEL_PART
+  BOM_DEFINITION
+  BOM_LINE
+  PROCESS_ROUTE
+  ROUTE_STAGE
+}
+
+model AuditRecord {
+  id             String       @id @default(uuid())
+  actorSubjectId String?
+  actorSubject   Subject?     @relation("AuditActor", fields: [actorSubjectId], references: [id])
+  action         String
+  resourceType   String
+  resourceId     String
+  outcome        AuditOutcome
+  reason         String?
+  correlationId  String?
+  detail         Json?
+  occurredAt     DateTime     @default(now())
+
+  @@index([resourceType, resourceId, occurredAt])
+  @@index([actorSubjectId, occurredAt])
+  @@index([correlationId])
+}
+
+model OutboxMessage {
+  id            String              @id @default(uuid())
+  aggregateType String
+  aggregateId   String
+  eventType     String
+  schemaVersion Int                 @default(1)
+  payload       Json
+  status        OutboxMessageStatus @default(PENDING)
+  availableAt   DateTime            @default(now())
+  publishedAt   DateTime?
+  attempts      Int                 @default(0)
+  lastError     String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([status, availableAt])
+  @@index([aggregateType, aggregateId, createdAt])
+}
+
+model IdempotencyRecord {
+  id              String                  @id @default(uuid())
+  subjectId       String
+  subject         Subject                 @relation(fields: [subjectId], references: [id])
+  operation       String
+  idempotencyKey  String
+  requestHash     String
+  status          IdempotencyRecordStatus @default(PENDING)
+  responseStatus  Int?
+  responseBody    Json?
+  responseHeaders Json?
+  expiresAt       DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@unique([subjectId, operation, idempotencyKey])
+  @@index([expiresAt])
+}
+
+enum Locale {
+  EN
+  JA
+  FIL
+}
+
+// Gate 2 identity is deployment-scoped. It intentionally has no Workspace,
+// membership-tenancy, or client-selected ProductionLine relation.
+enum SubjectStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum SubjectAssignmentKind {
+  CAPABILITY
+  ROLE_BUNDLE
+}
+
+enum SubjectAssignmentStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+model Subject {
+  id                          String                 @id @default(uuid())
+  provider                    String
+  issuer                      String
+  providerSubject             String
+  displayNameSnapshot         String?
+  emailSnapshot               String?
+  status                      SubjectStatus          @default(ACTIVE)
+  createdAt                   DateTime               @default(now())
+  updatedAt                   DateTime               @updatedAt
+  assignments                 SubjectAssignment[]
+  credential                  SubjectCredential?
+  stageEventActorRecords      StageEvent[]           @relation("StageEventActor")
+  inventoryTransactionRecords InventoryTransaction[] @relation("InventoryTransactionRecorder")
+  routingViolationResolutions RoutingViolation[]     @relation("RoutingViolationResolver")
+  processChangeRecords        ProcessChangeLog[]     @relation("ProcessChangeActor")
+  qualityInspections          QualityInspection[]    @relation("QualityInspectionInspector")
+  qualityDecisions            QualityDecision[]      @relation("QualityDecisionActor")
+  qualityStageAssignments     QualityStageAssignment[] @relation("QualityStageAssignee")
+  releasedPlans               Project[]              @relation("PlanReleaseActor")
+  createdBatches              Batch[]                @relation("BatchCreator")
+  auditRecords                AuditRecord[]          @relation("AuditActor")
+  idempotencyRecords          IdempotencyRecord[]
+  assignedLines               Line[]                 @relation("LineAssignedLeader")
+  activeLines                 Line[]                 @relation("LineActiveLeader")
+  lineOperatorAssignments     LineOperatorAssignment[] @relation("LineOperatorAssignmentSubject")
+
+  @@unique([provider, issuer, providerSubject])
+  @@index([status])
+}
+
+model SubjectCredential {
+  id           String    @id @default(uuid())
+  subjectId    String    @unique
+  subject      Subject   @relation(fields: [subjectId], references: [id])
+  username     String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastLoginAt  DateTime?
+
+  @@index([username])
+}
+
+model SubjectAssignment {
+  id          String                  @id @default(uuid())
+  subjectId   String
+  subject     Subject                 @relation(fields: [subjectId], references: [id])
+  kind        SubjectAssignmentKind
+  key         String
+  status      SubjectAssignmentStatus @default(ACTIVE)
+  assignedAt  DateTime                @default(now())
+  suspendedAt DateTime?
+  revokedAt   DateTime?
+  version     Int                     @default(1)
+  updatedAt   DateTime                @updatedAt
+
+  @@unique([subjectId, kind, key])
+  @@index([subjectId, status])
+  @@index([kind, key, status])
+}
+
+model UserPreference {
+  userId         String   @id
+  locale         Locale   @default(EN)
+  // Completed walkthrough tour keys, e.g. ["dashboard", "station"].
+  completedTours String[]
+  updatedAt      DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Source-backed client intake (raw file bytes stay in Drive/object storage)
+// ---------------------------------------------------------------------------
+
+enum SourceRunStatus {
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+enum SourceArtifactType {
+  WORKBOOK
+  PDF
+  OTHER
+}
+
+enum SourceExtractionStatus {
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+model SourceRun {
+  id          String           @id @default(uuid())
+  workspaceId String
+  sourceLabel String
+  status      SourceRunStatus  @default(RUNNING)
+  startedAt   DateTime         @default(now())
+  completedAt DateTime?
+  artifacts   SourceArtifact[]
+
+  @@index([workspaceId, startedAt])
+}
+
+model SourceArtifact {
+  id               String                 @id @default(uuid())
+  sourceRunId      String
+  sourceRun        SourceRun              @relation(fields: [sourceRunId], references: [id])
+  fileName         String
+  artifactType     SourceArtifactType
+  mimeType         String
+  sizeBytes        Int
+  sha256           String
+  productCode      String?
+  extractionStatus SourceExtractionStatus
+  analysis         Json
+  reportMarkdown   String
+  createdAt        DateTime               @default(now())
+  issues           SourceIssue[]
+  evidence         SourceEvidence[]
+
+  @@unique([sourceRunId, fileName])
+  @@index([sourceRunId])
+  @@index([sha256])
+}
+
+model SourceIssue {
+  id               String           @id @default(uuid())
+  sourceArtifactId String
+  sourceArtifact   SourceArtifact   @relation(fields: [sourceArtifactId], references: [id])
+  code             String
+  status           String
+  severity         String
+  message          String
+  sheet            String?
+  address          String?
+  value            Json?
+  canonicalValue   Json?
+  createdAt        DateTime         @default(now())
+  evidence         SourceEvidence[]
+
+  @@index([sourceArtifactId])
+  @@index([code, status])
+}
+
+// Immutable source coordinates and values used by canonical catalog records. Raw bytes remain in
+// Drive/object storage; this table stores only traceable extracted evidence.
+model SourceEvidence {
+  id               String                    @id @default(uuid())
+  sourceArtifactId String
+  sourceArtifact   SourceArtifact            @relation(fields: [sourceArtifactId], references: [id])
+  sourceIssueId    String?
+  sourceIssue      SourceIssue?              @relation(fields: [sourceIssueId], references: [id])
+  locatorType      SourceEvidenceLocatorType
+  sheet            String?
+  address          String?
+  page             Int?
+  rawValue         Json?
+  formulaText      String?
+  cachedValue      Json?
+  normalizedValue  Json?
+  quantityBasis    String?
+  dependencyState  String?
+  evidenceStatus   CanonicalEvidenceStatus
+  createdAt        DateTime                  @default(now())
+  canonicalLinks   CanonicalEvidenceLink[]
+  crosswalks       CanonicalCrosswalk[]
+
+  @@index([sourceArtifactId])
+  @@index([sourceIssueId])
+  @@index([evidenceStatus])
+}
+
+// The subject type is bounded and validated by the catalog application service. This link spans
+// the already-existing catalog tables and keeps source evidence reusable without storing arbitrary
+// workbook-shaped JSON on Product, Model, or ModelPart.
+model CanonicalEvidenceLink {
+  id               String                       @id @default(uuid())
+  sourceEvidenceId String
+  sourceEvidence   SourceEvidence               @relation(fields: [sourceEvidenceId], references: [id])
+  subjectType      CanonicalEvidenceSubjectType
+  subjectId        String
+  relation         String
+  createdAt        DateTime                     @default(now())
+
+  @@unique([sourceEvidenceId, subjectType, subjectId, relation])
+  @@index([subjectType, subjectId])
+}
+
+model CanonicalCrosswalk {
+  id               String                       @id @default(uuid())
+  sourceEvidenceId String
+  sourceEvidence   SourceEvidence               @relation(fields: [sourceEvidenceId], references: [id])
+  subjectType      CanonicalEvidenceSubjectType
+  subjectId        String
+  rawValue         String
+  canonicalValue   String
+  ruleCode         String
+  confidence       Float?
+  rationale        String?
+  status           CanonicalEvidenceStatus
+  createdAt        DateTime                     @default(now())
+
+  @@index([subjectType, subjectId])
+  @@index([rawValue])
+}
+
+// Durable retry record for canonical draft writes. A row is claimed before the business
+// transaction and completed only after the response is known; concurrent reuse is rejected.
+model CatalogIdempotencyRecord {
+  id              String    @id @default(uuid())
+  actorId         String
+  operation       String
+  idempotencyKey  String
+  requestHash     String
+  status          Int?
+  responseBody    Json?
+  responseHeaders Json?
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@unique([actorId, operation, idempotencyKey])
+  @@index([createdAt])
+}

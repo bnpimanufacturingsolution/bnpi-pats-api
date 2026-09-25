@@ -1,0 +1,251 @@
+// ---------------------------------------------------------------------------
+// Catalog (admin-authored, generic — no fixed stage enums anywhere)
+// ---------------------------------------------------------------------------
+
+enum LinkageMode {
+  LINKED
+  STANDALONE
+}
+
+enum ProductSourceStatus {
+  SOURCE_ALIGNED     @map("source-aligned")
+  NEEDS_CONFIRMATION @map("needs-confirmation")
+  MANUAL
+}
+
+enum CatalogLifecycleStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+enum CanonicalEvidenceStatus {
+  CONFIRMED
+  INFERRED
+  PROVISIONAL
+  SOURCE_ANOMALY
+  UNAVAILABLE_DEPENDENCY
+  NEEDS_CONFIRMATION
+  CONFLICTING
+  STALE
+}
+
+enum BomRelationshipKind {
+  COMPONENT
+  ASSEMBLY_COMPONENT
+  DECORATION_INPUT
+  PACKAGING_COMPONENT
+  OTHER
+}
+
+model Product {
+  id              String                  @id @default(uuid())
+  productCode     String                  @unique
+  productName     String
+  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion      Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  models          Model[]
+  projects        Project[]
+}
+
+model Model {
+  id                String                   @id @default(uuid())
+  productId         String
+  product           Product                  @relation(fields: [productId], references: [id])
+  modelNumber       String
+  modelName         String?
+  sourceStatus      ProductSourceStatus
+  sourceReference   Json?
+  pinned            Boolean                  @default(false)
+  lifecycleStatus   CatalogLifecycleStatus   @default(DRAFT)
+  evidenceStatus    CanonicalEvidenceStatus  @default(NEEDS_CONFIRMATION)
+  rowVersion        Int                      @default(1)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  modelParts        ModelPart[]
+  bomDefinitions    BomDefinition[]
+  processRoutes     ProcessRoute[]
+  allocations       ProjectModelAllocation[]
+  projectParts      Part[]                   @relation("ModelProjectParts")
+
+  @@unique([productId, modelNumber])
+  @@index([productId])
+}
+
+model ModelPart {
+  id              String                  @id @default(uuid())
+  modelId         String
+  model           Model                   @relation(fields: [modelId], references: [id])
+  partCode        String
+  partName        String
+  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion      Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  // Ordered catalog-level StageStepRef[] template. Promotion into a versioned PartsList is
+  // intentionally application-controlled until the template contract is confirmed.
+  routingSteps    Json
+  // Planned/required cycle time, seconds, keyed per route step
+  // (`stageId::subStageId`, empty subStageId when stage-wide). Null = unset
+  // (honest absence, never zero-filled). Master default consumed by projects;
+  // runs snapshot it onto Part at creation.
+  plannedCycleTimes Json?
+  projectParts    Part[]                  @relation("ModelPartProjectParts")
+  bomLines        BomLine[]
+
+  @@unique([modelId, partCode])
+  @@index([modelId])
+}
+
+// A versioned material relationship for one reusable catalog model. Quantity and UOM remain
+// nullable because the analyzed client sources do not consistently provide a convertible basis.
+model BomDefinition {
+  id              String                  @id @default(uuid())
+  modelId         String
+  model           Model                   @relation(fields: [modelId], references: [id])
+  revision        Int
+  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion      Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  lines           BomLine[]
+
+  @@unique([modelId, revision])
+  @@index([modelId])
+}
+
+model BomLine {
+  id                   String                  @id @default(uuid())
+  bomDefinitionId      String
+  bomDefinition        BomDefinition           @relation(fields: [bomDefinitionId], references: [id])
+  modelPartId          String
+  modelPart            ModelPart               @relation(fields: [modelPartId], references: [id])
+  lineNumber           Int
+  relationshipKind     BomRelationshipKind
+  quantityMagnitude    Float?
+  quantityUom          String?
+  usageBasis           String?
+  sourceRepresentation String?
+  lifecycleStatus      CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus       CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion           Int                     @default(1)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@unique([bomDefinitionId, lineNumber])
+  @@index([bomDefinitionId])
+  @@index([modelPartId])
+}
+
+// A versioned, model-applicable process definition. ProcessRouteStage may link to operational
+// Stage/SubStage records when mapped, while retaining source keys/names for unresolved lineage.
+model ProcessRoute {
+  id              String                  @id @default(uuid())
+  modelId         String
+  model           Model                   @relation(fields: [modelId], references: [id])
+  revision        Int
+  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion      Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  stages          ProcessRouteStage[]
+
+  @@unique([modelId, revision])
+  @@index([modelId])
+}
+
+model ProcessRouteStage {
+  id                   String                  @id @default(uuid())
+  processRouteId       String
+  processRoute         ProcessRoute            @relation(fields: [processRouteId], references: [id])
+  sequence             Int
+  stageId              String?
+  stage                Stage?                  @relation("ProcessRouteStageStage", fields: [stageId], references: [id])
+  subStageId           String?
+  subStage             SubStage?               @relation("ProcessRouteStageSubStage", fields: [subStageId], references: [id])
+  stageKey             String?
+  stageName            String?
+  stageDefinitionId    String?
+  subStageKey          String?
+  subStageName         String?
+  operationCode        String?
+  operationName        String?
+  sourceRepresentation String?
+  lifecycleStatus      CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus       CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion           Int                     @default(1)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@unique([processRouteId, sequence])
+  @@index([processRouteId])
+}
+
+model WorkflowGroup {
+  id              String                 @id @default(uuid())
+  // Compatibility-only link from the original draft. New configuration is deployment-owned and
+  // does not require a planning record.
+  projectId       String?
+  project         Project?               @relation(fields: [projectId], references: [id])
+  name            String
+  linkageMode     LinkageMode
+  displayOrder    Int
+  isSystemSeed    Boolean                @default(false)
+  lifecycleStatus CatalogLifecycleStatus @default(DRAFT)
+  stages          Stage[]
+
+  @@index([projectId])
+}
+
+model Stage {
+  id                 String                @id @default(uuid())
+  workflowGroupId    String
+  workflowGroup      WorkflowGroup         @relation(fields: [workflowGroupId], references: [id])
+  // Manufacturing route stage (for example Injection or Decoration), not floor Section/Process.
+  name               String
+  // Optional per-locale name overrides: { ja?: string, fil?: string }
+  nameLocalized      Json?
+  displayOrder       Int
+  isSystemSeed       Boolean               @default(false)
+  subStageLinks             SubStageEligibility[]
+  stationSteps              StationStep[]
+  processRouteStages        ProcessRouteStage[]   @relation("ProcessRouteStageStage")
+  qualityStageAssignments   QualityStageAssignment[]
+
+  @@index([workflowGroupId])
+}
+
+model SubStage {
+  id                            String                @id @default(uuid())
+  name                          String
+  nameLocalized                 Json?
+  displayOrder                  Int
+  isSystemSeed                  Boolean               @default(false)
+  isConfigurable                Boolean               @default(true)
+  isBuffer                      Boolean               @default(false)
+  hasQualityCheckpoint          Boolean               @default(false)
+  isMandatoryCheckpoint         Boolean               @default(false)
+  alwaysAlertOnRoutingViolation Boolean               @default(true)
+  subProcessGroup               String?
+  isDisabled                    Boolean               @default(false)
+  eligibleStages                SubStageEligibility[]
+  stationSteps                  StationStep[]
+  processRouteStages            ProcessRouteStage[]   @relation("ProcessRouteStageSubStage")
+  workProcesses                 WorkProcess[]
+}
+
+// A SubStage can be eligible under more than one Stage (the Capsulation/Assortment
+// Assembly-vs-Warehouse mechanism) — a join table, not a single parent FK.
+model SubStageEligibility {
+  stageId    String
+  stage      Stage    @relation(fields: [stageId], references: [id])
+  subStageId String
+  subStage   SubStage @relation(fields: [subStageId], references: [id])
+
+  @@id([stageId, subStageId])
+}

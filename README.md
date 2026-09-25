@@ -39,7 +39,7 @@ cron startup, and graceful shutdown.
 | `/api/workspace*` | Retained workspace tenancy |
 | `/api/auth/*`, `/api/workspace-member*`, `/api/project-member*`, `/api/employee*`, `/api/product*` | Blocked-review surfaces; behavior preserved |
 | Inherited PMS/procurement/finance routes | Quarantined; opt in with `ENABLE_LEGACY_API=true` |
-| `prisma/pats/schema.prisma` | Active PostgreSQL PATS schema; incomplete relative to the full frozen target |
+| `prisma/pats/` | Active multi-file PostgreSQL PATS schema; incomplete relative to the full frozen target |
 
 The full route/module evidence is recorded in
 [`docs/superpowers/reports/2026-07-13-api-surface-inventory.md`](docs/superpowers/reports/2026-07-13-api-surface-inventory.md),
@@ -99,7 +99,7 @@ pnpm run build
 # Validate the provisional draft independently; this does not connect it
 # to the runtime or create a migration.
 PATS_DATABASE_URL=postgresql://pats:pats@localhost:5432/pats \
-  npx prisma validate --schema prisma/pats/schema.prisma
+  npx prisma validate --schema prisma/pats
 ```
 
 The suite is primarily mocked controller coverage. The active-surface tests in

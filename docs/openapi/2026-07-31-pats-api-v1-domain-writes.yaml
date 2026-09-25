@@ -110,6 +110,21 @@ paths:
         '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
         '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }
         '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' }
+  /production-lines:
+    post:
+      operationId: productionLineCreate
+      summary: Create a production-line umbrella for the Section tree
+      description: >
+        A ProductionLine owns Sections; multiple Sections may belong to one line. The created
+        line has no Stations yet. Line codes are unique within the deployment.
+      tags: [PATS Configuration]
+      x-required-capability: operations.manage
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '201': { $ref: '#/components/responses/CommandRead' }
+        '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
+        '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }
+        '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' }
   /operator-assignments:
     post:
       operationId: operatorAssignmentCreate
@@ -168,6 +183,7 @@ paths:
     post:
       operationId: productionPlanModelAllocationUpsert
       summary: Upsert a model allocation and materialize plan-part evidence
+      description: Accepts model identity, planned quantity/UOM/usage basis, and source revision. Demand dimensions marketRegion and demandPurpose are retired and rejected.
       tags: [PATS Planning]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
@@ -191,7 +207,8 @@ paths:
   /production-plans/{planId}/lots:
     post:
       operationId: productionPlanLotCreate
-      summary: Create a planned lot and its part allocation
+      summary: Create the single planned lot and its part allocation
+      description: A production plan can have at most one lot. A second distinct lot creation returns a 409 cardinality conflict; idempotent retries replay the original response.
       tags: [PATS Planning]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
@@ -216,6 +233,7 @@ paths:
     post:
       operationId: inventoryTransactionCreate
       summary: Record receiving or issuance evidence
+      description: Records inventory movement without a MaterialRequirement link; materialRequirementId is retired and rejected.
       tags: [PATS Inventory]
       x-required-capability: inventory.issue
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
