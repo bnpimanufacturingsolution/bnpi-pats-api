@@ -198,12 +198,19 @@ export function resolvePrinterBinding(station: PrintJobStation): {
 			: station.printerConnection;
 	const envWidth = Number(process.env.PATS_LABEL_WIDTH_MM);
 	const envHeight = Number(process.env.PATS_LABEL_HEIGHT_MM);
+	const envDpi = Number(process.env.PATS_PRINTER_DPI);
+	const defaultDpi =
+		Number.isFinite(envDpi) && envDpi > 0
+			? envDpi
+			: /hd100/i.test(address || envWin || "")
+				? 203
+				: GLORY_L_DEFAULTS.dpi;
 	return {
 		connection,
 		address,
 		widthMm: clampGloryLWidthMm(station.labelWidthMm ?? (Number.isFinite(envWidth) ? envWidth : GLORY_L_DEFAULTS.widthMm)),
 		heightMm: station.labelHeightMm ?? (Number.isFinite(envHeight) && envHeight > 0 ? Math.round(envHeight) : GLORY_L_DEFAULTS.heightMm),
-		dpi: station.printerDpi ?? GLORY_L_DEFAULTS.dpi,
+		dpi: station.printerDpi ?? defaultDpi,
 	};
 }
 
@@ -232,6 +239,7 @@ export function buildLabelIr(input: {
 		quantity: input.quantity ?? quantityOf(input.batch),
 		fromStepLabel: input.fromStepLabel,
 		toStepLabel: input.toStepLabel,
+		atLabel: input.fromStepLabel || input.toStepLabel,
 		printedAt: input.printedAt,
 		sequence: input.sequence,
 		widthMm: input.widthMm,

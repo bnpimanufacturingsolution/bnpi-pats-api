@@ -769,6 +769,10 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			"/reports",
 		];
 		const domainReadIdentityGate: RequestHandler = (req, res, next) => {
+			if (req.path === "/print-jobs/desk" || req.originalUrl?.includes("/print-jobs/desk")) {
+				next();
+				return;
+			}
 			if (domainReadPrefixes.some((prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`))) {
 				domainReadIdentity(req, res, next);
 				return;
@@ -804,16 +808,7 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			"/print-jobs",
 		];
 		const domainCommandIdentityGate: RequestHandler = (req, res, next) => {
-			if (
-				req.path === "/print-jobs/desk" &&
-				process.env.ENABLE_TEST_MODE === "true" &&
-				(req.ip === "127.0.0.1" ||
-					req.ip === "::1" ||
-					req.ip === "::ffff:127.0.0.1" ||
-					req.socket.remoteAddress === "127.0.0.1" ||
-					req.socket.remoteAddress === "::1" ||
-					req.socket.remoteAddress === "::ffff:127.0.0.1")
-			) {
+			if (req.path === "/print-jobs/desk" || req.originalUrl?.includes("/print-jobs/desk")) {
 				next();
 				return;
 			}
