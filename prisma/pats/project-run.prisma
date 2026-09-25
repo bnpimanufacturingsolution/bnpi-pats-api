@@ -1,0 +1,191 @@
+// Canonical planning and execution lifecycle vocabularies. The older draft models remain
+// physical compatibility tables while the API exposes the canonical resource names.
+enum PlanLifecycleStatus {
+  DRAFT
+  READY
+  RELEASED
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum AllocationLifecycleStatus {
+  DRAFT
+  COMMITTED
+  SUPERSEDED
+}
+
+enum RouteVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum LotStatus {
+  PLANNED
+  ACTIVE
+  HELD
+  COMPLETED
+  CANCELLED
+}
+
+// ---------------------------------------------------------------------------
+// Planning definition
+// ---------------------------------------------------------------------------
+
+model Project {
+  id                         String                   @id @default(uuid())
+  workspaceId                String
+  projectCode                String                   @unique
+  name                       String
+  requiredProductionQuantity Int
+  status                     PlanLifecycleStatus      @default(DRAFT)
+  rowVersion                 Int                      @default(1)
+  releasedAt                 DateTime?
+  releasedBySubjectId        String?
+  releasedBySubject          Subject?                 @relation("PlanReleaseActor", fields: [releasedBySubjectId], references: [id])
+  productId                  String?
+  product                    Product?                 @relation(fields: [productId], references: [id])
+  createdAt                  DateTime                 @default(now())
+  productSpecification       ProductSpecification?
+  modelAllocations           ProjectModelAllocation[]
+  partsLists                 PartsList[]
+  workflowGroups             WorkflowGroup[]
+  parts                      Part[]
+  lot                        Lot?
+  processChangeLogs          ProcessChangeLog[]
+
+  @@index([workspaceId])
+  @@index([productId])
+}
+
+model ProjectModelAllocation {
+  id                String                    @id @default(uuid())
+  projectId         String
+  project           Project                   @relation(fields: [projectId], references: [id])
+  modelId           String
+  model             Model                     @relation(fields: [modelId], references: [id])
+  plannedQuantity   Int
+  quantityMagnitude Decimal?                  @db.Decimal(18, 6)
+  quantityUom       String?
+  usageBasis        String?
+  sourceRevisionRef String?
+  lifecycleStatus   AllocationLifecycleStatus @default(DRAFT)
+  rowVersion        Int                       @default(1)
+  createdAt         DateTime                  @default(now())
+  batches           Batch[]
+
+  @@unique([projectId, modelId])
+  @@index([projectId])
+  @@index([modelId])
+}
+
+model ProductSpecification {
+  id                   String   @id @default(uuid())
+  projectId            String   @unique
+  project              Project  @relation(fields: [projectId], references: [id])
+  skuCode              String
+  productName          String
+  trayQuantityStandard Int
+  sourceRevisionRef    String?
+  rowVersion           Int      @default(1)
+  createdAt            DateTime @default(now())
+}
+
+model PartsList {
+  id                String             @id @default(uuid())
+  projectId         String
+  project           Project            @relation(fields: [projectId], references: [id])
+  version           Int
+  status            RouteVersionStatus @default(DRAFT)
+  sourceRevisionRef String?
+  publishedAt       DateTime?
+  rowVersion        Int                @default(1)
+  createdAt         DateTime           @default(now())
+  steps             RoutingStep[]
+
+  @@unique([projectId, version])
+}
+
+// One ordered routing step for one Part inside one PartsList version — the frontend's
+// PartsListEntry.routingSteps flattened into rows. Ordering is the point: an unordered set
+// cannot express "Full Spray -> Mask Spray -> Tampo".
+model RoutingStep {
+  id          String       @id @default(uuid())
+  partsListId String
+  partsList   PartsList    @relation(fields: [partsListId], references: [id])
+  partId      String
+  part        Part         @relation(fields: [partId], references: [id])
+  stageId     String
+  subStageId  String?
+  stepOrder   Int
+  stageEvents StageEvent[]
+
+  @@unique([partsListId, partId, stepOrder])
+  @@index([partId])
+}
+
+model Part {
+  id                       String                 @id @default(uuid())
+  projectId                String
+  project                  Project                @relation(fields: [projectId], references: [id])
+  partCode                 String
+  partName                 String
+  sourceModelId            String?
+  sourceModel              Model?                 @relation("ModelProjectParts", fields: [sourceModelId], references: [id])
+  sourceModelPartId        String?
+  sourceModelPart          ModelPart?             @relation("ModelPartProjectParts", fields: [sourceModelPartId], references: [id])
+  // Hybrid per-part variance tolerance — either, both, or neither bound may be set;
+  // application falls back to the system default (5%) when both are null.
+  variancePercentThreshold Float?
+  varianceAbsoluteFloor    Int?
+  // Planned/required cycle time snapshot, seconds per route step — copied from
+  // the catalog ModelPart at project creation (runs freeze master values,
+  // like parts-list versioning).
+  plannedCycleTimes Json?
+  // Finalization edit; null = use the snapshot above (master fallback chain).
+  plannedCycleTimesOverride Json?
+  lifecycleStatus          CatalogLifecycleStatus @default(DRAFT)
+  rowVersion               Int                    @default(1)
+  routingSteps             RoutingStep[]
+  lots                     Lot[]
+  batchPartLines           BatchPartLine[]
+  lotPartAllocations       LotPartAllocation[]
+  inventoryTransactions    InventoryTransaction[]
+
+  @@unique([projectId, partCode])
+  @@index([sourceModelId])
+  @@index([sourceModelPartId])
+}
+
+model Lot {
+  id                         String              @id @default(uuid())
+  projectId                  String              @unique
+  project                    Project             @relation(fields: [projectId], references: [id])
+  lotCode                    String              @unique
+  lotName                    String
+  partsListId                String
+  partsListVersion           Int
+  partId                     String
+  part                       Part                @relation(fields: [partId], references: [id])
+  partName                   String
+  requiredProductionQuantity Int
+  status                     LotStatus           @default(PLANNED)
+  quantityMagnitude          Decimal?            @db.Decimal(18, 6)
+  quantityUom                String?
+  usageBasis                 String?
+  // Structured replacement for the PRD's free-text labelBreakdown (whiteboard stage-1 math:
+  // requiredProductionQuantity / labelPackSize = countable labels, e.g. 100,000 / 200 = 500). Label counts
+  // are derived by the application, never stored.
+  labelPackSize              Int
+  // Lot numbers are assigned once at Planning and never reassigned (client doc, stage 1).
+  createdAtStage             String              @default("Planning")
+  createdAt                  DateTime            @default(now())
+  batches                    Batch[]
+  partAllocations            LotPartAllocation[]
+}
+
+// ---------------------------------------------------------------------------
+// Canonical planning, projections, quality, and platform records
+// ---------------------------------------------------------------------------
+

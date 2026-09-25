@@ -91,7 +91,7 @@ Validated on 2026-07-13 before cleanup mutation:
 - `pnpm run type-check`: pass
 - `pnpm test`: 344 passing, 29 pending
 - `pnpm run build`: pass during the plan/commit hook run
-- `PATS_DATABASE_URL=postgresql://pats:pats@localhost:5432/pats npx prisma validate --schema prisma/pats/schema.prisma`: valid when the variable is supplied
+- `PATS_DATABASE_URL=postgresql://pats:pats@localhost:5432/pats npx prisma validate --schema prisma/pats`: valid when the variable is supplied
 
 The suite emits repeated legacy warnings, including failed audit/activity
 logging in mocked contexts, Redis-not-connected warnings, and an estimation

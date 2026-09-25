@@ -78,8 +78,6 @@ const productionPlanModelAllocationSchema = z.object({
 	quantityMagnitude: decimalString.nullable().optional(),
 	quantityUom: z.string().trim().min(1).max(40).nullable().optional(),
 	usageBasis: z.string().trim().max(120).nullable().optional(),
-	marketRegion: z.string().trim().max(120).nullable().optional(),
-	demandPurpose: z.string().trim().max(120).nullable().optional(),
 	sourceRevisionRef: z.string().trim().max(160).nullable().optional(),
 }).strict();
 
@@ -183,7 +181,6 @@ const inventoryTransactionCreateSchema = z.object({
 	quantityUom: z.string().trim().min(1).max(40).nullable().optional(),
 	usageBasis: z.string().trim().max(120).nullable().optional(),
 	withdrawalFormRef: z.string().trim().max(120).nullable().optional(),
-	materialRequirementId: z.string().trim().min(1).max(100).nullable().optional(),
 }).strict();
 
 const qualityInspectionCreateSchema = z.object({
@@ -244,6 +241,7 @@ const subStageCreateSchema = z.object({
 const sectionCreateSchema = z.object({
 	name: z.string().trim().min(1).max(160),
 		sectionCode: z.string().trim().min(1).max(80).optional(),
+		productionLineId: z.string().trim().min(1).max(100).nullable().optional(),
 		// stageId/displayOrder are optional: the board's create flow carries no
 	// stage context, so the server places new sections in the first stage
 	// and appends them. Explicit values are still honored when provided.
@@ -257,6 +255,12 @@ const sectionCreateSchema = z.object({
 const sectionPatchSchema = z.object({
 	name: z.string().trim().min(1).max(160).optional(),
 	sectionCode: z.string().trim().min(1).max(80).optional(),
+}).strict();
+
+const productionLineCreateSchema = z.object({
+	lineCode: z.string().trim().min(1).max(80),
+	name: z.string().trim().min(1).max(160),
+	displayOrder: z.number().int().nonnegative().optional(),
 }).strict();
 
 const stationStepCreateSchema = z.object({
@@ -373,6 +377,10 @@ function notFound(detail: string): never {
 
 function conflict(detail: string): never {
 	throw new CommandProblem(409, "urn:bandai:pats:problem:conflict", "Conflict", detail);
+}
+
+function cardinalityConflict(detail: string): never {
+	throw new CommandProblem(409, "urn:bandai:pats:problem:project-lot-cardinality-conflict", "Conflict", detail);
 }
 
 function staleVersion(): never {
@@ -535,8 +543,6 @@ export function commandRouter(
 						quantityMagnitude: body.quantityMagnitude ?? null,
 						quantityUom: body.quantityUom ?? null,
 						usageBasis: body.usageBasis ?? null,
-						marketRegion: body.marketRegion ?? null,
-						demandPurpose: body.demandPurpose ?? null,
 						sourceRevisionRef: body.sourceRevisionRef ?? null,
 					},
 					update: {
@@ -544,8 +550,6 @@ export function commandRouter(
 						quantityMagnitude: body.quantityMagnitude ?? null,
 						quantityUom: body.quantityUom ?? null,
 						usageBasis: body.usageBasis ?? null,
-						marketRegion: body.marketRegion ?? null,
-						demandPurpose: body.demandPurpose ?? null,
 						sourceRevisionRef: body.sourceRevisionRef ?? null,
 						rowVersion: { increment: 1 },
 					},
@@ -778,14 +782,14 @@ export function commandRouter(
 			const response = await executeCommand(database, req, "projectDraftDelete", { projectId: targetId }, async (transaction) => {
 				const current = await transaction.project.findUnique({
 					where: { id: targetId },
-					include: { lots: { select: { id: true } } },
+					include: { lot: { select: { id: true } } },
 				});
 				if (!current) notFound("The requested project was not found.");
 				if (expectedVersion !== undefined && current.rowVersion !== expectedVersion) staleVersion();
 				if (current.status !== PlanLifecycleStatus.DRAFT) {
 					conflict("Released or completed projects cannot be deleted.");
 				}
-				if (current.lots.length > 0) {
+				if (current.lot) {
 					conflict("Projects with lots cannot be deleted.");
 				}
 				const partsLists = await transaction.partsList.findMany({ where: { projectId: current.id }, select: { id: true } });
@@ -796,10 +800,7 @@ export function commandRouter(
 				}
 				await transaction.part.deleteMany({ where: { projectId: current.id } });
 				await transaction.projectModelAllocation.deleteMany({ where: { projectId: current.id } });
-				await transaction.planDemandAllocation.deleteMany({ where: { projectId: current.id } });
-				await transaction.materialRequirement.deleteMany({ where: { projectId: current.id } });
 				await transaction.productSpecification.deleteMany({ where: { projectId: current.id } });
-				await transaction.pmrs.deleteMany({ where: { projectId: current.id } });
 				await transaction.workflowGroup.deleteMany({ where: { projectId: current.id } });
 				await transaction.processChangeLog.deleteMany({ where: { projectId: current.id } });
 
@@ -825,6 +826,8 @@ export function commandRouter(
 			const response = await executeCommand(database, req, "productionPlanLotCreate", { planId: targetId, body }, async (transaction) => {
 				const plan = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true } });
 				if (!plan) notFound("The requested production plan was not found.");
+				const existingLot = await transaction.lot.findUnique({ where: { projectId: targetId }, select: { id: true } });
+				if (existingLot) cardinalityConflict("The production plan already has a lot.");
 				const partsList = await transaction.partsList.findFirst({ where: { id: body.partsListId, projectId: targetId, version: body.partsListVersion }, select: { id: true } });
 				if (!partsList) notFound("The requested parts-list version was not found for this production plan.");
 				const part = await transaction.part.findFirst({ where: { id: body.partId, projectId: targetId }, select: { id: true, partName: true } });
@@ -1073,10 +1076,6 @@ export function commandRouter(
 				if (!batch) notFound("The requested batch was not found.");
 				const part = await transaction.part.findFirst({ where: { id: body.partId, projectId: batch.lot.projectId }, select: { id: true } });
 				if (!part) notFound("The requested inventory part was not found in the batch's production plan.");
-				if (body.materialRequirementId) {
-					const requirement = await transaction.materialRequirement.findFirst({ where: { id: body.materialRequirementId, projectId: batch.lot.projectId }, select: { id: true } });
-					if (!requirement) notFound("The requested material requirement was not found.");
-				}
 				const transactionRecord = await transaction.inventoryTransaction.create({
 					data: {
 						transactionType: body.transactionType,
@@ -1098,7 +1097,6 @@ export function commandRouter(
 						actualQuantityMagnitude: body.quantityMagnitude ?? String(body.actualQuantity),
 						quantityUom: body.quantityUom ?? null,
 						usageBasis: body.usageBasis ?? null,
-						materialRequirementId: body.materialRequirementId ?? null,
 					},
 				});
 				await recordCommandSuccess(transaction, req, "INVENTORY_TRANSACTION_RECORDED", "InventoryTransaction", transactionRecord.id, { batchId: batch.id, status: transactionRecord.status });
@@ -1221,6 +1219,10 @@ export function commandRouter(
 		try {
 			const body = parseCommandBody(req, sectionCreateSchema);
 			const response = await executeCommand(database, req, "sectionCreate", body, async (transaction) => {
+				if (body.productionLineId) {
+					const productionLine = await transaction.productionLine.findUnique({ where: { id: body.productionLineId }, select: { id: true } });
+					if (!productionLine) notFound("The requested production line was not found.");
+				}
 				let stageId = body.stageId;
 				if (stageId) {
 					const stage = await transaction.stage.findUnique({ where: { id: stageId }, select: { id: true } });
@@ -1246,7 +1248,7 @@ export function commandRouter(
 					}
 				}
 				const displayOrder = body.displayOrder ?? await transaction.section.count();
-				const section = await transaction.section.create({ data: { name: body.name, sectionCode, stageId, screenType: body.screenType ?? "COMPUTER", scannerAttached: body.scannerAttached ?? true, printerAttached: body.printerAttached ?? true, displayOrder, workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS" } });
+				const section = await transaction.section.create({ data: { name: body.name, sectionCode, productionLineId: body.productionLineId ?? null, stageId, screenType: body.screenType ?? "COMPUTER", scannerAttached: body.scannerAttached ?? true, printerAttached: body.printerAttached ?? true, displayOrder, workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS" } });
 
 				// Create bound steps for all sub-stages of this stage so work processes
 				// can resolve their sub-stage via the section's bound steps.
@@ -1510,22 +1512,11 @@ export function commandRouter(
 		try {
 			const body = parseCommandBody(req, workProcessCreateSchema) as typeof workProcessCreateSchema._type & { stationId?: string | null };
 			const sectionRef = body.sectionId ?? body.stationId ?? null;
-			let resolvedSubStageId = body.subStageId ?? null;
-			if (!resolvedSubStageId && sectionRef) {
-				const section = await database.section.findFirst({
-					where: { id: sectionRef },
-					select: { boundSteps: { select: { subStageId: true } } },
-				});
-				if (section?.boundSteps.length) {
-					resolvedSubStageId = section.boundSteps.find((step) => step.subStageId !== null)?.subStageId ?? null;
-				}
+			const resolvedSubStageId = body.subStageId ?? null;
+			if (resolvedSubStageId) {
+				const subStage = await database.subStage.findUnique({ where: { id: resolvedSubStageId }, select: { id: true } });
+				if (!subStage) notFound("The requested sub-stage was not found.");
 			}
-			if (!resolvedSubStageId) {
-				malformed("The section has no bound sub-stage.");
-				return;
-			}
-			const subStage = await database.subStage.findUnique({ where: { id: resolvedSubStageId }, select: { id: true } });
-			if (!subStage) notFound("The requested sub-stage was not found.");
 			// Senior guard: self-parent and cycle-proof. The app's descendantIds is
 			// already cycle-proof, but the API must not trust the client.
 			if (body.parentProcessId) {
@@ -1666,6 +1657,38 @@ export function commandRouter(
 				// 200 with the deleted identifier (audit correlation) is the documented
 				// DELETE contract for this resource; repeat deletes return 404.
 				return { status: 200, body: { sectionId }, headers: { Location: `/api/v1/sections/${sectionId}` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	/**
+	 * @openapi
+	 * /api/v1/production-lines:
+	 *   post:
+	 *     operationId: productionLineCreate
+	 *     summary: Create a production-line umbrella for the Section tree
+	 *     description: A ProductionLine owns Sections; multiple Sections may belong to one line. The created line has no Stations yet.
+	 *     tags: [PATS Floor]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - $ref: '#/components/parameters/IdempotencyKey'
+	 *     responses:
+	 *       201: { description: Production line created }
+	 *       409: { description: Duplicate line code or idempotency conflict }
+	 *       422: { description: Invalid production-line payload }
+	 */
+	router.post("/production-lines", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, productionLineCreateSchema);
+			const response = await executeCommand(database, req, "productionLineCreate", body, async (transaction) => {
+				const clash = await transaction.productionLine.findUnique({ where: { lineCode: body.lineCode }, select: { id: true } });
+				if (clash) conflict("The production line code is already in use.");
+				const displayOrder = body.displayOrder ?? await transaction.productionLine.count();
+				const line = await transaction.productionLine.create({ data: { lineCode: body.lineCode, name: body.name, displayOrder } });
+				await recordCommandSuccess(transaction, req, "PRODUCTION_LINE_CREATED", "ProductionLine", line.id, { lineCode: line.lineCode });
+				return { status: 201, body: { productionLineId: line.id, lineCode: line.lineCode, name: line.name }, headers: { Location: `/api/v1/production-lines/${line.id}` } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }

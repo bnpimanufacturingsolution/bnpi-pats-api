@@ -277,9 +277,7 @@ async function wipeSeededTables(tx) {
 		"batchPartLine",
 		"lotPartAllocation",
 		"batch",
-		"materialRequirement",
 		"routingStep",
-		"pmrs",
 		"partsList",
 		"qualityStageAssignment",
 		"stationStep",
@@ -292,13 +290,13 @@ async function wipeSeededTables(tx) {
 		"stage",
 		"subStage",
 		"section",
+		"productionLine",
 		"bomLine",
 		"bomDefinition",
 		"modelPart",
 		"processRoute",
 		"lot",
 		"part",
-		"planDemandAllocation",
 		"projectModelAllocation",
 		"productSpecification",
 		"project",
@@ -1194,6 +1192,23 @@ async function seedProfile(tx) {
 		});
 	}
 
+	const mainProductionLineId = stableId("production-line-main");
+	await tx.productionLine.upsert({
+		where: { lineCode: code("PL-MAIN") },
+		update: {
+			name: "Main Production Line",
+			displayOrder: 0,
+			isEnabled: true,
+		},
+		create: {
+			id: mainProductionLineId,
+			lineCode: code("PL-MAIN"),
+			name: "Main Production Line",
+			displayOrder: 0,
+			isEnabled: true,
+		},
+	});
+
 	for (const [id, name, sectionCode, stageId, displayOrder] of [
 		[injectionSectionId, "Injection", "SEC-INJ", injectionStageId, 1],
 		[decorationSectionId, "Decoration", "SEC-DEC", decorationStageId, 2],
@@ -1207,6 +1222,7 @@ async function seedProfile(tx) {
 				name,
 				sectionCode: code(sectionCode),
 				operationalContextKey: "PATS",
+				productionLineId: mainProductionLineId,
 				stageId,
 				displayOrder,
 				isEnabled: true,
@@ -1217,6 +1233,7 @@ async function seedProfile(tx) {
 				name,
 				sectionCode: code(sectionCode),
 				operationalContextKey: "PATS",
+				productionLineId: mainProductionLineId,
 				stageId,
 				displayOrder,
 				isEnabled: true,
@@ -1661,33 +1678,6 @@ async function seedProfile(tx) {
 				lifecycleStatus: "COMMITTED",
 			},
 		});
-		await tx.planDemandAllocation.upsert({
-			where: { id: stableId(`pda-b251-${modelNumber}`) },
-			update: {
-				projectId,
-				modelId: modelIds[modelNumber],
-				marketRegion: "JP",
-				demandPurpose: "production",
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				usageBasis: "finished product",
-				sourceRevisionRef: CLIENT_B251.revision,
-				lifecycleStatus: "COMMITTED",
-			},
-			create: {
-				id: stableId(`pda-b251-${modelNumber}`),
-				projectId,
-				modelId: modelIds[modelNumber],
-				marketRegion: "JP",
-				demandPurpose: "production",
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				usageBasis: "finished product",
-				sourceRevisionRef: CLIENT_B251.revision,
-				lifecycleStatus: "COMMITTED",
-				createdAt: seedClock,
-			},
-		});
 	}
 
 	// Snapshot plan parts: inj + deco part nos + capsule (paints stay catalog/BOM only)
@@ -1834,62 +1824,6 @@ async function seedProfile(tx) {
 		}
 	}
 
-	await tx.pmrs.upsert({
-		where: { projectId },
-		update: {
-			partsListId,
-			externalControlNumber: CLIENT_B251.formCode,
-			revisionLabel: CLIENT_B251.revision,
-			status: "attached",
-			sourceReference: {
-				origin: "client-parts-list",
-				workbookTitle: CLIENT_B251.workbookTitle,
-				evidenceStatus: "PROVISIONAL",
-			},
-		},
-		create: {
-			id: stableId("pmrs-b251"),
-			projectId,
-			partsListId,
-			externalControlNumber: CLIENT_B251.formCode,
-			revisionLabel: CLIENT_B251.revision,
-			status: "attached",
-			sourceReference: {
-				origin: "client-parts-list",
-				workbookTitle: CLIENT_B251.workbookTitle,
-				evidenceStatus: "PROVISIONAL",
-			},
-		},
-	});
-
-	const primaryPartCode = "B251-01-01";
-	const primaryPlanPartId = planPartIds[primaryPartCode];
-	await tx.materialRequirement.upsert({
-		where: { id: stableId("mr-b251-upper-bun") },
-		update: {
-			projectId,
-			partId: primaryPlanPartId,
-			externalReference: `${CLIENT_B251.formCode}-L01`,
-			quantityMagnitude: `${modelPlanQtys["01"]}.000000`,
-			quantityUom: "piece",
-			usageBasis: "1 per product",
-			sourceRevisionRef: CLIENT_B251.revision,
-			status: "APPROVED",
-		},
-		create: {
-			id: stableId("mr-b251-upper-bun"),
-			projectId,
-			partId: primaryPlanPartId,
-			externalReference: `${CLIENT_B251.formCode}-L01`,
-			quantityMagnitude: `${modelPlanQtys["01"]}.000000`,
-			quantityUom: "piece",
-			usageBasis: "1 per product",
-			sourceRevisionRef: CLIENT_B251.revision,
-			status: "APPROVED",
-			createdAt: seedClock,
-		},
-	});
-
 	// ── Demo pack pilot projects (planning linkage only) ─────────────────────
 	// One DRAFT pilot project per demo pack: spec + model allocations + plan
 	// part snapshots. No lots/batches/prints — execution realism stays B251.
@@ -1961,33 +1895,6 @@ async function seedProfile(tx) {
 					lifecycleStatus: "COMMITTED",
 				},
 			});
-			await tx.planDemandAllocation.upsert({
-				where: { id: stableId(`demo-pda-${packKey}-${model.modelNumber}`) },
-				update: {
-					projectId: demoProjectId,
-					modelId: demoModelId,
-					marketRegion: "JP",
-					demandPurpose: "production",
-					quantityMagnitude: `${DEMO_TRAY_STANDARD}.000000`,
-					quantityUom: "piece",
-					usageBasis: "finished product",
-					sourceRevisionRef: "demo-fixture-1.0",
-					lifecycleStatus: "COMMITTED",
-				},
-				create: {
-					id: stableId(`demo-pda-${packKey}-${model.modelNumber}`),
-					projectId: demoProjectId,
-					modelId: demoModelId,
-					marketRegion: "JP",
-					demandPurpose: "production",
-					quantityMagnitude: `${DEMO_TRAY_STANDARD}.000000`,
-					quantityUom: "piece",
-					usageBasis: "finished product",
-					sourceRevisionRef: "demo-fixture-1.0",
-					lifecycleStatus: "COMMITTED",
-					createdAt: seedClock,
-				},
-			});
 			let partIndex = 1;
 			for (const partName of model.parts) {
 				const partCode = `${pack.productCode}-${model.modelNumber}-${String(partIndex).padStart(2, "0")}`;
@@ -2023,63 +1930,65 @@ async function seedProfile(tx) {
 		demoProjectCount += 1;
 	}
 
-	// Lots: required pcs = seeded batches for that lot × tray size (240).
-	const lotDefs = [
-		["lot-avocado", "LOT-B251-01", "B251 Avocado Burger — Lot 01", "01", 4 * tray],
-		["lot-hotdog", "LOT-B251-02", "B251 Cheese Hotdog — Lot 01", "02", 3 * tray],
-		["lot-tacos", "LOT-B251-03", "B251 Tacos — Lot 01", "03", 2 * tray],
-		["lot-fries", "LOT-B251-04", "B251 Potato Wedge — Lot 01", "04", 2 * tray],
-		["lot-drink", "LOT-B251-05", "B251 Cola / Ice Coffee — Lot 01", "05", 2 * tray],
-		["lot-tray", "LOT-B251-06", "B251 Tray — Lot 01", "06", 2 * tray],
-	];
-	const lotIds = {};
+	// Lots: one Project/ProductionPlan has one Lot.
+	const lotModelTrays = { "01": 4, "02": 3, "03": 2, "04": 2, "05": 2, "06": 2 };
+	const lotModels = CLIENT_B251.models.filter((model) => lotModelTrays[model.modelNumber] !== undefined);
+	const lotId = stableId("lot-b251");
+	const lotQty = lotModels.reduce((sum, model) => sum + lotModelTrays[model.modelNumber] * tray, 0);
+	const lotCode = "LOT-B251-01";
+	const lotName = "B251 Production Lot 01";
+	const firstPart = lotModels[0].parts[0];
+	const lotIds = Object.fromEntries(lotModels.map((model) => [model.modelNumber, lotId]));
 	const lotAllocIds = {};
-	for (const [key, lotCode, lotName, modelNumber, qty] of lotDefs) {
-		const lotId = stableId(key);
-		lotIds[modelNumber] = lotId;
-		const firstPartCode = CLIENT_B251.models.find((m) => m.modelNumber === modelNumber).parts[0][0];
-		await tx.lot.upsert({
-			where: { id: lotId },
-			update: {
-				projectId,
-				lotCode: code(lotCode),
-				lotName,
-				partsListId,
-				partsListVersion: 1,
-				partId: planPartIds[firstPartCode],
-				partName: CLIENT_B251.models.find((m) => m.modelNumber === modelNumber).parts[0][1],
-				requiredProductionQuantity: qty,
-				status: "ACTIVE",
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				labelPackSize: CLIENT_B251.trayQuantityStandard,
-				createdAtStage: "Planning",
-			},
-			create: {
-				id: lotId,
-				projectId,
-				lotCode: code(lotCode),
-				lotName,
-				partsListId,
-				partsListVersion: 1,
-				partId: planPartIds[firstPartCode],
-				partName: CLIENT_B251.models.find((m) => m.modelNumber === modelNumber).parts[0][1],
-				requiredProductionQuantity: qty,
-				status: "ACTIVE",
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				labelPackSize: CLIENT_B251.trayQuantityStandard,
-				createdAtStage: "Planning",
-				createdAt: seedClock,
-			},
-		});
-		for (const [partCode] of CLIENT_B251.models.find((m) => m.modelNumber === modelNumber).parts) {
+	await tx.lot.upsert({
+		where: { id: lotId },
+		update: {
+			projectId,
+			lotCode: code(lotCode),
+			lotName,
+			partsListId,
+			partsListVersion: 1,
+			partId: planPartIds[firstPart[0]],
+			partName: firstPart[1],
+			requiredProductionQuantity: lotQty,
+			status: "ACTIVE",
+			quantityMagnitude: `${lotQty}.000000`,
+			quantityUom: "piece",
+			labelPackSize: CLIENT_B251.trayQuantityStandard,
+			createdAtStage: "Planning",
+		},
+		create: {
+			id: lotId,
+			projectId,
+			lotCode: code(lotCode),
+			lotName,
+			partsListId,
+			partsListVersion: 1,
+			partId: planPartIds[firstPart[0]],
+			partName: firstPart[1],
+			requiredProductionQuantity: lotQty,
+			status: "ACTIVE",
+			quantityMagnitude: `${lotQty}.000000`,
+			quantityUom: "piece",
+			labelPackSize: CLIENT_B251.trayQuantityStandard,
+			createdAtStage: "Planning",
+			createdAt: seedClock,
+		},
+	});
+	for (const model of lotModels) {
+		const modelQty = lotModelTrays[model.modelNumber] * tray;
+		const partCodes = [
+			...model.parts.map(([partCode]) => partCode),
+			...(CLIENT_B251.decoPartsByModel[model.modelNumber] ?? []).map((deco) => deco.partCode),
+			...(model.modelNumber === "01" ? [CLIENT_B251.sharedCapsule.partCode] : []),
+		];
+		for (const partCode of new Set(partCodes)) {
 			const allocId = stableId(`alloc-${lotCode}-${partCode}`);
-			lotAllocIds[`${modelNumber}:${partCode}`] = allocId;
+			lotAllocIds[`${model.modelNumber}:${partCode}`] = allocId;
 			await tx.lotPartAllocation.upsert({
 				where: { lotId_partId: { lotId, partId: planPartIds[partCode] } },
 				update: {
-					quantityMagnitude: `${qty}.000000`,
+					quantityMagnitude: `${modelQty}.000000`,
 					quantityUom: "piece",
 					usageBasis: "1 per product",
 					status: "COMMITTED",
@@ -2088,7 +1997,7 @@ async function seedProfile(tx) {
 					id: allocId,
 					lotId,
 					partId: planPartIds[partCode],
-					quantityMagnitude: `${qty}.000000`,
+					quantityMagnitude: `${modelQty}.000000`,
 					quantityUom: "piece",
 					usageBasis: "1 per product",
 					status: "COMMITTED",
@@ -2202,7 +2111,7 @@ async function seedProfile(tx) {
 		["jun", "PRJ-B251-JUN", "B251 June pilot (retro)", "COMPLETED", true, { "01": 2 }],
 		["oct", "PRJ-B251-OCT", "B251 October forecast", "DRAFT", false, { "01": 2, "02": 2 }],
 	];
-	// Lots per story project: [lotSuffix, lotCode, lotName, modelNumber, trays, lotStatus]
+	// One Lot per story project; suffixes alias the same Lot when multiple model batches share it.
 	const storyLots = {
 		aug: [
 			["aug1", "LOT-B251-11", "B251 August replenishment — Lot 01", "01", 3, "ACTIVE"],
@@ -2471,11 +2380,13 @@ async function seedProfile(tx) {
 				storyStepOrder += 1;
 			}
 		}
-		for (const [lotSuffix, lotCode, lotName, modelNumber, trays, lotStatus] of storyLots[projKey] ?? []) {
-			const qty = trays * tray;
-			const lotId = stableId(`lot-${projKey}-${lotSuffix}`);
-			storyLotIds[lotSuffix] = lotId;
-			const firstPart = CLIENT_B251.models.find((m) => m.modelNumber === modelNumber).parts[0];
+		const projectLotDefs = storyLots[projKey] ?? [];
+		if (projectLotDefs.length > 0) {
+			const [canonicalLotSuffix, lotCode, lotName, firstModelNumber, , lotStatus] = projectLotDefs[0];
+			const lotId = stableId(`lot-${projKey}-${canonicalLotSuffix}`);
+			const lotQty = projectLotDefs.reduce((sum, [, , , , trays]) => sum + trays * tray, 0);
+			const firstPart = CLIENT_B251.models.find((model) => model.modelNumber === firstModelNumber).parts[0];
+			for (const [lotSuffix] of projectLotDefs) storyLotIds[lotSuffix] = lotId;
 			await tx.lot.upsert({
 				where: { id: lotId },
 				update: {
@@ -2486,9 +2397,9 @@ async function seedProfile(tx) {
 					partsListVersion: 1,
 					partId: storyPlanPartIds[firstPart[0]],
 					partName: firstPart[1],
-					requiredProductionQuantity: qty,
+					requiredProductionQuantity: lotQty,
 					status: lotStatus,
-					quantityMagnitude: `${qty}.000000`,
+					quantityMagnitude: `${lotQty}.000000`,
 					quantityUom: "piece",
 					labelPackSize: CLIENT_B251.trayQuantityStandard,
 					createdAtStage: "Planning",
@@ -2502,55 +2413,55 @@ async function seedProfile(tx) {
 					partsListVersion: 1,
 					partId: storyPlanPartIds[firstPart[0]],
 					partName: firstPart[1],
-					requiredProductionQuantity: qty,
+					requiredProductionQuantity: lotQty,
 					status: lotStatus,
-					quantityMagnitude: `${qty}.000000`,
+					quantityMagnitude: `${lotQty}.000000`,
 					quantityUom: "piece",
 					labelPackSize: CLIENT_B251.trayQuantityStandard,
 					createdAtStage: "Planning",
 					createdAt: seedClock,
 				},
 			});
-			const lotModel = CLIENT_B251.models.find((m) => m.modelNumber === modelNumber);
-			const lotPartCodes = [
-				...lotModel.parts.map(([c]) => c),
-				...(CLIENT_B251.decoPartsByModel[modelNumber] ?? [])
-					.map((deco) => deco.partCode)
-					.filter((c) => storyPlanPartIds[c] !== undefined),
-				...(modelNumber === "01" && storyPlanPartIds[CLIENT_B251.sharedCapsule.partCode] !== undefined
-					? [CLIENT_B251.sharedCapsule.partCode]
-					: []),
-			];
-			for (const partCode of lotPartCodes) {
-				const allocId = stableId(`alloc-${projKey}-${lotSuffix}-${partCode}`);
-				storyAllocIds[`${lotSuffix}:${partCode}`] = allocId;
-				await tx.lotPartAllocation.upsert({
-					where: { lotId_partId: { lotId, partId: storyPlanPartIds[partCode] } },
-					update: {
-						quantityMagnitude: `${qty}.000000`,
-						quantityUom: "piece",
-						usageBasis: "1 per product",
-						status: "COMMITTED",
-					},
-					create: {
-						id: allocId,
-						lotId,
-						partId: storyPlanPartIds[partCode],
-						quantityMagnitude: `${qty}.000000`,
-						quantityUom: "piece",
-						usageBasis: "1 per product",
-						status: "COMMITTED",
-						createdAt: seedClock,
-					},
-				});
+			for (const modelNumber of Object.keys(modelTrays)) {
+				const modelQty = modelTrays[modelNumber] * tray;
+				const model = CLIENT_B251.models.find((candidate) => candidate.modelNumber === modelNumber);
+				const partCodes = [
+					...model.parts.map(([partCode]) => partCode),
+					...(CLIENT_B251.decoPartsByModel[modelNumber] ?? []).map((deco) => deco.partCode),
+					...(modelNumber === "01" ? [CLIENT_B251.sharedCapsule.partCode] : []),
+				].filter((partCode) => storyPlanPartIds[partCode] !== undefined);
+				for (const partCode of new Set(partCodes)) {
+					const allocId = stableId(`alloc-${projKey}-${canonicalLotSuffix}-${partCode}`);
+					storyAllocIds[`${canonicalLotSuffix}:${partCode}`] = allocId;
+					await tx.lotPartAllocation.upsert({
+						where: { lotId_partId: { lotId, partId: storyPlanPartIds[partCode] } },
+						update: {
+							quantityMagnitude: `${modelQty}.000000`,
+							quantityUom: "piece",
+							usageBasis: "1 per product",
+							status: "COMMITTED",
+						},
+						create: {
+							id: allocId,
+							lotId,
+							partId: storyPlanPartIds[partCode],
+							quantityMagnitude: `${modelQty}.000000`,
+							quantityUom: "piece",
+							usageBasis: "1 per product",
+							status: "COMMITTED",
+							createdAt: seedClock,
+						},
+					});
+				}
 			}
 		}
 		for (const [batchSuffix, batchCode, lotSuffix, partCode, stageKey, subKey, batchStatus] of storyBatches[projKey] ?? []) {
 			const id = stableId(`batch-${projKey}-${batchSuffix}`);
 			const stageId = storyStage[stageKey];
 			const subStageId = subKey === "-" ? null : (storySubStage[subKey] ?? null);
-			const lotId = storyLotIds[lotSuffix];
-			const allocId = storyAllocIds[`${lotSuffix}:${partCode}`];
+			const canonicalLotSuffix = storyLots[projKey]?.[0]?.[0] ?? lotSuffix;
+			const lotId = storyLotIds[lotSuffix] ?? storyLotIds[canonicalLotSuffix];
+			const allocId = storyAllocIds[`${canonicalLotSuffix}:${partCode}`];
 			const lineCode = stageDefaultLineCode[stageId] ?? null;
 			const lineId = lineCode ? stableId(`line-${lineCode}`) : null;
 			await tx.batch.upsert({
@@ -3343,12 +3254,13 @@ async function seedProfile(tx) {
 		demoPlanParts: demoPlanPartCount,
 		planParts: Object.keys(planPartIds).length,
 		plans: 1 + storyProjects.length + demoProjectCount,
-		lots: lotDefs.length + Object.values(storyLots).reduce((sum, lots) => sum + lots.length, 0),
+		lots: 1 + Object.values(storyLots).filter((lots) => lots.length > 0).length,
 		batches:
 			batchDefs.length +
 			Object.values(storyBatches).reduce((sum, batches) => sum + batches.length, 0),
 		stations: lineDefs.length,
 		workProcesses: 17,
+		productionLines: 1,
 		booths: 2,
 		monitoringDailySheets: 4,
 		monitoringStationBoards: 2,

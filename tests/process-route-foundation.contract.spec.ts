@@ -153,6 +153,8 @@ describe("canonical process route writes", () => {
 			});
 
 		expect(routeResponse.status).to.equal(201);
+		expect(routeResponse.headers.deprecation).to.equal("true");
+		expect(routeResponse.headers.sunset).to.equal("Fri, 01 Jan 2027 00:00:00 GMT");
 		expect(routeResponse.body).to.include({
 			modelId: "model-a",
 			revision: 1,
@@ -173,6 +175,8 @@ describe("canonical process route writes", () => {
 			});
 
 		expect(stageResponse.status).to.equal(201);
+		expect(stageResponse.headers.deprecation).to.equal("true");
+		expect(stageResponse.headers.sunset).to.equal("Fri, 01 Jan 2027 00:00:00 GMT");
 		expect(stageResponse.body).to.include({
 			sequence: 1,
 			stageName: "Fullspray",

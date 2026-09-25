@@ -56,7 +56,7 @@ describe("canonical PATS domain read contract", () => {
 						createdAt: new Date("2026-07-01T00:00:00.000Z"),
 						releasedAt: new Date("2026-07-02T00:00:00.000Z"),
 						product: { productName: "Sample product" },
-						lots: [{ id: "lot-1" }],
+						lot: { id: "lot-1" },
 					}];
 				},
 			},
@@ -102,12 +102,9 @@ describe("canonical PATS domain read contract", () => {
 					product: null,
 					productSpecification: null,
 					modelAllocations: [],
-					demandAllocations: [],
-					materialRequirements: [],
 					parts: [{ id: "part-1", partCode: "PART-001", partName: "Main part" }],
 					partsLists: [{ id: "route-1", version: 3, status: "PUBLISHED", publishedAt: new Date("2026-07-02T00:00:00.000Z"), steps: [{ id: "route-step-1", partId: "part-1", part: { partCode: "PART-001", partName: "Main part" }, stageId: "stage-1", subStageId: null, stepOrder: 1 }] }],
-					pmrs: [],
-					lots: [{
+					lot: {
 						id: "lot-1",
 						lotCode: "LOT-001",
 						lotName: "July lot",
@@ -120,7 +117,7 @@ describe("canonical PATS domain read contract", () => {
 						quantityUom: "EA",
 						partAllocations: [{ lotPartAllocationId: "allocation-1", partId: "part-1", part: { partCode: "PART-001" }, quantityMagnitude: "100", quantityUom: "EA" }],
 						batches: [],
-					}],
+					},
 				}),
 			},
 		});
@@ -132,6 +129,9 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.status).to.equal(200);
 		expect(response.headers.etag).to.equal('"2"');
 		expect(response.headers["cache-control"]).to.equal("no-store");
+		expect(response.body).not.to.have.property("allocations");
+		expect(response.body).not.to.have.property("materialRequirements");
+		expect(response.body).not.to.have.property("pmrsReference");
 		expect(response.body.lots[0]).to.include({
 			lotId: "lot-1",
 			partsListId: "route-1",
@@ -630,6 +630,34 @@ describe("canonical PATS domain read contract", () => {
 		]);
 	});
 
+	it("hides pre-floor STG-PROJECTS batches so progress rows show stage data", async () => {
+		const app = appFor({
+			project: { count: async () => 2 },
+			batch: {
+				findMany: async () => [
+					{ id: "batch-floor", plannedQuantity: 240, lot: { id: "lot-1", projectId: "project-1", requiredProductionQuantity: 480, project: { name: "July production", product: { productName: "Product 1" } } }, positionProjection: { stageId: "stage-1", quantityMagnitude: "240" } },
+					{ id: "batch-prefloor", plannedQuantity: 1, lot: { id: "lot-2", projectId: "project-2", requiredProductionQuantity: 1, project: { name: "E2E release", product: { productName: "Product 1" } } }, positionProjection: { stageId: "STG-PROJECTS", quantityMagnitude: "1" } },
+				],
+			},
+			stage: { findMany: async () => [{ id: "stage-1", name: "Injection", displayOrder: 1 }] },
+			routingViolation: { findMany: async () => [] },
+			qualityDecision: { count: async () => 0 },
+			inventoryTransaction: { count: async () => 0 },
+		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/dashboard-summaries")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		// Pre-floor project is still counted as active, but carries no stage
+		// segments so it must not occupy a progress row ahead of floor data.
+		expect(response.body.activeProjects).to.equal(2);
+		expect(response.body.productionProgress).to.have.length(1);
+		expect(response.body.productionProgress[0].projectId).to.equal("project-1");
+		expect(response.body.productionProgress[0].segments[0]).to.include({ kind: "stage", stageName: "Injection" });
+	});
+
 	it("returns server-owned line activity, throughput evidence, closed batches, and traceability rows", async () => {
 		const occurredAt = new Date();
 		const app = appFor({
@@ -841,6 +869,31 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.status).to.equal(200);
 		expect(response.body.data).to.have.length(1);
 		expect(response.body.data[0]).to.deep.include({ id: "station-1", name: "Station 1", sectionCode: "ST-01" });
+	});
+
+	it("lists production lines as the Section tree umbrella", async () => {
+		const app = appFor(
+			{
+				productionLine: {
+					count: async () => 1,
+					findMany: async () => [{ id: "pline-1", lineCode: "PL-MAIN", name: "Main Production Line", displayOrder: 0, isEnabled: true }],
+				},
+			},
+			[{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }],
+		);
+
+		const response = await request(app)
+			.get("/api/v1/production-lines")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.data).to.deep.equal([{
+			productionLineId: "pline-1",
+			lineCode: "PL-MAIN",
+			name: "Main Production Line",
+			displayOrder: 0,
+			isEnabled: true,
+		}]);
 	});
 
 	it("filters sections by search across name and code", async () => {

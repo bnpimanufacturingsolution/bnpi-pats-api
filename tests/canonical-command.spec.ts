@@ -287,6 +287,17 @@ describe("canonical PATS command contract", () => {
 		expect(response.body).to.deep.include({ allocationId: "allocation-1", modelId: "model-1", partsListVersionId: "parts-list-1", planRowVersion: 2 });
 	});
 
+	it("rejects retired demand dimensions in model allocation writes", async () => {
+		const app = appFor({});
+		const response = await request(app)
+			.post("/api/v1/production-plans/plan-1/model-allocations")
+			.set("Authorization", "Bearer command-token")
+			.send({ modelId: "model-1", plannedQuantity: 100, demandPurpose: "production" });
+
+		expect(response.status).to.equal(422);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:validation-error");
+	});
+
 	it("creates a new draft route version and validates server-owned route identity", async () => {
 		const database = {
 			idempotencyRecord: {
@@ -357,10 +368,7 @@ describe("canonical PATS command contract", () => {
 			routingStep: { deleteMany: async () => undefined },
 			part: { deleteMany: async () => undefined },
 			projectModelAllocation: { deleteMany: async () => undefined },
-			planDemandAllocation: { deleteMany: async () => undefined },
-			materialRequirement: { deleteMany: async () => undefined },
 			productSpecification: { deleteMany: async () => undefined },
-			pmrs: { deleteMany: async () => undefined },
 			workflowGroup: { deleteMany: async () => undefined },
 			processChangeLog: { deleteMany: async () => undefined },
 			auditRecord: {
@@ -552,7 +560,6 @@ describe("canonical PATS command contract", () => {
 				findUnique: async () => ({ id: "batch-1", lotId: "lot-1", lot: { projectId: "proj-1" } }),
 			},
 			part: { findFirst: async () => ({ id: "part-1" }) },
-			materialRequirement: { findFirst: async () => null },
 			inventoryTransaction: {
 				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "itx-1", rowVersion: 1, ...data }),
 			},
@@ -597,6 +604,18 @@ describe("canonical PATS command contract", () => {
 
 		expect(response.status).to.equal(201);
 		expect(response.headers.location).to.equal("/api/v1/inventory-transactions/itx-1");
+	});
+
+	it("rejects the retired material requirement link on inventory transactions", async () => {
+		const app = appFor({}, [{ kind: "CAPABILITY", key: "inventory.issue", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/inventory-transactions")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "inventory-issue-retired-requirement")
+			.send({ ...issuanceBody, materialRequirementId: "mr-1" });
+
+		expect(response.status).to.equal(422);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:validation-error");
 	});
 
 	it("keeps ISSUANCE behind inventory.issue even for inventory.receive holders", async () => {
@@ -745,6 +764,91 @@ describe("canonical PATS command contract", () => {
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:conflict");
 	});
 
+	it("creates a production line as the Section tree umbrella", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-pline", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			productionLine: {
+				findUnique: async () => null,
+				count: async () => 0,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "pline-1", ...data }),
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/production-lines")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "pline-create-1")
+			.send({ lineCode: "PL-MAIN", name: "Main Production Line" });
+
+		expect(response.status).to.equal(201);
+		expect(response.body).to.deep.equal({ productionLineId: "pline-1", lineCode: "PL-MAIN", name: "Main Production Line" });
+		expect(response.headers["location"]).to.equal("/api/v1/production-lines/pline-1");
+	});
+
+	it("rejects a duplicate production line code with 409 conflict", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-pline-dup", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			productionLine: {
+				findUnique: async () => ({ id: "pline-1" }),
+				create: async () => { throw new Error("must not create on conflict"); },
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/production-lines")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "pline-create-dup")
+			.send({ lineCode: "PL-MAIN", name: "Other" });
+
+		expect(response.status).to.equal(409);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:conflict");
+	});
+
+	it("creates a work process without inferring a manufacturing sub-stage", async () => {
+		let createdData: Record<string, unknown> | undefined;
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-wp", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			workProcess: {
+				count: async () => 0,
+				create: async ({ data }: { data: Record<string, unknown> }) => { createdData = data; return { id: "proc-9", ...data }; },
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }, { kind: "CAPABILITY", key: "operations.manage", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/work-processes")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "wp-no-substage")
+			.send({ name: "Tampo Printing", sectionId: "section-1" });
+
+		expect(response.status).to.equal(201);
+		expect(createdData).to.include({ name: "Tampo Printing", sectionId: "section-1", subStageId: null });
+		expect(response.body).to.include({ processId: "proc-9", subStageId: null });
+	});
+
 	it("fails station processes replace when station is not found", async () => {
 		const database = {
 			idempotencyRecord: {
@@ -886,6 +990,37 @@ describe("canonical PATS command contract", () => {
 		expect(response.body).to.include({ batchId: "batch-1", batchCode: "B-1001" });
 		expect(response.headers.location).to.equal("/api/v1/batches/batch-1");
 		expect(response.headers.etag).to.equal('"1"');
+	});
+
+	it("rejects a second lot for the same production plan", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-lot-duplicate" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			project: { findUnique: async () => ({ id: "proj-1" }) },
+			lot: { findUnique: async () => ({ id: "lot-1" }) },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
+		const response = await request(app)
+			.post("/api/v1/production-plans/proj-1/lots")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "lot-create-duplicate")
+			.send({
+				lotCode: "LOT-002",
+				lotName: "Second lot",
+				partId: "part-1",
+				partsListId: "route-1",
+				partsListVersion: 1,
+				requiredProductionQuantity: 100,
+				labelPackSize: 10,
+			});
+
+		expect(response.status).to.equal(409);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:project-lot-cardinality-conflict");
 	});
 
 	it("activates PLANNED batches when the production plan is released", async () => {

@@ -419,10 +419,11 @@
     "method": "POST",
     "url": "/api/v1/catalog/bom-definitions",
     "summary": "Create a draft BOM revision",
+    "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
     "tags": [
       "PATS Catalog"
     ],
-    "deprecated": false,
+    "deprecated": true,
     "security": [
       {
         "bearerAuth": []
@@ -460,10 +461,11 @@
     "method": "GET",
     "url": "/api/v1/catalog/bom-definitions",
     "summary": "List BOM definition revisions for a model",
+    "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
     "tags": [
       "PATS Catalog"
     ],
-    "deprecated": false,
+    "deprecated": true,
     "security": [
       {
         "bearerAuth": []
@@ -537,10 +539,11 @@
     "method": "POST",
     "url": "/api/v1/catalog/bom-lines",
     "summary": "Add an ordered model-part line to a draft BOM",
+    "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
     "tags": [
       "PATS Catalog"
     ],
-    "deprecated": false,
+    "deprecated": true,
     "security": [
       {
         "bearerAuth": []
@@ -578,10 +581,11 @@
     "method": "PATCH",
     "url": "/api/v1/catalog/bom-definitions/{bomDefinitionId}",
     "summary": "Update draft BOM evidence status",
+    "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
     "tags": [
       "PATS Catalog"
     ],
-    "deprecated": false,
+    "deprecated": true,
     "security": [
       {
         "bearerAuth": []
@@ -619,10 +623,11 @@
     "method": "GET",
     "url": "/api/v1/catalog/bom-definitions/{bomDefinitionId}",
     "summary": "Read a BOM definition revision with ordered lines",
+    "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
     "tags": [
       "PATS Catalog"
     ],
-    "deprecated": false,
+    "deprecated": true,
     "security": [
       {
         "bearerAuth": []
@@ -672,10 +677,11 @@
     "method": "PATCH",
     "url": "/api/v1/catalog/bom-lines/{bomLineId}",
     "summary": "Correct a draft BOM line without silent quantity conversion",
+    "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
     "tags": [
       "PATS Catalog"
     ],
-    "deprecated": false,
+    "deprecated": true,
     "security": [
       {
         "bearerAuth": []
@@ -713,10 +719,11 @@
     "method": "POST",
     "url": "/api/v1/catalog/process-routes",
     "summary": "Create a draft process route revision",
+    "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
     "tags": [
       "PATS Catalog"
     ],
-    "deprecated": false,
+    "deprecated": true,
     "security": [
       {
         "bearerAuth": []
@@ -754,10 +761,11 @@
     "method": "POST",
     "url": "/api/v1/catalog/route-stages",
     "summary": "Add an ordered stage to a draft process route",
+    "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
     "tags": [
       "PATS Catalog"
     ],
-    "deprecated": false,
+    "deprecated": true,
     "security": [
       {
         "bearerAuth": []
@@ -795,10 +803,11 @@
     "method": "PATCH",
     "url": "/api/v1/catalog/process-routes/{processRouteId}",
     "summary": "Update draft process route evidence status",
+    "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
     "tags": [
       "PATS Catalog"
     ],
-    "deprecated": false,
+    "deprecated": true,
     "security": [
       {
         "bearerAuth": []
@@ -836,10 +845,11 @@
     "method": "PATCH",
     "url": "/api/v1/catalog/route-stages/{routeStageId}",
     "summary": "Correct draft route stage order or metadata",
+    "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
     "tags": [
       "PATS Catalog"
     ],
-    "deprecated": false,
+    "deprecated": true,
     "security": [
       {
         "bearerAuth": []

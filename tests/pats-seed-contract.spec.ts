@@ -26,8 +26,6 @@ describe("PATS seed contract", () => {
     );
 
     for (const required of [
-      "planDemandAllocation",
-      "materialRequirement",
       "lotPartAllocation",
       "stageEvent",
       "inventoryTransaction",
@@ -56,6 +54,10 @@ describe("PATS seed contract", () => {
     ]) {
       expect(script, `seed is missing ${required}`).to.contain(required);
     }
+
+    expect(script).not.to.contain("planDemandAllocation");
+    expect(script).not.to.contain("materialRequirement");
+    expect(script).not.to.contain("pmrs");
 
     expect(clientFragment).to.contain('productCode: "B251"');
     expect(clientFragment).to.contain("B251-01-01");
@@ -152,7 +154,7 @@ describe("PATS seed contract", () => {
       script.indexOf("async function seedProfile"),
     );
     expect(wipeRegion).to.match(/\.deleteMany\s*\(/);
-    for (const table of ["outboxMessage", "auditRecord", "stageEvent", "batch", "qualityInspection", "qualityStageAssignment", "subjectAssignment", "subject", "section"]) {
+    for (const table of ["outboxMessage", "auditRecord", "stageEvent", "batch", "qualityInspection", "qualityStageAssignment", "subjectAssignment", "subject", "section", "productionLine"]) {
       expect(wipeRegion, `wipe is missing table ${table}`).to.contain(`"${table}"`);
     }
     // The Station→Section model rename must be reflected in the wipe list —
@@ -212,6 +214,7 @@ describe("PATS seed contract", () => {
 		expect(script).to.contain('batchIds["batch-fw-inj"]');
 		expect(script).to.contain('"printJob"');
 		expect(script).to.contain("workProcesses: 17,");
+		expect(script).to.contain("productionLines: 1,");
 		// Floor layout: Injection 3 + Decoration 17 + Assembly 11 = 31 station-screen lines.
 		expect(script).to.contain('["INJ-MO-01", processInjMachineOpId, "Machine Operator #1"]');
 		expect(script).to.contain('["DEC-FS-MS-01", processFsManualId, "Manual Spray #1"]');

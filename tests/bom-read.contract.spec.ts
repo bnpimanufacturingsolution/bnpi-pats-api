@@ -161,6 +161,8 @@ describe("canonical BOM definition reads", () => {
 
 		expect(response.status).to.equal(200);
 		expect(response.headers["cache-control"]).to.equal("no-store");
+		expect(response.headers.deprecation).to.equal("true");
+		expect(response.headers.sunset).to.equal("Fri, 01 Jan 2027 00:00:00 GMT");
 		expect(response.body).to.deep.equal({
 			data: [
 				{
