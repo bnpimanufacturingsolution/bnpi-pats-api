@@ -974,8 +974,8 @@
           "minLength": 1
         }
       },
-      "PlanId": {
-        "name": "planId",
+      "ProjectId": {
+        "name": "projectId",
         "in": "path",
         "required": true,
         "schema": {
@@ -2440,7 +2440,7 @@
         ],
         "responses": {
           "201": {
-            "description": "Draft model part created"
+            "description": "Draft model part created. The body echoes the stored representation, including routingSteps (possibly [])."
           },
           "404": {
             "description": "Parent model not found"
@@ -2590,404 +2590,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Updated draft model part"
-          },
-          "412": {
-            "description": "Stale or missing If-Match"
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/bom-definitions": {
-      "post": {
-        "operationId": "catalogBomDefinitionCreate",
-        "summary": "Create a draft BOM revision",
-        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
-        "deprecated": true,
-        "tags": [
-          "PATS Catalog"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Draft BOM revision created"
-          },
-          "404": {
-            "description": "Parent model not found"
-          },
-          "409": {
-            "description": "Duplicate BOM revision or idempotency conflict"
-          },
-          "422": {
-            "description": "Invalid BOM revision or source evidence"
-          }
-        }
-      },
-      "get": {
-        "operationId": "catalogBomDefinitionCollectionGet",
-        "summary": "List BOM definition revisions for a model",
-        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
-        "deprecated": true,
-        "tags": [
-          "PATS Catalog"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "query",
-            "name": "model_id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 100,
-              "default": 50
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "description": "Comma-separated revision, created_at, updated_at fields; prefix with - for descending order.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paginated BOM definition summaries"
-          },
-          "400": {
-            "description": "Malformed or incomplete collection query"
-          },
-          "401": {
-            "description": "Authentication required"
-          },
-          "403": {
-            "description": "catalog.read capability required"
-          },
-          "503": {
-            "description": "BOM persistence unavailable"
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/bom-lines": {
-      "post": {
-        "operationId": "catalogBomLineCreate",
-        "summary": "Add an ordered model-part line to a draft BOM",
-        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
-        "deprecated": true,
-        "tags": [
-          "PATS Catalog"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Draft BOM line created"
-          },
-          "404": {
-            "description": "BOM or model part not found"
-          },
-          "409": {
-            "description": "Duplicate line or idempotency conflict"
-          },
-          "422": {
-            "description": "Cross-model or invalid BOM line"
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/bom-definitions/{bomDefinitionId}": {
-      "patch": {
-        "operationId": "catalogBomDefinitionPatch",
-        "summary": "Update draft BOM evidence status",
-        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
-        "deprecated": true,
-        "tags": [
-          "PATS Catalog"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "bomDefinitionId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Updated draft BOM revision"
-          },
-          "412": {
-            "description": "Stale or missing If-Match"
-          }
-        }
-      },
-      "get": {
-        "operationId": "catalogBomDefinitionGet",
-        "summary": "Read a BOM definition revision with ordered lines",
-        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
-        "deprecated": true,
-        "tags": [
-          "PATS Catalog"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "bomDefinitionId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "BOM definition with sparse-safe ordered lines"
-          },
-          "401": {
-            "description": "Authentication required"
-          },
-          "403": {
-            "description": "catalog.read capability required"
-          },
-          "404": {
-            "description": "BOM definition not found"
-          },
-          "503": {
-            "description": "BOM persistence unavailable"
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/bom-lines/{bomLineId}": {
-      "patch": {
-        "operationId": "catalogBomLinePatch",
-        "summary": "Correct a draft BOM line without silent quantity conversion",
-        "description": "Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.",
-        "deprecated": true,
-        "tags": [
-          "PATS Catalog"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "bomLineId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Updated draft BOM line"
-          },
-          "412": {
-            "description": "Stale or missing If-Match"
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/process-routes": {
-      "post": {
-        "operationId": "catalogProcessRouteCreate",
-        "summary": "Create a draft process route revision",
-        "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
-        "deprecated": true,
-        "tags": [
-          "PATS Catalog"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Draft process route created"
-          },
-          "404": {
-            "description": "Parent model not found"
-          },
-          "409": {
-            "description": "Duplicate route revision or idempotency conflict"
-          },
-          "422": {
-            "description": "Invalid route or source evidence"
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/route-stages": {
-      "post": {
-        "operationId": "catalogRouteStageCreate",
-        "summary": "Add an ordered stage to a draft process route",
-        "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
-        "deprecated": true,
-        "tags": [
-          "PATS Catalog"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Draft route stage created"
-          },
-          "404": {
-            "description": "Parent route not found"
-          },
-          "409": {
-            "description": "Duplicate stage sequence or idempotency conflict"
-          },
-          "422": {
-            "description": "Missing stage identity or invalid route stage"
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/process-routes/{processRouteId}": {
-      "patch": {
-        "operationId": "catalogProcessRoutePatch",
-        "summary": "Update draft process route evidence status",
-        "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
-        "deprecated": true,
-        "tags": [
-          "PATS Catalog"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "processRouteId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Updated draft process route"
-          },
-          "412": {
-            "description": "Stale or missing If-Match"
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/route-stages/{routeStageId}": {
-      "patch": {
-        "operationId": "catalogRouteStagePatch",
-        "summary": "Correct draft route stage order or metadata",
-        "description": "Deprecated; scheduled for removal on 2027-01-01. The active app authors route steps on ModelPart.",
-        "deprecated": true,
-        "tags": [
-          "PATS Catalog"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "routeStageId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Updated draft route stage"
+            "description": "Updated draft model part. The body echoes the stored representation, including routingSteps — no re-GET is required to render the saved route."
           },
           "412": {
             "description": "Stale or missing If-Match"
@@ -3126,10 +2729,10 @@
         }
       }
     },
-    "/stations": {
+    "/sections": {
       "get": {
-        "operationId": "stationCollectionGet",
-        "summary": "Read physical production stations",
+        "operationId": "sectionCollectionGet",
+        "summary": "Read configured sections",
         "tags": [
           "PATS Configuration"
         ],
@@ -3147,8 +2750,8 @@
         }
       },
       "post": {
-        "operationId": "stationCreate",
-        "summary": "Add a physical production station",
+        "operationId": "sectionCreate",
+        "summary": "Add a configured section",
         "tags": [
           "PATS Configuration"
         ],
@@ -3174,18 +2777,18 @@
         }
       }
     },
-    "/stations/{stationId}/history": {
+    "/sections/{sectionId}/history": {
       "get": {
-        "operationId": "stationHistoryGet",
-        "summary": "Read server-owned station event history and open violations",
-        "description": "Returns stage-event evidence and open routing violations for the station's configured stage boundaries. The projection is read-only and rebuildable from the execution ledger.",
+        "operationId": "sectionHistoryGet",
+        "summary": "Read server-owned section event history and open violations",
+        "description": "Returns stage-event evidence and open routing violations for the section's configured stage boundaries. The projection is read-only and rebuildable from the execution ledger.",
         "tags": [
           "PATS Execution"
         ],
         "x-required-capability": "execution.read",
         "parameters": [
           {
-            "name": "stationId",
+            "name": "sectionId",
             "in": "path",
             "required": true,
             "schema": {
@@ -3197,6 +2800,55 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/StationHistoryRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/sections/{sectionId}/support": {
+      "get": {
+        "operationId": "sectionSupportGet",
+        "summary": "Read rebuildable section support projection (output + WIP)",
+        "description": "Secondary workstation cards. todayOutput aggregates first-success PrintJobs (SENT|SIMULATED, sequence 1) at this section for a UTC calendar day (query date=YYYY-MM-DD). materials are hop inventory (bound-step positions minus first-success print here). lotPlans carry ceil(lot.requiredProductionQuantity / lot.labelPackSize) for Lot Progress — the denominator is the lot plan, not hop occupancy. staff and expectedOutput stay null until product-owned sources exist.\n",
+        "tags": [
+          "PATS Execution"
+        ],
+        "x-required-capability": "execution.read",
+        "parameters": [
+          {
+            "name": "sectionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "UTC calendar day for today's output (default current UTC date)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ResourceRead"
+          },
+          "400": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
           },
           "403": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
@@ -3306,10 +2958,203 @@
         }
       }
     },
-    "/production-plans": {
+    "/production-lines": {
       "get": {
-        "operationId": "productionPlanCollectionGet",
-        "summary": "List production-plan summaries",
+        "operationId": "productionLineCollectionGet",
+        "summary": "Read production-line umbrellas for the Section tree",
+        "description": "A ProductionLine owns Sections; multiple Sections may belong to one line. The collection carries no Station identity; a StationScreen is the published state of a Line.",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedRead"
+          },
+          "400": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      },
+      "post": {
+        "operationId": "productionLineCreate",
+        "summary": "Create a production-line umbrella for the Section tree",
+        "description": "A ProductionLine owns Sections; multiple Sections may belong to one line. The created line has no Stations yet. Line codes are unique within the deployment.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "operations.manage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "409": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422"
+          }
+        }
+      }
+    },
+    "/lines": {
+      "get": {
+        "operationId": "lineCollectionGet",
+        "summary": "Read station-screen line instances scoped to the caller",
+        "description": "1 line = 1 station screen. Admin (operations.manage) sees all lines; every other subject sees only lines where they are the active leader, the assigned leader, or hold an ACTIVE operator assignment. This collection is the login-landing source: one allowed line lands directly, several show the picker.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "section_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "process_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "include_disabled",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedRead"
+          },
+          "400": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      },
+      "post": {
+        "operationId": "lineCreate",
+        "summary": "Register a station-screen line under a leaf work process",
+        "description": "1 line = 1 station screen (L-1). The line must attach to a leaf WorkProcess; parent counts roll up (L-2/L-4). assignedLeaderId is required at creation time (L-5); the active leader defaults to the assigned leader. lineCode must be uppercase alphanumeric with dashes (e.g. DEC-LS-01) and is unique across the deployment.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "operations.manage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422"
+          }
+        }
+      }
+    },
+    "/lines/{lineId}/attention": {
+      "get": {
+        "operationId": "lineAttentionGet",
+        "summary": "Read the leader switcher attention flags for a line",
+        "description": "Red-dot evidence (L-12): openViolations counts OPEN routing violations at the line's sub-stage, stuckWip counts batch positions parked there longer than 8 hours, and unfilledHour reports whether today has a daily-sheet row for the line's work process. Non-admin callers must lead or run the line.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.read",
+        "parameters": [
+          {
+            "name": "lineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ResourceRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "operationId": "projectCollectionGet",
+        "summary": "List project summaries",
         "tags": [
           "PATS Planning"
         ],
@@ -3338,8 +3183,8 @@
         }
       },
       "post": {
-        "operationId": "productionPlanCreate",
-        "summary": "Create a draft production plan",
+        "operationId": "projectCreate",
+        "summary": "Create a draft project",
         "tags": [
           "PATS Planning"
         ],
@@ -3368,17 +3213,18 @@
         }
       }
     },
-    "/production-plans/{planId}": {
+    "/projects/{projectId}": {
       "get": {
-        "operationId": "productionPlanGet",
-        "summary": "Read a production plan and its planning snapshot",
+        "operationId": "projectGet",
+        "summary": "Read a project and its planning snapshot",
+        "description": "Returns the active Project snapshot, model quantities, Parts, Parts List versions, Lot, and execution lineage. Demand allocation, PMRS placeholder, and MaterialRequirement properties were removed by the user-approved 2026-09-25 v1 scope amendment.",
         "tags": [
           "PATS Planning"
         ],
         "x-required-capability": "planning.read",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlanId"
+            "$ref": "#/components/parameters/ProjectId"
           }
         ],
         "responses": {
@@ -3397,15 +3243,15 @@
         }
       },
       "patch": {
-        "operationId": "productionPlanPatch",
-        "summary": "Update a draft production plan",
+        "operationId": "projectPatch",
+        "summary": "Update a draft project",
         "tags": [
           "PATS Planning"
         ],
         "x-required-capability": "planning.manage",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlanId"
+            "$ref": "#/components/parameters/ProjectId"
           },
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -3469,7 +3315,7 @@
       },
       "post": {
         "operationId": "batchCreate",
-        "summary": "Create a planned batch and initial position projection",
+        "summary": "Create a planned batch and initial position projection (API/tests; UI releases mint automatically)",
         "tags": [
           "PATS Execution"
         ],
@@ -3622,6 +3468,7 @@
       "post": {
         "operationId": "inventoryTransactionCreate",
         "summary": "Record receiving or issuance evidence",
+        "description": "Records inventory movement without a MaterialRequirement link; materialRequirementId is retired and rejected.",
         "tags": [
           "PATS Inventory"
         ],
@@ -3664,6 +3511,45 @@
           },
           "403": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
+    "/quality-inspections/resolve": {
+      "get": {
+        "operationId": "qualityInspectionResolveGet",
+        "summary": "Resolve a scanned batch code into an open quality inspection",
+        "description": "Journey D scan-first resolve. Requires quality.resolve. Fail-closed when the gate stage is not in the subject's allowedStages.",
+        "tags": [
+          "PATS Quality"
+        ],
+        "x-required-capability": "quality.resolve",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ResourceRead"
+          },
+          "400": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
           },
           "503": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
@@ -3737,6 +3623,58 @@
         }
       }
     },
+    "/subjects": {
+      "get": {
+        "operationId": "subjectCollectionGet",
+        "summary": "Read the subject directory for leader/operator pickers",
+        "description": "Admin-only identity read (identity.read) backing the line-screen management pickers: assigned/active leader selection and operator assignment. Returns opaque subject ids plus display/email snapshots; never provider identifiers.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "identity.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "DISABLED"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedRead"
+          },
+          "400": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      }
+    },
     "/dashboard-summaries": {
       "get": {
         "operationId": "dashboardSummaryGet",
@@ -3779,17 +3717,181 @@
         }
       }
     },
-    "/production-plans/{planId}/model-allocations": {
+    "/lines/{lineId}": {
+      "patch": {
+        "operationId": "linePatch",
+        "summary": "Update a line (label, code, leaders, order, enable state)",
+        "description": "Admin management of the line identity. The cover flip (sick-day active leader) is a patch of activeLeaderId; the assigned leader assignment stays untouched (L-5). Requires If-Match with the current rowVersion; 412 on mismatch.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "operations.manage",
+        "parameters": [
+          {
+            "name": "lineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
+          },
+          "412": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412"
+          },
+          "422": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "lineDelete",
+        "summary": "Soft-disable a line and end its active operator assignments",
+        "description": "Soft-hide (standard §6): the line row is disabled and its ACTIVE operator assignments end; GET /lines no longer returns it and reads of attention return 404. Evidence stays in audit. Requires If-Match.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "operations.manage",
+        "parameters": [
+          {
+            "name": "lineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
+          },
+          "412": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412"
+          }
+        }
+      }
+    },
+    "/operator-assignments": {
       "post": {
-        "operationId": "productionPlanModelAllocationUpsert",
+        "operationId": "operatorAssignmentCreate",
+        "summary": "Assign an operator to a line (single-line invariant)",
+        "description": "Leader-owned transfer (L-8): the line's active leader (or an admin) assigns an ACTIVE operator. A subject already holding an ACTIVE assignment on another line returns 409 until that assignment ends. The reason is a plain stamp, not a charge-code system.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422"
+          }
+        }
+      }
+    },
+    "/operator-assignments/{assignmentId}": {
+      "delete": {
+        "operationId": "operatorAssignmentEnd",
+        "summary": "End an operator's line assignment",
+        "description": "Marks the assignment ENDED with endedAt evidence; rows are never rewritten beyond ending. Only the line's active leader or an admin may end it.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "execution.write",
+        "parameters": [
+          {
+            "name": "assignmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/model-allocations": {
+      "post": {
+        "operationId": "projectModelAllocationUpsert",
         "summary": "Upsert a model allocation and materialize plan-part evidence",
+        "description": "Accepts model identity, planned quantity/UOM/usage basis, and source revision. Demand dimensions marketRegion and demandPurpose are retired and rejected.",
         "tags": [
           "PATS Planning"
         ],
         "x-required-capability": "planning.manage",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlanId"
+            "$ref": "#/components/parameters/ProjectId"
           },
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -3820,9 +3922,9 @@
         }
       }
     },
-    "/production-plans/{planId}/parts-list-versions": {
+    "/projects/{projectId}/parts-list-versions": {
       "post": {
-        "operationId": "productionPlanPartsListVersionCreate",
+        "operationId": "projectPartsListVersionCreate",
         "summary": "Create an immutable draft parts-list route version",
         "tags": [
           "PATS Planning"
@@ -3830,7 +3932,7 @@
         "x-required-capability": "planning.manage",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlanId"
+            "$ref": "#/components/parameters/ProjectId"
           },
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -3861,17 +3963,17 @@
         }
       }
     },
-    "/production-plans/{planId}/release": {
+    "/projects/{projectId}/release": {
       "post": {
-        "operationId": "productionPlanRelease",
-        "summary": "Release a draft or ready production plan",
+        "operationId": "projectRelease",
+        "summary": "Release a draft or ready project (mints missing tray batches, then activates PLANNED→ACTIVE)",
         "tags": [
           "PATS Planning"
         ],
         "x-required-capability": "planning.manage",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlanId"
+            "$ref": "#/components/parameters/ProjectId"
           },
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -3896,17 +3998,18 @@
         }
       }
     },
-    "/production-plans/{planId}/lots": {
+    "/projects/{projectId}/lots": {
       "post": {
-        "operationId": "productionPlanLotCreate",
-        "summary": "Create a planned lot and its part allocation",
+        "operationId": "projectLotCreate",
+        "summary": "Create the single planned lot and its part allocation",
+        "description": "A project can have at most one lot. A second distinct lot creation returns a 409 cardinality conflict; idempotent retries replay the original response.",
         "tags": [
           "PATS Planning"
         ],
         "x-required-capability": "planning.manage",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlanId"
+            "$ref": "#/components/parameters/ProjectId"
           },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -4004,75 +4107,6 @@
           },
           "404": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422"
-          }
-        }
-      }
-    },
-    "/production-lines": {
-      "get": {
-        "operationId": "productionLineCollectionGet",
-        "summary": "Read production-line umbrellas for the Section tree",
-        "description": "A ProductionLine owns Sections; multiple Sections may belong to one line. The collection carries no Station identity; a StationScreen is the published state of a Line.",
-        "tags": [
-          "PATS Configuration"
-        ],
-        "x-required-capability": "execution.read",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Page"
-          },
-          {
-            "$ref": "#/components/parameters/Limit"
-          },
-          {
-            "name": "search",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "minLength": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/PaginatedRead"
-          },
-          "400": {
-            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400"
-          },
-          "403": {
-            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
-          },
-          "503": {
-            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
-          }
-        }
-      },
-      "post": {
-        "operationId": "productionLineCreate",
-        "summary": "Create a production-line umbrella for the Section tree",
-        "description": "A ProductionLine owns Sections; multiple Sections may belong to one line. The created line has no Stations yet. Line codes are unique within the deployment.",
-        "tags": [
-          "PATS Configuration"
-        ],
-        "x-required-capability": "operations.manage",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "responses": {
-          "201": {
-            "$ref": "#/components/responses/CommandRead"
-          },
-          "403": {
-            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
           },
           "409": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"

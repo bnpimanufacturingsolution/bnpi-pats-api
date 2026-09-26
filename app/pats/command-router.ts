@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
 	Prisma,
 	PrismaClient as PatsPrismaClient,
-	PlanLifecycleStatus,
+	ProjectLifecycleStatus,
 	LotStatus,
 	BatchStatus,
 	StageEventStatus,
@@ -31,12 +31,13 @@ import { allowUnauthenticatedDeskPrint, deliverDeskLabel } from "./print-desk";
 import { GLORY_L_DEFAULTS } from "./label-ir";
 import { setDeprecationHeaders } from "../canonical/response-headers";
 
-// Station→Section rename (2026-09-16) transitional bridge. The canonical paths
-// are /sections + sectionId/sectionCode; the legacy /stations + stationId/
-// stationCode aliases below are TRANSITIONAL per the endpoint design standard
-// §7 and emit Deprecation/Sunset headers. Sunset is ≥90 days after first
-// release of the canonical paths. Request bodies accept both spellings and
-// prefer the canonical one when both are present.
+// Station→Section rename (2026-09-16) completed for route paths: the canonical
+// paths are /sections + sectionId/sectionCode. The /stations route-path aliases
+// were removed 2026-09-25 under the scoped §7 exception (no production
+// deployment; zero active app callers). Request bodies still accept the
+// `stationId` spelling as an alias for `sectionId` (active app caller in
+// use-pats-commands/line-setup-editor; app UI frozen) and prefer the canonical
+// one when both are present.
 const SECTION_LEGACY_SUNSET = new Date("2027-06-30T00:00:00Z");
 
 function legacyStationHeaders(req: Request, extra: Record<string, string> = {}): Record<string, string> {
@@ -58,21 +59,20 @@ function isLegacyStationPath(req: Request): boolean {
 
 const decimalString = z.string().trim().regex(/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/, "Must be a non-negative decimal with up to 6 places.");
 
-const productionPlanCreateSchema = z.object({
-	planCode: z.string().trim().min(1).max(120).optional(),
-	projectCode: z.string().trim().min(1).max(120).optional(),
+const projectCreateSchema = z.object({
+	projectCode: z.string().trim().min(1).max(120),
 	name: z.string().trim().min(1).max(240),
 	requiredProductionQuantity: z.number().int().positive(),
 	productId: z.string().trim().min(1).max(100).nullable().optional(),
-}).strict().refine((body) => Boolean(body.projectCode || body.planCode), "Either projectCode or planCode is required.");
+}).strict();
 
-const productionPlanPatchSchema = z.object({
+const projectPatchSchema = z.object({
 	name: z.string().trim().min(1).max(240).optional(),
 	requiredProductionQuantity: z.number().int().positive().optional(),
 	productId: z.string().trim().min(1).max(100).nullable().optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
 
-const productionPlanModelAllocationSchema = z.object({
+const projectModelAllocationSchema = z.object({
 	modelId: z.string().trim().min(1).max(100),
 	plannedQuantity: z.number().int().positive(),
 	quantityMagnitude: decimalString.nullable().optional(),
@@ -81,7 +81,7 @@ const productionPlanModelAllocationSchema = z.object({
 	sourceRevisionRef: z.string().trim().max(160).nullable().optional(),
 }).strict();
 
-const productionPlanPartsListVersionSchema = z.object({
+const projectPartsListVersionSchema = z.object({
 	steps: z.array(z.object({
 		partId: z.string().trim().min(1).max(100),
 		stageId: z.string().trim().min(1).max(100),
@@ -193,9 +193,9 @@ const qualityInspectionCreateSchema = z.object({
 	evidence: z.record(z.string(), z.unknown()).nullable().optional(),
 }).strict();
 
-// Finalization override map for a run-scoped plan part (REQ-CT per-step CT).
+// Finalization override map for a run-scoped project part (REQ-CT per-step CT).
 // Required but nullable: clients send explicit null to fall back to the snapshot.
-const planPartCycleTimesSchema = z.object({
+const projectPartCycleTimesSchema = z.object({
 	plannedCycleTimesOverride: z
 		.record(z.string().trim().min(1).max(220), z.number().int().min(1).max(86400))
 		.nullable(),
@@ -209,7 +209,7 @@ const qualityDecisionSchema = z
 	})
 	.strict()
 	.superRefine((body, ctx) => {
-		// A fail must say why (2026-09-09 QC plan D3); PASSED/HOLD need no reason.
+		// A fail must say why (2026-09-09 QC project D3); PASSED/HOLD need no reason.
 		if (body.decision === "FAILED" && !(body.reasonCode && body.reasonCode.length > 0)) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
@@ -340,35 +340,24 @@ const monitoringStationBoardUpsertSchema = z.object({
 	payload: z.record(z.string(), z.unknown()),
 }).strict();
 
-function resourceHeaders(id: string, rowVersion: number, req?: Request): Record<string, string> {
-	const isProject = req ? (req.baseUrl + req.path).includes("/projects") : false;
-	const base = isProject ? "/api/v1/projects" : "/api/v1/production-plans";
-	return { Location: `${base}/${id}`, ETag: `"${rowVersion}"` };
+function resourceHeaders(id: string, rowVersion: number): Record<string, string> {
+	return { Location: `/api/v1/projects/${id}`, ETag: `"${rowVersion}"` };
 }
 
 function batchHeaders(id: string, rowVersion: number): Record<string, string> {
 	return { Location: `/api/v1/batches/${id}`, ETag: `"${rowVersion}"` };
 }
 
-function planResponse(plan: { id: string; projectCode: string; name: string; status: string; requiredProductionQuantity: number; productId: string | null; rowVersion: number }, req?: Request) {
-	const isProject = req ? (req.baseUrl + req.path).includes("/projects") : false;
-	const base = {
-		planId: plan.id,
-		planCode: plan.projectCode,
-		name: plan.name,
-		status: plan.status,
-		requiredProductionQuantity: plan.requiredProductionQuantity,
-		productId: plan.productId,
-		rowVersion: plan.rowVersion,
+function projectResponse(project: { id: string; projectCode: string; name: string; status: string; requiredProductionQuantity: number; productId: string | null; rowVersion: number }) {
+	return {
+		projectId: project.id,
+		projectCode: project.projectCode,
+		name: project.name,
+		status: project.status,
+		requiredProductionQuantity: project.requiredProductionQuantity,
+		productId: project.productId,
+		rowVersion: project.rowVersion,
 	};
-	if (isProject) {
-		return {
-			projectId: plan.id,
-			projectCode: plan.projectCode,
-			...base,
-		};
-	}
-	return base;
 }
 
 function notFound(detail: string): never {
@@ -395,10 +384,10 @@ function forbidden(detail: string): never {
 	throw new CommandProblem(403, "urn:bandai:pats:problem:authorization-denied", "Forbidden", detail);
 }
 
-function ensurePlanEditable(plan: { status: string }): void {
-	const immutableStatuses: string[] = [PlanLifecycleStatus.RELEASED, PlanLifecycleStatus.COMPLETED, PlanLifecycleStatus.CANCELLED];
-	if (immutableStatuses.includes(plan.status)) {
-		conflict("Released or completed production plans cannot be edited.");
+function ensureProjectEditable(project: { status: string }): void {
+	const immutableStatuses: string[] = [ProjectLifecycleStatus.RELEASED, ProjectLifecycleStatus.COMPLETED, ProjectLifecycleStatus.CANCELLED];
+	if (immutableStatuses.includes(project.status)) {
+		conflict("Released or completed projects cannot be edited.");
 	}
 }
 
@@ -459,27 +448,26 @@ export function commandRouter(
 ): Router {
 	const router = Router();
 
-	router.post(["/projects", "/production-plans"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post("/projects", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const body = parseCommandBody(req, productionPlanCreateSchema);
-			const response = await executeCommand(database, req, "productionPlanCreate", body, async (transaction) => {
+			const body = parseCommandBody(req, projectCreateSchema);
+			const response = await executeCommand(database, req, "projectCreate", body, async (transaction) => {
 				if (body.productId) {
 					const product = await transaction.product.findUnique({ where: { id: body.productId }, select: { id: true } });
 					if (!product) notFound("The requested catalog product was not found.");
 				}
-				const planCode = (body.projectCode ?? body.planCode)!;
-				const plan = await transaction.project.create({
+				const project = await transaction.project.create({
 					data: {
 						workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS",
-						projectCode: planCode,
+						projectCode: body.projectCode,
 						name: body.name,
 						requiredProductionQuantity: body.requiredProductionQuantity,
-						status: PlanLifecycleStatus.DRAFT,
+						status: ProjectLifecycleStatus.DRAFT,
 						productId: body.productId ?? null,
 					},
 				});
-				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_CREATED", "ProductionPlan", plan.id, { planCode: plan.projectCode });
-				return { status: 201, body: planResponse(plan, req), headers: resourceHeaders(plan.id, plan.rowVersion, req) };
+				await recordCommandSuccess(transaction, req, "PROJECT_CREATED", "Project", project.id, { projectCode: project.projectCode });
+				return { status: 201, body: projectResponse(project), headers: resourceHeaders(project.id, project.rowVersion) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -487,21 +475,21 @@ export function commandRouter(
 		}
 	});
 
-	router.patch(["/projects/:projectId", "/production-plans/:planId"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.patch("/projects/:projectId", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const targetId = req.params.projectId ?? req.params.planId;
-			const body = parseCommandBody(req, productionPlanPatchSchema);
-			const expectedVersion = requireIfMatch(req, "production plan");
-			const response = await executeCommand(database, req, "productionPlanPatch", { planId: targetId, body }, async (transaction) => {
+			const targetId = req.params.projectId;
+			const body = parseCommandBody(req, projectPatchSchema);
+			const expectedVersion = requireIfMatch(req, "project");
+			const response = await executeCommand(database, req, "projectPatch", { projectId: targetId, body }, async (transaction) => {
 				const current = await transaction.project.findUnique({ where: { id: targetId } });
-				if (!current) notFound("The requested production plan was not found.");
+				if (!current) notFound("The requested project was not found.");
 				if (current.rowVersion !== expectedVersion) staleVersion();
-				if (current.status === PlanLifecycleStatus.RELEASED || current.status === PlanLifecycleStatus.COMPLETED || current.status === PlanLifecycleStatus.CANCELLED) conflict("Released or completed production plans cannot be edited.");
+				if (current.status === ProjectLifecycleStatus.RELEASED || current.status === ProjectLifecycleStatus.COMPLETED || current.status === ProjectLifecycleStatus.CANCELLED) conflict("Released or completed projects cannot be edited.");
 				if (body.productId) {
 					const product = await transaction.product.findUnique({ where: { id: body.productId }, select: { id: true } });
 					if (!product) notFound("The requested catalog product was not found.");
 				}
-				const plan = await transaction.project.update({
+				const project = await transaction.project.update({
 					where: { id: current.id },
 					data: {
 						...(body.name === undefined ? {} : { name: body.name }),
@@ -510,8 +498,8 @@ export function commandRouter(
 						rowVersion: { increment: 1 },
 					},
 				});
-				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_UPDATED", "ProductionPlan", plan.id, { rowVersion: plan.rowVersion });
-				return { status: 200, body: planResponse(plan, req), headers: resourceHeaders(plan.id, plan.rowVersion, req) };
+				await recordCommandSuccess(transaction, req, "PROJECT_UPDATED", "Project", project.id, { rowVersion: project.rowVersion });
+				return { status: 200, body: projectResponse(project), headers: resourceHeaders(project.id, project.rowVersion) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -519,25 +507,25 @@ export function commandRouter(
 		}
 	});
 
-	router.post(["/projects/:projectId/model-allocations", "/production-plans/:planId/model-allocations"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post("/projects/:projectId/model-allocations", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const targetId = req.params.projectId ?? req.params.planId;
-			const body = parseCommandBody(req, productionPlanModelAllocationSchema);
-			const expectedVersion = requireIfMatch(req, "production plan");
-			const response = await executeCommand(database, req, "productionPlanModelAllocationUpsert", { planId: targetId, body }, async (transaction) => {
-				const plan = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, productId: true, status: true, rowVersion: true } });
-				if (!plan) notFound("The requested production plan was not found.");
-				if (plan.rowVersion !== expectedVersion) staleVersion();
-				ensurePlanEditable(plan);
+			const targetId = req.params.projectId;
+			const body = parseCommandBody(req, projectModelAllocationSchema);
+			const expectedVersion = requireIfMatch(req, "project");
+			const response = await executeCommand(database, req, "projectModelAllocationUpsert", { projectId: targetId, body }, async (transaction) => {
+				const project = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, productId: true, status: true, rowVersion: true } });
+				if (!project) notFound("The requested project was not found.");
+				if (project.rowVersion !== expectedVersion) staleVersion();
+				ensureProjectEditable(project);
 
 				const model = await transaction.model.findUnique({ where: { id: body.modelId }, include: { modelParts: true } });
 				if (!model) notFound("The requested catalog model was not found.");
-				if (plan.productId !== null && model.productId !== plan.productId) conflict("The selected model does not belong to the production plan product.");
+				if (project.productId !== null && model.productId !== project.productId) conflict("The selected model does not belong to the project product.");
 
 				const allocation = await transaction.projectModelAllocation.upsert({
-					where: { projectId_modelId: { projectId: plan.id, modelId: model.id } },
+					where: { projectId_modelId: { projectId: project.id, modelId: model.id } },
 					create: {
-						projectId: plan.id,
+						projectId: project.id,
 						modelId: model.id,
 						plannedQuantity: body.plannedQuantity,
 						quantityMagnitude: body.quantityMagnitude ?? null,
@@ -558,13 +546,13 @@ export function commandRouter(
 				const modelPartIds = model.modelParts.map((modelPart) => modelPart.id);
 				const existingParts = modelPartIds.length === 0
 					? []
-					: await transaction.part.findMany({ where: { projectId: plan.id, sourceModelPartId: { in: modelPartIds } }, select: { sourceModelPartId: true } });
+					: await transaction.part.findMany({ where: { projectId: project.id, sourceModelPartId: { in: modelPartIds } }, select: { sourceModelPartId: true } });
 				const existingPartIds = new Set(existingParts.map((part) => part.sourceModelPartId));
 				for (const modelPart of model.modelParts) {
 					if (existingPartIds.has(modelPart.id)) continue;
 					await transaction.part.create({
 						data: {
-							projectId: plan.id,
+							projectId: project.id,
 							partCode: modelPart.partCode,
 							partName: modelPart.partName,
 							plannedCycleTimes: (modelPart.plannedCycleTimes as Record<string, number> | null) ?? undefined,
@@ -574,26 +562,26 @@ export function commandRouter(
 					});
 				}
 
-				const currentPartsList = await transaction.partsList.findFirst({ where: { projectId: plan.id }, orderBy: [{ version: "desc" }, { id: "desc" }], include: { steps: true } });
+				const currentPartsList = await transaction.partsList.findFirst({ where: { projectId: project.id }, orderBy: [{ version: "desc" }, { id: "desc" }], include: { steps: true } });
 				let partsListVersionId = currentPartsList?.id ?? null;
 				if (!currentPartsList) {
-					const planParts = await transaction.part.findMany({ where: { projectId: plan.id }, select: { id: true, sourceModelPartId: true } });
-					const planPartByModelPartId = new Map(planParts.flatMap((part) => part.sourceModelPartId ? [[part.sourceModelPartId, part.id] as const] : []));
+					const projectParts = await transaction.part.findMany({ where: { projectId: project.id }, select: { id: true, sourceModelPartId: true } });
+					const projectPartByModelPartId = new Map(projectParts.flatMap((part) => part.sourceModelPartId ? [[part.sourceModelPartId, part.id] as const] : []));
 					const validStageIds = new Set((await transaction.stage.findMany({ select: { id: true } })).map((stage) => stage.id));
 					const configuredSubStages = await transaction.subStage.findMany({ select: { id: true, eligibleStages: { select: { stageId: true } } } });
 					const validSubStagePairs = new Set(configuredSubStages.flatMap((subStage) => subStage.eligibleStages.map((eligibility) => `${subStage.id}:${eligibility.stageId}`)));
 					const initialSteps = model.modelParts.flatMap((modelPart) => {
-						const partId = planPartByModelPartId.get(modelPart.id);
+						const partId = projectPartByModelPartId.get(modelPart.id);
 						if (!partId) return [];
 						return catalogRoutingSteps(modelPart.routingSteps).filter((step) => validStageIds.has(step.stageId) && (step.subStageId === null || validSubStagePairs.has(`${step.subStageId}:${step.stageId}`))).map((step) => ({ ...step, partId }));
 					});
-					const partsList = await transaction.partsList.create({ data: { projectId: plan.id, version: 1, status: "DRAFT", steps: { create: initialSteps } }, select: { id: true } });
+					const partsList = await transaction.partsList.create({ data: { projectId: project.id, version: 1, status: "DRAFT", steps: { create: initialSteps } }, select: { id: true } });
 					partsListVersionId = partsList.id;
 				}
 
-				const updatedPlan = await transaction.project.update({ where: { id: plan.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
-				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_MODEL_ALLOCATION_UPSERTED", "ProductionPlan", plan.id, { allocationId: allocation.id, modelId: model.id, partsListVersionId });
-				return { status: 200, body: { allocationId: allocation.id, modelId: allocation.modelId, plannedQuantity: allocation.plannedQuantity, partsListVersionId, planRowVersion: updatedPlan.rowVersion }, headers: resourceHeaders(plan.id, updatedPlan.rowVersion, req) };
+				const updatedProject = await transaction.project.update({ where: { id: project.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
+				await recordCommandSuccess(transaction, req, "PROJECT_MODEL_ALLOCATION_UPSERTED", "Project", project.id, { allocationId: allocation.id, modelId: model.id, partsListVersionId });
+				return { status: 200, body: { allocationId: allocation.id, modelId: allocation.modelId, plannedQuantity: allocation.plannedQuantity, partsListVersionId, projectRowVersion: updatedProject.rowVersion }, headers: resourceHeaders(project.id, updatedProject.rowVersion) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -601,20 +589,20 @@ export function commandRouter(
 		}
 	});
 
-	router.post(["/projects/:projectId/parts-list-versions", "/production-plans/:planId/parts-list-versions"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post("/projects/:projectId/parts-list-versions", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const targetId = req.params.projectId ?? req.params.planId;
-			const body = parseCommandBody(req, productionPlanPartsListVersionSchema);
-			const expectedVersion = requireIfMatch(req, "production plan");
-			const response = await executeCommand(database, req, "productionPlanPartsListVersionCreate", { planId: targetId, body }, async (transaction) => {
-				const plan = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, status: true, rowVersion: true } });
-				if (!plan) notFound("The requested production plan was not found.");
-				if (plan.rowVersion !== expectedVersion) staleVersion();
-				ensurePlanEditable(plan);
+			const targetId = req.params.projectId;
+			const body = parseCommandBody(req, projectPartsListVersionSchema);
+			const expectedVersion = requireIfMatch(req, "project");
+			const response = await executeCommand(database, req, "projectPartsListVersionCreate", { projectId: targetId, body }, async (transaction) => {
+				const project = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, status: true, rowVersion: true } });
+				if (!project) notFound("The requested project was not found.");
+				if (project.rowVersion !== expectedVersion) staleVersion();
+				ensureProjectEditable(project);
 
 				const partIds = [...new Set(body.steps.map((step) => step.partId))];
-				const parts = await transaction.part.findMany({ where: { projectId: plan.id, id: { in: partIds } }, select: { id: true } });
-				if (parts.length !== partIds.length) notFound("Every route step must reference a part in the production plan.");
+				const parts = await transaction.part.findMany({ where: { projectId: project.id, id: { in: partIds } }, select: { id: true } });
+				if (parts.length !== partIds.length) notFound("Every route step must reference a part in the project.");
 				const stageIds = [...new Set(body.steps.map((step) => step.stageId))];
 				const subStageIds = [...new Set(body.steps.flatMap((step) => step.subStageId ? [step.subStageId] : []))];
 				const [stages, subStages] = await Promise.all([
@@ -638,10 +626,10 @@ export function commandRouter(
 					partOrders.add(order);
 				}
 
-				const previous = await transaction.partsList.findFirst({ where: { projectId: plan.id }, orderBy: [{ version: "desc" }, { id: "desc" }], select: { version: true } });
+				const previous = await transaction.partsList.findFirst({ where: { projectId: project.id }, orderBy: [{ version: "desc" }, { id: "desc" }], select: { version: true } });
 				const partsList = await transaction.partsList.create({
 					data: {
-						projectId: plan.id,
+						projectId: project.id,
 						version: (previous?.version ?? 0) + 1,
 						status: "DRAFT",
 						sourceRevisionRef: body.sourceRevisionRef ?? null,
@@ -649,9 +637,9 @@ export function commandRouter(
 					},
 					select: { id: true, version: true },
 				});
-				const updatedPlan = await transaction.project.update({ where: { id: plan.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
-				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_PARTS_LIST_VERSION_CREATED", "PartsList", partsList.id, { planId: plan.id, version: partsList.version, stepCount: body.steps.length });
-				return { status: 201, body: { partsListVersionId: partsList.id, version: partsList.version, planRowVersion: updatedPlan.rowVersion }, headers: resourceHeaders(plan.id, updatedPlan.rowVersion, req) };
+				const updatedProject = await transaction.project.update({ where: { id: project.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
+				await recordCommandSuccess(transaction, req, "PROJECT_PARTS_LIST_VERSION_CREATED", "PartsList", partsList.id, { projectId: project.id, version: partsList.version, stepCount: body.steps.length });
+				return { status: 201, body: { partsListVersionId: partsList.id, version: partsList.version, projectRowVersion: updatedProject.rowVersion }, headers: resourceHeaders(project.id, updatedProject.rowVersion) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -659,18 +647,18 @@ export function commandRouter(
 		}
 	});
 
-	router.patch(["/projects/:projectId/parts/:partId", "/production-plans/:planId/parts/:partId"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.patch("/projects/:projectId/parts/:partId", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const targetId = req.params.projectId ?? req.params.planId;
+			const targetId = req.params.projectId;
 			const partId = req.params.partId;
-			const body = parseCommandBody(req, planPartCycleTimesSchema);
-			const expectedVersion = requireIfMatch(req, "plan part");
-			const response = await executeCommand(database, req, "planPartCycleTimeOverride", { planId: targetId, partId, body }, async (transaction) => {
+			const body = parseCommandBody(req, projectPartCycleTimesSchema);
+			const expectedVersion = requireIfMatch(req, "project part");
+			const response = await executeCommand(database, req, "projectPartCycleTimeOverride", { projectId: targetId, partId, body }, async (transaction) => {
 				const part = await transaction.part.findUnique({ where: { id: partId }, select: { id: true, projectId: true, rowVersion: true } });
-				if (!part || part.projectId !== targetId) notFound("The requested plan part was not found in this production plan.");
-				const plan = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, status: true } });
-				if (!plan) notFound("The owning production plan was not found.");
-				ensurePlanEditable(plan);
+				if (!part || part.projectId !== targetId) notFound("The requested project part was not found in this project.");
+				const project = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, status: true } });
+				if (!project) notFound("The owning production project was not found.");
+				ensureProjectEditable(project);
 				if (part.rowVersion !== expectedVersion) staleVersion();
 				const updated = await transaction.part.update({ where: { id: part.id }, data: { plannedCycleTimesOverride: body.plannedCycleTimesOverride ?? Prisma.JsonNull, rowVersion: { increment: 1 } }, select: { id: true, plannedCycleTimes: true, plannedCycleTimesOverride: true, rowVersion: true } });
 				// Prisma reads JSON NULL back as null, but the write sentinel can echo
@@ -690,15 +678,15 @@ export function commandRouter(
 		}
 	});
 
-	router.post(["/projects/:projectId/release", "/production-plans/:planId/release"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post("/projects/:projectId/release", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const targetId = req.params.projectId ?? req.params.planId;
-			const expectedVersion = requireIfMatch(req, "production plan");
-			const response = await executeCommand(database, req, "productionPlanRelease", { planId: targetId, expectedVersion }, async (transaction) => {
+			const targetId = req.params.projectId;
+			const expectedVersion = requireIfMatch(req, "project");
+			const response = await executeCommand(database, req, "projectRelease", { projectId: targetId, expectedVersion }, async (transaction) => {
 				const current = await transaction.project.findUnique({ where: { id: targetId } });
-				if (!current) notFound("The requested production plan was not found.");
+				if (!current) notFound("The requested project was not found.");
 				if (current.rowVersion !== expectedVersion) staleVersion();
-				if (current.status !== PlanLifecycleStatus.DRAFT && current.status !== PlanLifecycleStatus.READY) conflict("Only draft or ready production plans can be released.");
+				if (current.status !== ProjectLifecycleStatus.DRAFT && current.status !== ProjectLifecycleStatus.READY) conflict("Only draft or ready projects can be released.");
 				// Release = publish: mint missing tray-sized scan units so the floor
 				// queue is non-empty without a separate Create batches step.
 				const lots = await transaction.lot.findMany({
@@ -755,18 +743,18 @@ export function commandRouter(
 						mintedBatchCount += 1;
 					}
 				}
-				const plan = await transaction.project.update({
+				const project = await transaction.project.update({
 					where: { id: current.id },
-					data: { status: PlanLifecycleStatus.RELEASED, releasedAt: new Date(), releasedBySubjectId: actorId(req), rowVersion: { increment: 1 } },
+					data: { status: ProjectLifecycleStatus.RELEASED, releasedAt: new Date(), releasedBySubjectId: actorId(req), rowVersion: { increment: 1 } },
 				});
-				// Floor arrival queue only lists ACTIVE batches; releasing the plan activates
+				// Floor arrival queue only lists ACTIVE batches; releasing the project activates
 				// its PLANNED batches (including just-minted trays) for the next-hop station.
 				await transaction.batch.updateMany({
-					where: { lot: { projectId: plan.id }, status: BatchStatus.PLANNED },
+					where: { lot: { projectId: project.id }, status: BatchStatus.PLANNED },
 					data: { status: BatchStatus.ACTIVE },
 				});
-				await recordCommandSuccess(transaction, req, "PRODUCTION_PLAN_RELEASED", "ProductionPlan", plan.id, { rowVersion: plan.rowVersion, mintedBatchCount });
-				return { status: 200, body: planResponse(plan, req), headers: resourceHeaders(plan.id, plan.rowVersion, req) };
+				await recordCommandSuccess(transaction, req, "PROJECT_RELEASED", "Project", project.id, { rowVersion: project.rowVersion, mintedBatchCount });
+				return { status: 200, body: projectResponse(project), headers: resourceHeaders(project.id, project.rowVersion) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -774,9 +762,9 @@ export function commandRouter(
 		}
 	});
 
-	router.delete(["/projects/:projectId", "/production-plans/:planId"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.delete("/projects/:projectId", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const targetId = req.params.projectId ?? req.params.planId;
+			const targetId = req.params.projectId;
 			const ifMatch = req.header("If-Match");
 			const expectedVersion = ifMatch?.match(/^"(\d+)"$/) ? Number(ifMatch.match(/^"(\d+)"$/)![1]) : undefined;
 			const response = await executeCommand(database, req, "projectDraftDelete", { projectId: targetId }, async (transaction) => {
@@ -786,7 +774,7 @@ export function commandRouter(
 				});
 				if (!current) notFound("The requested project was not found.");
 				if (expectedVersion !== undefined && current.rowVersion !== expectedVersion) staleVersion();
-				if (current.status !== PlanLifecycleStatus.DRAFT) {
+				if (current.status !== ProjectLifecycleStatus.DRAFT) {
 					conflict("Released or completed projects cannot be deleted.");
 				}
 				if (current.lot) {
@@ -819,19 +807,19 @@ export function commandRouter(
 		}
 	});
 
-	router.post(["/projects/:projectId/lots", "/production-plans/:planId/lots"], requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.post("/projects/:projectId/lots", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
-			const targetId = req.params.projectId ?? req.params.planId;
+			const targetId = req.params.projectId;
 			const body = parseCommandBody(req, lotCreateSchema);
-			const response = await executeCommand(database, req, "productionPlanLotCreate", { planId: targetId, body }, async (transaction) => {
-				const plan = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true } });
-				if (!plan) notFound("The requested production plan was not found.");
+			const response = await executeCommand(database, req, "projectLotCreate", { projectId: targetId, body }, async (transaction) => {
+				const project = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true } });
+				if (!project) notFound("The requested project was not found.");
 				const existingLot = await transaction.lot.findUnique({ where: { projectId: targetId }, select: { id: true } });
-				if (existingLot) cardinalityConflict("The production plan already has a lot.");
+				if (existingLot) cardinalityConflict("The production project already has a lot.");
 				const partsList = await transaction.partsList.findFirst({ where: { id: body.partsListId, projectId: targetId, version: body.partsListVersion }, select: { id: true } });
-				if (!partsList) notFound("The requested parts-list version was not found for this production plan.");
+				if (!partsList) notFound("The requested parts-list version was not found for this production project.");
 				const part = await transaction.part.findFirst({ where: { id: body.partId, projectId: targetId }, select: { id: true, partName: true } });
-				if (!part) notFound("The requested plan part was not found.");
+				if (!part) notFound("The requested project part was not found.");
 				const lot = await transaction.lot.create({
 					data: {
 						projectId: targetId,
@@ -858,7 +846,7 @@ export function commandRouter(
 						usageBasis: body.usageBasis ?? null,
 					},
 				});
-				await recordCommandSuccess(transaction, req, "LOT_CREATED", "Lot", lot.id, { planId: targetId, lotCode: lot.lotCode });
+				await recordCommandSuccess(transaction, req, "LOT_CREATED", "Lot", lot.id, { projectId: targetId, lotCode: lot.lotCode });
 				return { status: 201, body: { lotId: lot.id, lotCode: lot.lotCode, status: lot.status }, headers: { Location: `/api/v1/lots/${lot.id}` } };
 			});
 			respondCommand(res, response);
@@ -880,7 +868,7 @@ export function commandRouter(
 				const parts = body.parts ?? [];
 				const uniquePartIds = [...new Set(parts.map((part) => part.partId))];
 				const validParts = await transaction.part.findMany({ where: { id: { in: uniquePartIds }, projectId: lot.projectId }, select: { id: true } });
-				if (validParts.length !== uniquePartIds.length) notFound("Every batch part must belong to the lot's production plan.");
+				if (validParts.length !== uniquePartIds.length) notFound("Every batch part must belong to the lot's project.");
 				const batch = await transaction.batch.create({
 					data: {
 						batchCode: body.batchCode,
@@ -1075,7 +1063,7 @@ export function commandRouter(
 				const batch = await transaction.batch.findUnique({ where: { id: body.batchId }, select: { id: true, lotId: true, lot: { select: { projectId: true } } } });
 				if (!batch) notFound("The requested batch was not found.");
 				const part = await transaction.part.findFirst({ where: { id: body.partId, projectId: batch.lot.projectId }, select: { id: true } });
-				if (!part) notFound("The requested inventory part was not found in the batch's production plan.");
+				if (!part) notFound("The requested inventory part was not found in the batch's project.");
 				const transactionRecord = await transaction.inventoryTransaction.create({
 					data: {
 						transactionType: body.transactionType,

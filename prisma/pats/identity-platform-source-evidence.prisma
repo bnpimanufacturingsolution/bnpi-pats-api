@@ -28,10 +28,6 @@ enum CanonicalEvidenceSubjectType {
   PRODUCT
   MODEL
   MODEL_PART
-  BOM_DEFINITION
-  BOM_LINE
-  PROCESS_ROUTE
-  ROUTE_STAGE
 }
 
 model AuditRecord {

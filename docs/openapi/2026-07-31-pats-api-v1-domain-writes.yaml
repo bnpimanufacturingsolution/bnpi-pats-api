@@ -22,10 +22,10 @@ paths:
       x-required-capability: operations.manage
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' } }
-  /stations:
+  /sections:
     post:
-      operationId: stationCreate
-      summary: Add a physical production station
+      operationId: sectionCreate
+      summary: Add a configured section
       tags: [PATS Configuration]
       x-required-capability: operations.manage
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
@@ -163,55 +163,55 @@ paths:
         '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
         '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
         '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }
-  /production-plans:
+  /projects:
     post:
-      operationId: productionPlanCreate
-      summary: Create a draft production plan
+      operationId: projectCreate
+      summary: Create a draft project
       tags: [PATS Planning]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       responses: { '201': { $ref: '#/components/responses/CommandRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
-  /production-plans/{planId}:
+  /projects/{projectId}:
     patch:
-      operationId: productionPlanPatch
-      summary: Update a draft production plan
+      operationId: projectPatch
+      summary: Update a draft project
       tags: [PATS Planning]
       x-required-capability: planning.manage
-      parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses: { '200': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
-  /production-plans/{planId}/model-allocations:
+  /projects/{projectId}/model-allocations:
     post:
-      operationId: productionPlanModelAllocationUpsert
+      operationId: projectModelAllocationUpsert
       summary: Upsert a model allocation and materialize plan-part evidence
       description: Accepts model identity, planned quantity/UOM/usage basis, and source revision. Demand dimensions marketRegion and demandPurpose are retired and rejected.
       tags: [PATS Planning]
       x-required-capability: planning.manage
-      parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses: { '200': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
-  /production-plans/{planId}/parts-list-versions:
+  /projects/{projectId}/parts-list-versions:
     post:
-      operationId: productionPlanPartsListVersionCreate
+      operationId: projectPartsListVersionCreate
       summary: Create an immutable draft parts-list route version
       tags: [PATS Planning]
       x-required-capability: planning.manage
-      parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
-  /production-plans/{planId}/release:
+  /projects/{projectId}/release:
     post:
-      operationId: productionPlanRelease
-      summary: Release a draft or ready production plan (mints missing tray batches, then activates PLANNED→ACTIVE)
+      operationId: projectRelease
+      summary: Release a draft or ready project (mints missing tray batches, then activates PLANNED→ACTIVE)
       tags: [PATS Planning]
       x-required-capability: planning.manage
-      parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses: { '200': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' } }
-  /production-plans/{planId}/lots:
+  /projects/{projectId}/lots:
     post:
-      operationId: productionPlanLotCreate
+      operationId: projectLotCreate
       summary: Create the single planned lot and its part allocation
-      description: A production plan can have at most one lot. A second distinct lot creation returns a 409 cardinality conflict; idempotent retries replay the original response.
+      description: A project can have at most one lot. A second distinct lot creation returns a 409 cardinality conflict; idempotent retries replay the original response.
       tags: [PATS Planning]
       x-required-capability: planning.manage
-      parameters: [{ $ref: '#/components/parameters/PlanId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
   /batches:
     post:
@@ -264,7 +264,7 @@ paths:
       responses: { '200': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
 components:
   parameters:
-    PlanId: { name: planId, in: path, required: true, schema: { type: string, minLength: 1 } }
+    ProjectId: { name: projectId, in: path, required: true, schema: { type: string, minLength: 1 } }
     IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
     IfMatch: { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[0-9]+"$' } }
   responses:

@@ -15,9 +15,6 @@ import {
 import type { LocalAuthDependencies } from "../identity/local-auth";
 import { effectiveCapabilities } from "../identity/policy";
 import { hasCapability } from "../identity/policy";
-import { setDeprecationHeaders } from "./response-headers";
-
-const CATALOG_ROUTE_SUNSET = new Date("2027-01-01T00:00:00.000Z");
 
 const PROBLEM_TYPES = {
 	internalError: "urn:bandai:pats:problem:internal-error",
@@ -61,16 +58,6 @@ export interface CanonicalRouterOptions {
 	};
 	/** Optional deployment-scoped product collection boundary. */
 	catalogCollection?: {
-		handler: RequestHandler;
-		requiredCapability?: string;
-	};
-	/** Optional deployment-scoped BOM definition collection read boundary. */
-	bomDefinitionCollection?: {
-		handler: RequestHandler;
-		requiredCapability?: string;
-	};
-	/** Optional deployment-scoped BOM definition detail read boundary. */
-	bomDefinition?: {
 		handler: RequestHandler;
 		requiredCapability?: string;
 	};
@@ -342,19 +329,6 @@ function sendCanonicalError(error: unknown, req: Request, res: Response): void {
 
 export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 	const router = Router();
-	const catalogRouteDeprecationHeaders: RequestHandler = (_req, res, next) => {
-		setDeprecationHeaders(res, CATALOG_ROUTE_SUNSET);
-		next();
-	};
-	router.use(
-		[
-			"/catalog/bom-definitions",
-			"/catalog/bom-lines",
-			"/catalog/process-routes",
-			"/catalog/route-stages",
-		],
-		catalogRouteDeprecationHeaders,
-	);
 	const healthHandler =
 		options.healthHandler ??
 		((_req: Request, res: Response) => {
@@ -540,9 +514,7 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			if (
 				["GET", "HEAD"].includes(req.method) &&
 				(req.path === "/products" ||
-					/^\/products\/[^/]+$/.test(req.path) ||
-					req.path === "/bom-definitions" ||
-					/^\/bom-definitions\/[^/]+$/.test(req.path))
+					/^\/products\/[^/]+$/.test(req.path))
 			) {
 				next();
 				return;
@@ -668,109 +640,17 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 		);
 	}
 
-	if (options.bomDefinitionCollection) {
-		const bomDefinitionCollectionIdentity =
-			identityMiddleware ??
-			((_req: Request, res: Response) => identityUnavailable(_req, res));
-		/**
-		 * @openapi
-		 * /api/v1/catalog/bom-definitions:
-		 *   get:
-		 *     operationId: catalogBomDefinitionCollectionGet
-		 *     summary: List BOM definition revisions for a model
-		 *     description: Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.
-		 *     deprecated: true
-		 *     tags: [PATS Catalog]
-		 *     security:
-		 *       - bearerAuth: []
-		 *     parameters:
-		 *       - in: query
-		 *         name: model_id
-		 *         required: true
-		 *         schema: { type: string }
-		 *       - in: query
-		 *         name: page
-		 *         schema: { type: integer, minimum: 1, default: 1 }
-		 *       - in: query
-		 *         name: limit
-		 *         schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
-		 *       - in: query
-		 *         name: sort
-		 *         description: Comma-separated revision, created_at, updated_at fields; prefix with - for descending order.
-		 *         schema: { type: string }
-		 *     responses:
-		 *       200: { description: Paginated BOM definition summaries }
-		 *       400: { description: Malformed or incomplete collection query }
-		 *       401: { description: Authentication required }
-		 *       403: { description: catalog.read capability required }
-		 *       503: { description: BOM persistence unavailable }
-		 */
-		router.get(
-			"/catalog/bom-definitions",
-			bomDefinitionCollectionIdentity,
-			options.bomDefinitionCollection.requiredCapability
-				? requireCanonicalCapability(options.bomDefinitionCollection.requiredCapability)
-				: (_req, _res, next) => next(),
-			options.bomDefinitionCollection.handler,
-		);
-		router.all("/catalog/bom-definitions", (req: Request, res: Response) =>
-			canonicalMethodNotAllowed(req, res, "GET"),
-		);
-	}
-
-	if (options.bomDefinition) {
-		const bomDefinitionIdentity =
-			identityMiddleware ??
-			((_req: Request, res: Response) => identityUnavailable(_req, res));
-		/**
-		 * @openapi
-		 * /api/v1/catalog/bom-definitions/{bomDefinitionId}:
-		 *   get:
-		 *     operationId: catalogBomDefinitionGet
-		 *     summary: Read a BOM definition revision with ordered lines
-		 *     description: Deprecated; scheduled for removal on 2027-01-01. See the Deprecation and Sunset response headers.
-		 *     deprecated: true
-		 *     tags: [PATS Catalog]
-		 *     security:
-		 *       - bearerAuth: []
-		 *     parameters:
-		 *       - in: path
-		 *         name: bomDefinitionId
-		 *         required: true
-		 *         schema: { type: string }
-		 *     responses:
-		 *       200: { description: BOM definition with sparse-safe ordered lines }
-		 *       401: { description: Authentication required }
-		 *       403: { description: catalog.read capability required }
-		 *       404: { description: BOM definition not found }
-		 *       503: { description: BOM persistence unavailable }
-		 */
-		router.get(
-			"/catalog/bom-definitions/:bomDefinitionId",
-			bomDefinitionIdentity,
-			options.bomDefinition.requiredCapability
-				? requireCanonicalCapability(options.bomDefinition.requiredCapability)
-				: (_req, _res, next) => next(),
-			options.bomDefinition.handler,
-		);
-		router.all("/catalog/bom-definitions/:bomDefinitionId", (req: Request, res: Response) =>
-			canonicalMethodNotAllowed(req, res, "GET"),
-		);
-	}
-
 	if (options.domainReads) {
 		const domainReadIdentity =
 			identityMiddleware ??
 			((_req: Request, res: Response) => identityUnavailable(_req, res));
 		const domainReadPrefixes = [
 			"/projects",
-			"/production-plans",
 			"/production-lines",
 			"/workflow-groups",
 			"/stages",
 			"/sub-stages",
 			"/sections",
-			"/stations",
 			"/station-steps",
 			"/work-instructions",
 			"/work-processes",
@@ -805,12 +685,10 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			((_req: Request, res: Response) => identityUnavailable(_req, res));
 		const domainCommandPrefixes = [
 			"/projects",
-			"/production-plans",
 			"/production-lines",
 			"/stages",
 			"/sub-stages",
 			"/sections",
-			"/stations",
 			"/station-steps",
 			"/work-instructions",
 			"/work-processes",

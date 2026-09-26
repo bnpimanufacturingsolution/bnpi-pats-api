@@ -30,14 +30,6 @@ enum CanonicalEvidenceStatus {
   STALE
 }
 
-enum BomRelationshipKind {
-  COMPONENT
-  ASSEMBLY_COMPONENT
-  DECORATION_INPUT
-  PACKAGING_COMPONENT
-  OTHER
-}
-
 model Product {
   id              String                  @id @default(uuid())
   productCode     String                  @unique
@@ -66,8 +58,6 @@ model Model {
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
   modelParts        ModelPart[]
-  bomDefinitions    BomDefinition[]
-  processRoutes     ProcessRoute[]
   allocations       ProjectModelAllocation[]
   projectParts      Part[]                   @relation("ModelProjectParts")
 
@@ -94,97 +84,18 @@ model ModelPart {
   // runs snapshot it onto Part at creation.
   plannedCycleTimes Json?
   projectParts    Part[]                  @relation("ModelPartProjectParts")
-  bomLines        BomLine[]
 
   @@unique([modelId, partCode])
   @@index([modelId])
 }
 
-// A versioned material relationship for one reusable catalog model. Quantity and UOM remain
-// nullable because the analyzed client sources do not consistently provide a convertible basis.
-model BomDefinition {
-  id              String                  @id @default(uuid())
-  modelId         String
-  model           Model                   @relation(fields: [modelId], references: [id])
-  revision        Int
-  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
-  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
-  rowVersion      Int                     @default(1)
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  lines           BomLine[]
+// A versioned material relationship for one reusable catalog model was removed
+// 2026-09-25 under the scoped §7 exception (BomDefinition/BomLine/BomRelationshipKind;
+// no production deployment, zero active app callers).
 
-  @@unique([modelId, revision])
-  @@index([modelId])
-}
-
-model BomLine {
-  id                   String                  @id @default(uuid())
-  bomDefinitionId      String
-  bomDefinition        BomDefinition           @relation(fields: [bomDefinitionId], references: [id])
-  modelPartId          String
-  modelPart            ModelPart               @relation(fields: [modelPartId], references: [id])
-  lineNumber           Int
-  relationshipKind     BomRelationshipKind
-  quantityMagnitude    Float?
-  quantityUom          String?
-  usageBasis           String?
-  sourceRepresentation String?
-  lifecycleStatus      CatalogLifecycleStatus  @default(DRAFT)
-  evidenceStatus       CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
-  rowVersion           Int                     @default(1)
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-
-  @@unique([bomDefinitionId, lineNumber])
-  @@index([bomDefinitionId])
-  @@index([modelPartId])
-}
-
-// A versioned, model-applicable process definition. ProcessRouteStage may link to operational
-// Stage/SubStage records when mapped, while retaining source keys/names for unresolved lineage.
-model ProcessRoute {
-  id              String                  @id @default(uuid())
-  modelId         String
-  model           Model                   @relation(fields: [modelId], references: [id])
-  revision        Int
-  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
-  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
-  rowVersion      Int                     @default(1)
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  stages          ProcessRouteStage[]
-
-  @@unique([modelId, revision])
-  @@index([modelId])
-}
-
-model ProcessRouteStage {
-  id                   String                  @id @default(uuid())
-  processRouteId       String
-  processRoute         ProcessRoute            @relation(fields: [processRouteId], references: [id])
-  sequence             Int
-  stageId              String?
-  stage                Stage?                  @relation("ProcessRouteStageStage", fields: [stageId], references: [id])
-  subStageId           String?
-  subStage             SubStage?               @relation("ProcessRouteStageSubStage", fields: [subStageId], references: [id])
-  stageKey             String?
-  stageName            String?
-  stageDefinitionId    String?
-  subStageKey          String?
-  subStageName         String?
-  operationCode        String?
-  operationName        String?
-  sourceRepresentation String?
-  lifecycleStatus      CatalogLifecycleStatus  @default(DRAFT)
-  evidenceStatus       CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
-  rowVersion           Int                     @default(1)
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-
-  @@unique([processRouteId, sequence])
-  @@index([processRouteId])
-}
+// A versioned, model-applicable process definition was removed 2026-09-25 under the
+// scoped §7 exception (ProcessRoute/ProcessRouteStage; no production deployment,
+// zero active app callers).
 
 model WorkflowGroup {
   id              String                 @id @default(uuid())
@@ -214,7 +125,6 @@ model Stage {
   isSystemSeed       Boolean               @default(false)
   subStageLinks             SubStageEligibility[]
   stationSteps              StationStep[]
-  processRouteStages        ProcessRouteStage[]   @relation("ProcessRouteStageStage")
   qualityStageAssignments   QualityStageAssignment[]
 
   @@index([workflowGroupId])
@@ -235,7 +145,6 @@ model SubStage {
   isDisabled                    Boolean               @default(false)
   eligibleStages                SubStageEligibility[]
   stationSteps                  StationStep[]
-  processRouteStages            ProcessRouteStage[]   @relation("ProcessRouteStageSubStage")
   workProcesses                 WorkProcess[]
 }
 

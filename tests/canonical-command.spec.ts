@@ -182,7 +182,7 @@ describe("canonical PATS command contract", () => {
 			project: {
 				create: async () => {
 					createdPlans += 1;
-					return { id: "plan-1", projectCode: "PLAN-001", name: "July run", status: "DRAFT", requiredProductionQuantity: 100, productId: null, rowVersion: 1 };
+					return { id: "project-1", projectCode: "PLAN-001", name: "July run", status: "DRAFT", requiredProductionQuantity: 100, productId: null, rowVersion: 1 };
 				},
 			},
 			product: { findUnique: async () => null },
@@ -191,24 +191,24 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database);
 		const first = await request(app)
-			.post("/api/v1/production-plans")
+			.post("/api/v1/projects")
 			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "plan-create-1")
-			.send({ planCode: "PLAN-001", name: "July run", requiredProductionQuantity: 100 });
+			.set("Idempotency-Key", "project-create-1")
+			.send({ projectCode: "PLAN-001", name: "July run", requiredProductionQuantity: 100 });
 
 		expect(first.status).to.equal(201);
-		expect(first.headers.location).to.equal("/api/v1/production-plans/plan-1");
+		expect(first.headers.location).to.equal("/api/v1/projects/project-1");
 		expect(first.headers.etag).to.equal('"1"');
 		expect(createdPlans).to.equal(1);
 
 		const replay = await request(app)
-			.post("/api/v1/production-plans")
+			.post("/api/v1/projects")
 			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "plan-create-1")
-			.send({ planCode: "PLAN-001", name: "July run", requiredProductionQuantity: 100 });
+			.set("Idempotency-Key", "project-create-1")
+			.send({ projectCode: "PLAN-001", name: "July run", requiredProductionQuantity: 100 });
 
 		expect(replay.status).to.equal(201);
-		expect(replay.headers.location).to.equal("/api/v1/production-plans/plan-1");
+		expect(replay.headers.location).to.equal("/api/v1/projects/project-1");
 		expect(createdPlans).to.equal(1);
 	});
 
@@ -222,8 +222,8 @@ describe("canonical PATS command contract", () => {
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
 			project: {
-				findUnique: async () => ({ id: "plan-1", projectCode: "PLAN-001", name: "Old", status: "DRAFT", requiredProductionQuantity: 100, productId: null, rowVersion: 3 }),
-				update: async () => ({ id: "plan-1", projectCode: "PLAN-001", name: "New", status: "DRAFT", requiredProductionQuantity: 100, productId: null, rowVersion: 4 }),
+				findUnique: async () => ({ id: "project-1", projectCode: "PLAN-001", name: "Old", status: "DRAFT", requiredProductionQuantity: 100, productId: null, rowVersion: 3 }),
+				update: async () => ({ id: "project-1", projectCode: "PLAN-001", name: "New", status: "DRAFT", requiredProductionQuantity: 100, productId: null, rowVersion: 4 }),
 			},
 			auditRecord: { create: async () => undefined },
 			outboxMessage: { create: async () => undefined },
@@ -231,9 +231,9 @@ describe("canonical PATS command contract", () => {
 		const app = appFor(database);
 
 		const response = await request(app)
-			.patch("/api/v1/production-plans/plan-1")
+			.patch("/api/v1/projects/plan-1")
 			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "plan-patch-1")
+			.set("Idempotency-Key", "project-patch-1")
 			.set("If-Match", '"2"')
 			.send({ name: "New" });
 
@@ -252,8 +252,8 @@ describe("canonical PATS command contract", () => {
 			idempotencyRecord,
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
 			project: {
-				findUnique: async () => ({ id: "plan-1", productId: "product-1", status: "DRAFT", rowVersion: 1 }),
-				update: async () => ({ id: "plan-1", rowVersion: 2 }),
+				findUnique: async () => ({ id: "project-1", productId: "product-1", status: "DRAFT", rowVersion: 1 }),
+				update: async () => ({ id: "project-1", rowVersion: 2 }),
 			},
 			model: {
 				findUnique: async () => ({ id: "model-1", productId: "product-1", modelParts: [{ id: "model-part-1", partCode: "PART-001", partName: "Main part", routingSteps: [{ stageId: "stage-1", subStageId: null }] }] }),
@@ -276,7 +276,7 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database);
 		const response = await request(app)
-			.post("/api/v1/production-plans/plan-1/model-allocations")
+			.post("/api/v1/projects/plan-1/model-allocations")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "allocation-1")
 			.set("If-Match", '"1"')
@@ -284,13 +284,13 @@ describe("canonical PATS command contract", () => {
 
 		expect(response.status).to.equal(200);
 		expect(response.headers.etag).to.equal('"2"');
-		expect(response.body).to.deep.include({ allocationId: "allocation-1", modelId: "model-1", partsListVersionId: "parts-list-1", planRowVersion: 2 });
+		expect(response.body).to.deep.include({ allocationId: "allocation-1", modelId: "model-1", partsListVersionId: "parts-list-1", projectRowVersion: 2 });
 	});
 
 	it("rejects retired demand dimensions in model allocation writes", async () => {
 		const app = appFor({});
 		const response = await request(app)
-			.post("/api/v1/production-plans/plan-1/model-allocations")
+			.post("/api/v1/projects/plan-1/model-allocations")
 			.set("Authorization", "Bearer command-token")
 			.send({ modelId: "model-1", plannedQuantity: 100, demandPurpose: "production" });
 
@@ -308,8 +308,8 @@ describe("canonical PATS command contract", () => {
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
 			project: {
-				findUnique: async () => ({ id: "plan-1", status: "DRAFT", rowVersion: 1 }),
-				update: async () => ({ id: "plan-1", rowVersion: 2 }),
+				findUnique: async () => ({ id: "project-1", status: "DRAFT", rowVersion: 1 }),
+				update: async () => ({ id: "project-1", rowVersion: 2 }),
 			},
 			part: { findMany: async () => [{ id: "part-1" }] },
 			stage: { findMany: async () => [{ id: "stage-1" }] },
@@ -323,7 +323,7 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database);
 		const response = await request(app)
-			.post("/api/v1/production-plans/plan-1/parts-list-versions")
+			.post("/api/v1/projects/plan-1/parts-list-versions")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "route-version-1")
 			.set("If-Match", '"1"')
@@ -331,16 +331,16 @@ describe("canonical PATS command contract", () => {
 
 		expect(response.status).to.equal(201);
 		expect(response.headers.etag).to.equal('"2"');
-		expect(response.body).to.deep.include({ partsListVersionId: "parts-list-2", version: 2, planRowVersion: 2 });
+		expect(response.body).to.deep.include({ partsListVersionId: "parts-list-2", version: 2, projectRowVersion: 2 });
 	});
 
 	it("fails command access closed without planning.manage", async () => {
 		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 		const response = await request(app)
-			.post("/api/v1/production-plans")
+			.post("/api/v1/projects")
 			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "plan-create-2")
-			.send({ planCode: "PLAN-002", name: "Blocked", requiredProductionQuantity: 1 });
+			.set("Idempotency-Key", "project-create-2")
+			.send({ projectCode: "PLAN-002", name: "Blocked", requiredProductionQuantity: 1 });
 
 		expect(response.status).to.equal(403);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
@@ -1006,7 +1006,7 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
 		const response = await request(app)
-			.post("/api/v1/production-plans/proj-1/lots")
+			.post("/api/v1/projects/proj-1/lots")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "lot-create-duplicate")
 			.send({
@@ -1066,13 +1066,13 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
 		const response = await request(app)
-			.post("/api/v1/production-plans/proj-1/release")
+			.post("/api/v1/projects/proj-1/release")
 			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "plan-release-1")
+			.set("Idempotency-Key", "project-release-1")
 			.set("If-Match", '"1"');
 
 		expect(response.status).to.equal(200);
-		expect(response.body).to.include({ planId: "proj-1", status: "RELEASED" });
+		expect(response.body).to.include({ projectId: "proj-1", status: "RELEASED" });
 		expect(batchUpdates).to.have.lengthOf(1);
 		expect(batchUpdates[0].data).to.deep.equal({ status: "ACTIVE" });
 		expect(batchUpdates[0].where).to.deep.equal({
@@ -1155,13 +1155,13 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
 		const response = await request(app)
-			.post("/api/v1/production-plans/proj-1/release")
+			.post("/api/v1/projects/proj-1/release")
 			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "plan-release-mint")
+			.set("Idempotency-Key", "project-release-mint")
 			.set("If-Match", '"1"');
 
 		expect(response.status).to.equal(200);
-		expect(response.body).to.include({ planId: "proj-1", status: "RELEASED" });
+		expect(response.body).to.include({ projectId: "proj-1", status: "RELEASED" });
 		expect(createdBatches).to.have.lengthOf(2);
 		expect(createdBatches[0]).to.include({
 			batchCode: "MLT-001-B001",
@@ -1216,8 +1216,8 @@ describe("canonical PATS command contract", () => {
 	});
 });
 
-describe("plan part cycle-time override (REQ-CT-1 S3)", () => {
-	function partApp(partRow: Record<string, unknown>, planStatus = "DRAFT") {
+describe("project part cycle-time override (REQ-CT-1 S3)", () => {
+	function partApp(partRow: Record<string, unknown>, projectStatus = "DRAFT") {
 		let stored = { ...partRow };
 		const database = {
 			idempotencyRecord: {
@@ -1235,7 +1235,7 @@ describe("plan part cycle-time override (REQ-CT-1 S3)", () => {
 				},
 			},
 			project: {
-				findUnique: async () => ({ id: "plan-1", status: planStatus }),
+				findUnique: async () => ({ id: "project-1", status: projectStatus }),
 			},
 			auditRecord: { create: async () => undefined },
 			outboxMessage: { create: async () => undefined },
@@ -1243,12 +1243,12 @@ describe("plan part cycle-time override (REQ-CT-1 S3)", () => {
 		return appFor(database);
 	}
 
-	const basePart = { id: "part-1", projectId: "plan-1", plannedCycleTimes: { "STG-INJECTION::": 30 }, plannedCycleTimesOverride: null, rowVersion: 1 };
+	const basePart = { id: "part-1", projectId: "project-1", plannedCycleTimes: { "STG-INJECTION::": 30 }, plannedCycleTimesOverride: null, rowVersion: 1 };
 
 	it("sets the finalization override with If-Match and bumps the version", async () => {
 		const app = partApp(basePart);
 		const response = await request(app)
-			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.patch("/api/v1/projects/project-1/parts/part-1")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "part-ct-set-1")
 			.set("If-Match", '"1"')
@@ -1264,7 +1264,7 @@ describe("plan part cycle-time override (REQ-CT-1 S3)", () => {
 	it("clears the override back to null (master fallback)", async () => {
 		const app = partApp({ ...basePart, plannedCycleTimesOverride: { "STG-INJECTION::": 25 } });
 		const response = await request(app)
-			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.patch("/api/v1/projects/project-1/parts/part-1")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "part-ct-clear-1")
 			.set("If-Match", '"1"')
@@ -1274,10 +1274,10 @@ describe("plan part cycle-time override (REQ-CT-1 S3)", () => {
 		expect(response.body.plannedCycleTimesOverride).to.equal(null);
 	});
 
-	it("refuses overrides on released plans", async () => {
+	it("refuses overrides on released projects", async () => {
 		const app = partApp(basePart, "RELEASED");
 		const response = await request(app)
-			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.patch("/api/v1/projects/project-1/parts/part-1")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "part-ct-released-1")
 			.set("If-Match", '"1"')
@@ -1289,7 +1289,7 @@ describe("plan part cycle-time override (REQ-CT-1 S3)", () => {
 	it("rejects stale versions and invalid values", async () => {
 		const app = partApp(basePart);
 		const stale = await request(app)
-			.patch("/api/v1/projects/plan-1/parts/part-1")
+			.patch("/api/v1/projects/project-1/parts/part-1")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "part-ct-stale-1")
 			.set("If-Match", '"9"')
@@ -1298,7 +1298,7 @@ describe("plan part cycle-time override (REQ-CT-1 S3)", () => {
 
 		for (const [key, bad] of [["zero", 0], ["negative", -3], ["fraction", 7.5]] as const) {
 			const response = await request(app)
-				.patch("/api/v1/projects/plan-1/parts/part-1")
+				.patch("/api/v1/projects/project-1/parts/part-1")
 				.set("Authorization", "Bearer command-token")
 				.set("Idempotency-Key", `part-ct-bad-${key}`)
 				.set("If-Match", '"1"')

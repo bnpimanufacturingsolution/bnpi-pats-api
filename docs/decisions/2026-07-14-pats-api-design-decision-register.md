@@ -83,7 +83,7 @@ The following distinctions apply to every decision in this register:
 | D-022 | The app uses localStorage release snapshots and seeded fixtures for planning/execution alignment | `STALE` | Prototype transport/state behavior is not an API persistence or concurrency contract |
 | D-023 | The on-prem readiness document proposes Docker-first air-gapped deployment but leaves identity, backup ownership, recovery objectives, and topology open | `NEEDS_CONFIRMATION` | Operations design must define control boundaries and test hooks without inventing client-owned values |
 
-| D-024 | Draft business documents call the planning aggregate `Project`, while the target endpoint inventory calls it `ProductionPlan` | `NEEDS_CONFIRMATION` | No public planning route or database identity is canonical until the domain noun and compatibility mapping are accepted |
+| D-024 | Draft business documents call the planning aggregate `Project`, while the target endpoint inventory calls it `ProductionPlan` | `CONFIRMED` — canonical noun is `Project` (see resolution entry 2026-09-25) | `Project` is the canonical domain noun, route family, and schema identity; `ProductionPlan` is a retired synonym pending twin removal per the canonicalization plan |
 
 | D-025 | The current schema uses `String actor`, while audit requirements need a stable subject reference plus an optional historical snapshot | `NEEDS_CONFIRMATION` | Identity mapping and snapshot fields must be accepted before audit or operational writes are implemented |
 
@@ -504,3 +504,59 @@ and phased migration; it does not apply a database migration by itself.
   wipe/summary assertions; full suite green.
 - **App UI:** untouched per the frozen-layout constraint; the app's existing setup editors continue
   against unchanged v1 shapes plus additive fields.
+
+## User-confirmed planning noun: Project (2026-09-25)
+
+D-024 is resolved. The canonical planning aggregate noun is **Project**.
+
+- **Decision:** `Project` is the canonical domain noun, route family (`/api/v1/projects…`),
+  schema identity (`model Project`), and UI term. `ProductionPlan`/`productionPlan` is a retired
+  synonym: route twins, code identifiers, audit names, and error strings still carrying it are
+  compatibility residue, not a second concept.
+- **Rationale/evidence:** UI routes/labels, Prisma schema, and user direction agree on `Project`;
+  the sibling callsite audit (2026-09-25) showed the app displays `Project` while calling
+  `/production-plans` on the wire — one noun end-to-end removes the split.
+- **Implementation impact:** Executed per
+  `docs/superpowers/plans/2026-09-25-project-noun-canonicalization-plan.md` (app wire switch →
+  API twin removal + renames → app renames with compat aliases). Response keys `planId`/`planCode`
+  are retained in this slice; trimming them is a separate contract decision.
+- **Owner:** user, 2026-09-25.
+- **Review condition:** reopen only if an external consumer requires the `ProductionPlan` noun.
+
+## User-approved §7 exception: immediate removal of sunset-gated surfaces (2026-09-25)
+
+The user approved immediate removal of the 2027-gated transitional surfaces without waiting for
+sunset, as a scoped v1.2.1 §7 exception (same mechanism as D-038).
+
+- **Excepted section:** v1.2.1 §7 minimum 90-day deprecation window.
+- **Scope (only):** `GET/POST/PATCH /api/v1/catalog/bom-definitions`,
+  `POST/PATCH /api/v1/catalog/bom-lines`, `POST/PATCH /api/v1/catalog/process-routes`,
+  `POST/PATCH /api/v1/catalog/route-stages`, and the `/stations` route-path alias rows for
+  `/sections`, `/sections/{id}/history`, `/sections/{id}/support`. `Stage`/`SubStage`, ModelPart
+  `routingSteps`, PartsList/RoutingStep, and the Section → Process → Sub-process hierarchy stay.
+- **Why conformance is not appropriate:** no production deployment exists; the dev database is
+  disposable. Sibling callsite audit (2026-09-25) verified zero active app API callers: the app
+  calls canonical `/api/v1/sections/...` (`endpoints.ts` `SECTIONS`/`STATION_HISTORY`) and never
+  `/api/v1/stations`, `bom-definitions`, `bom-lines`, `process-routes`, or `route-stages`.
+  The 2027 sunset dates assumed a production consumer that does not exist.
+- **Owner:** user. **Reason:** dead transitional weight on an unshipped v1; nothing to migrate.
+- **Review condition:** reopen before any external consumer is introduced or any removed surface
+  is reintroduced to the app. One-time; no expiry.
+- **Explicitly retained (outside this scope):** response compat fields (`stationCode`, history/
+  support `station` + `stationId` shapes, station-step `station` shape) and the `stationId`
+  request-body alias on work-process create. The app hook (`useCreateWorkProcess`) now sends
+  `sectionId`-only on the wire (2026-09-25 service/hook alignment; frozen components untouched);
+  the API alias remains as a safety net until components are editable. The app's
+  `/line/stations/*` UI routes are frontend paths and are untouched.
+- **Migration impact:** new additive migration drops `BomDefinition`, `BomLine`, `ProcessRoute`,
+  `ProcessRouteStage`, and `BomRelationshipKind`; historical migrations untouched. Dev-only
+  row disposition (disposable DB, reseed after migrate).
+- **Other sections checked:** §2 resource identity/paths (§7 alias rows removed, canonical
+  `/sections` unchanged); §3 method semantics unchanged; §6 RFC 9457 shape unchanged (removed
+  routes fall through to the existing canonical `404`/`405` boundary); §8 auth/object checks
+  unchanged (removed capability gates leave with their routes); §9 concurrency unchanged;
+  §10 removed fields no longer accepted/returned at route scope; §11 idempotency middleware
+  for removed catalog paths leaves with them. OpenAPI and focused tests updated.
+- **Supersedes:** the "Exception: None" lines in `docs/decisions/2026-09-25-bom-api-retirement-decision.md`
+  and `docs/decisions/2026-09-25-process-route-api-retirement-decision.md`, and the D-040
+  `/stations`-until-2027-06-30 hold, only for the route-path scope above.

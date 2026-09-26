@@ -1,10 +1,10 @@
 [
   {
-    "id": "stationHistoryGet",
+    "id": "sectionHistoryGet",
     "method": "GET",
-    "url": "/stations/{stationId}/history",
-    "summary": "Read server-owned station event history and open violations",
-    "description": "Returns stage-event evidence and open routing violations for the station's configured stage boundaries. The projection is read-only and rebuildable from the execution ledger.",
+    "url": "/sections/{sectionId}/history",
+    "summary": "Read server-owned section event history and open violations",
+    "description": "Returns stage-event evidence and open routing violations for the section's configured stage boundaries. The projection is read-only and rebuildable from the execution ledger.",
     "tags": [
       "PATS Execution"
     ],
@@ -12,7 +12,7 @@
     "contentTypes": [],
     "pathParams": [
       {
-        "name": "stationId",
+        "name": "sectionId",
         "required": true,
         "schema": {
           "type": "string",
@@ -23,6 +23,61 @@
     "queryParams": [],
     "responses": {
       "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "sectionSupportGet",
+    "method": "GET",
+    "url": "/sections/{sectionId}/support",
+    "summary": "Read rebuildable section support projection (output + WIP)",
+    "description": "Secondary workstation cards. todayOutput aggregates first-success PrintJobs (SENT|SIMULATED, sequence 1) at this section for a UTC calendar day (query date=YYYY-MM-DD). materials are hop inventory (bound-step positions minus first-success print here). lotPlans carry ceil(lot.requiredProductionQuantity / lot.labelPackSize) for Lot Progress — the denominator is the lot plan, not hop occupancy. staff and expectedOutput stay null until product-owned sources exist.\n",
+    "tags": [
+      "PATS Execution"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "sectionId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    ],
+    "queryParams": [
+      {
+        "name": "date",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date"
+        },
+        "description": "UTC calendar day for today's output (default current UTC date)"
+      }
+    ],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
         "contentTypes": []
       },
       "403": {
@@ -77,7 +132,7 @@
     "id": "batchCreate",
     "method": "POST",
     "url": "/batches",
-    "summary": "Create a planned batch and initial position projection",
+    "summary": "Create a planned batch and initial position projection (API/tests; UI releases mint automatically)",
     "tags": [
       "PATS Execution"
     ],

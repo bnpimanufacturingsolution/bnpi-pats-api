@@ -36,6 +36,7 @@
     "method": "POST",
     "url": "/inventory-transactions",
     "summary": "Record receiving or issuance evidence",
+    "description": "Records inventory movement without a MaterialRequirement link; materialRequirementId is retired and rejected.",
     "tags": [
       "PATS Inventory"
     ],

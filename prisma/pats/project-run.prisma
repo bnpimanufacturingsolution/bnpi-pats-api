@@ -1,6 +1,6 @@
 // Canonical planning and execution lifecycle vocabularies. The older draft models remain
 // physical compatibility tables while the API exposes the canonical resource names.
-enum PlanLifecycleStatus {
+enum ProjectLifecycleStatus {
   DRAFT
   READY
   RELEASED
@@ -39,7 +39,7 @@ model Project {
   projectCode                String                   @unique
   name                       String
   requiredProductionQuantity Int
-  status                     PlanLifecycleStatus      @default(DRAFT)
+  status                     ProjectLifecycleStatus      @default(DRAFT)
   rowVersion                 Int                      @default(1)
   releasedAt                 DateTime?
   releasedBySubjectId        String?

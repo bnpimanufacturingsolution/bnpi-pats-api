@@ -31,6 +31,15 @@ does not claim that no other API consumer exists.
   is the retirement notice and the app WWG report records the UI removal.
 - **Exception:** None. Immediate removal is not approved.
 
+## Amendment: immediate removal under scoped §7 exception (2026-09-25)
+
+Superseded by the user-approved §7 exception recorded in
+`docs/decisions/2026-07-14-pats-api-design-decision-register.md` ("User-approved §7 exception:
+immediate removal of sunset-gated surfaces"). No production deployment exists and the sibling
+callsite audit verified zero active app API callers, so the BOM route family is removed
+immediately instead of at the 2027-01-01 sunset. Persistence cleanup proceeds under that
+exception's dev-only disposition; historical migrations remain immutable.
+
 ## Persistence cleanup gate
 
 Do not remove `BomDefinition`, `BomLine`, their `Model`/`ModelPart` relations, `BomRelationshipKind`,
