@@ -54,8 +54,6 @@ model Employee {
   // Work Details
   workLocation String? // ONSITE, REMOTE, HYBRID
   isManager    Boolean @default(false)
-  deviceId     String?
-  deviceEmpId  String?
 
   // Compensation
   basicSalary  Float?

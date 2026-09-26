@@ -153,8 +153,6 @@ export const EmployeeSchema = z.object({
   // Work Details
   workLocation: z.string().optional().nullable(),
   isManager: z.boolean().default(false),
-  deviceId: z.string().optional().nullable(),
-  deviceEmpId: z.string().optional().nullable(),
 
   // Compensation
   basicSalary: z.number().optional().nullable(),
@@ -304,8 +302,6 @@ export const HRISEmployeeSchema = z.object({
   // Work Details
   workLocation: z.string(),
   isManager: z.boolean(),
-  deviceId: z.string().nullable(),
-  deviceEmpId: z.string().nullable(),
 
   // Compensation
   basicSalary: z.number(),

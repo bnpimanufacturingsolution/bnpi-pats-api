@@ -390,8 +390,6 @@ export class EmployeeService {
       // Work Details
       workLocation: hris.workLocation,
       isManager: hris.isManager,
-      deviceId: hris.deviceId,
-      deviceEmpId: hris.deviceEmpId,
 
       // Compensation
       basicSalary: hris.basicSalary,
