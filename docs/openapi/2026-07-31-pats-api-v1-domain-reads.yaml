@@ -27,33 +27,33 @@ paths:
       tags: [PATS Configuration]
       x-required-capability: execution.read
       responses: { '200': { $ref: '#/components/responses/CollectionRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
-  /stations:
+  /sections:
     get:
-      operationId: stationCollectionGet
-      summary: Read physical production stations
+      operationId: sectionCollectionGet
+      summary: Read configured sections
       tags: [PATS Configuration]
       x-required-capability: execution.read
       responses: { '200': { $ref: '#/components/responses/CollectionRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
-  /stations/{stationId}/history:
+  /sections/{sectionId}/history:
     get:
-      operationId: stationHistoryGet
-      summary: Read server-owned station event history and open violations
-      description: Returns stage-event evidence and open routing violations for the station's configured stage boundaries. The projection is read-only and rebuildable from the execution ledger.
+      operationId: sectionHistoryGet
+      summary: Read server-owned section event history and open violations
+      description: Returns stage-event evidence and open routing violations for the section's configured stage boundaries. The projection is read-only and rebuildable from the execution ledger.
       tags: [PATS Execution]
       x-required-capability: execution.read
       parameters:
-        - name: stationId
+        - name: sectionId
           in: path
           required: true
           schema: { type: string, minLength: 1 }
       responses: { '200': { $ref: '#/components/responses/StationHistoryRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
-  /stations/{stationId}/support:
+  /sections/{sectionId}/support:
     get:
-      operationId: stationSupportGet
-      summary: Read rebuildable station support projection (output + WIP)
+      operationId: sectionSupportGet
+      summary: Read rebuildable section support projection (output + WIP)
       description: >
         Secondary workstation cards. todayOutput aggregates first-success PrintJobs (SENT|SIMULATED,
-        sequence 1) at this station for a UTC calendar day (query date=YYYY-MM-DD). materials are
+        sequence 1) at this section for a UTC calendar day (query date=YYYY-MM-DD). materials are
         hop inventory (bound-step positions minus first-success print here). lotPlans carry
         ceil(lot.requiredProductionQuantity / lot.labelPackSize) for Lot Progress — the
         denominator is the lot plan, not hop occupancy. staff and expectedOutput stay null until
@@ -61,7 +61,7 @@ paths:
       tags: [PATS Execution]
       x-required-capability: execution.read
       parameters:
-        - name: stationId
+        - name: sectionId
           in: path
           required: true
           schema: { type: string, minLength: 1 }
@@ -136,24 +136,24 @@ paths:
         '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
         '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
         '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' }
-  /production-plans:
+  /projects:
     get:
-      operationId: productionPlanCollectionGet
-      summary: List production-plan summaries
+      operationId: projectCollectionGet
+      summary: List project summaries
       tags: [PATS Planning]
       x-required-capability: planning.read
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
       responses: { '200': { $ref: '#/components/responses/PaginatedRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
-  /production-plans/{planId}:
+  /projects/{projectId}:
     get:
-      operationId: productionPlanGet
-      summary: Read a production plan and its planning snapshot
+      operationId: projectGet
+      summary: Read a project and its planning snapshot
       description: Returns the active Project snapshot, model quantities, Parts, Parts List versions, Lot, and execution lineage. Demand allocation, PMRS placeholder, and MaterialRequirement properties were removed by the user-approved 2026-09-25 v1 scope amendment.
       tags: [PATS Planning]
       x-required-capability: planning.read
-      parameters: [{ $ref: '#/components/parameters/PlanId' }]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
       responses: { '200': { $ref: '#/components/responses/ResourceRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
   /batches:
     get:
@@ -276,7 +276,7 @@ components:
     Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
     Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
     BatchId: { name: batch_id, in: query, schema: { type: string, minLength: 1 } }
-    PlanId: { name: planId, in: path, required: true, schema: { type: string, minLength: 1 } }
+    ProjectId: { name: projectId, in: path, required: true, schema: { type: string, minLength: 1 } }
     IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
     IfMatch: { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[0-9]+"$' } }
   responses:

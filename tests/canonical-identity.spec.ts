@@ -131,9 +131,9 @@ describe("canonical identity boundary", () => {
 			effectiveCapabilities([{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]),
 		);
 		const gatedCapabilities = [
-			// create-app read boundaries (catalog, catalog collection, BOM reads)
+			// create-app read boundaries (catalog, catalog collection)
 			"catalog.read",
-			// catalog mutation boundary (catalog/bom/process-route foundations)
+			// catalog mutation boundary (catalog foundation)
 			"catalog.manage",
 			// domain reads (app/pats/domain-read.ts)
 			"planning.read",

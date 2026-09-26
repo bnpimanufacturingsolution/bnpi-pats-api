@@ -148,10 +148,10 @@
     }
   },
   {
-    "id": "stationCollectionGet",
+    "id": "sectionCollectionGet",
     "method": "GET",
-    "url": "/stations",
-    "summary": "Read physical production stations",
+    "url": "/sections",
+    "summary": "Read configured sections",
     "tags": [
       "PATS Configuration"
     ],
@@ -177,10 +177,10 @@
     }
   },
   {
-    "id": "stationCreate",
+    "id": "sectionCreate",
     "method": "POST",
-    "url": "/stations",
-    "summary": "Add a physical production station",
+    "url": "/sections",
+    "summary": "Add a configured section",
     "tags": [
       "PATS Configuration"
     ],
@@ -340,58 +340,33 @@
       "PATS Configuration"
     ],
     "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
     "contentTypes": [],
     "pathParams": [],
     "queryParams": [
       {
-        "name": "page",
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 1
-        }
-      },
-      {
-        "name": "limit",
-        "schema": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 100,
-          "default": 50
-        }
-      },
-      {
         "name": "search",
         "schema": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         }
       }
     ],
     "responses": {
       "200": {
-        "description": "Paginated production-line summaries",
         "contentTypes": []
       },
       "400": {
-        "description": "Malformed or incomplete collection query",
         "contentTypes": []
       },
       "403": {
-        "description": "execution.read capability required",
         "contentTypes": []
       },
       "503": {
-        "description": "Production-line data unavailable",
         "contentTypes": []
       }
     },
     "paginationHints": {
-      "hasPaginationParams": true,
+      "hasPaginationParams": false,
       "hasSearchParam": false,
       "hasSortParams": false
     }
@@ -401,34 +376,380 @@
     "method": "POST",
     "url": "/production-lines",
     "summary": "Create a production-line umbrella for the Section tree",
-    "description": "A ProductionLine owns Sections; multiple Sections may belong to one line. The created line has no Stations yet. Line codes are unique within the deployment.",
+    "description": "A ProductionLine owns Sections; multiple Sections may belong to one line. The created line has no Stations yet. Line codes are unique within the deployment.\n",
     "tags": [
       "PATS Configuration"
     ],
     "deprecated": false,
-    "security": [
-      {
-        "bearerAuth": []
-      }
-    ],
     "contentTypes": [],
     "pathParams": [],
     "queryParams": [],
     "responses": {
       "201": {
-        "description": "Production line created",
         "contentTypes": []
       },
       "403": {
-        "description": "operations.manage capability required",
         "contentTypes": []
       },
       "409": {
-        "description": "Duplicate line code or idempotency conflict",
         "contentTypes": []
       },
       "422": {
-        "description": "Invalid production-line payload",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "lineCollectionGet",
+    "method": "GET",
+    "url": "/lines",
+    "summary": "Read station-screen line instances scoped to the caller",
+    "description": "1 line = 1 station screen. Admin (operations.manage) sees all lines; every other subject sees only lines where they are the active leader, the assigned leader, or hold an ACTIVE operator assignment. This collection is the login-landing source: one allowed line lands directly, several show the picker.\n",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "section_id",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      {
+        "name": "process_id",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      {
+        "name": "include_disabled",
+        "schema": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "lineCreate",
+    "method": "POST",
+    "url": "/lines",
+    "summary": "Register a station-screen line under a leaf work process",
+    "description": "1 line = 1 station screen (L-1). The line must attach to a leaf WorkProcess; parent counts roll up (L-2/L-4). assignedLeaderId is required at creation time (L-5); the active leader defaults to the assigned leader. lineCode must be uppercase alphanumeric with dashes (e.g. DEC-LS-01) and is unique across the deployment.\n",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "lineAttentionGet",
+    "method": "GET",
+    "url": "/lines/{lineId}/attention",
+    "summary": "Read the leader switcher attention flags for a line",
+    "description": "Red-dot evidence (L-12): openViolations counts OPEN routing violations at the line's sub-stage, stuckWip counts batch positions parked there longer than 8 hours, and unfilledHour reports whether today has a daily-sheet row for the line's work process. Non-admin callers must lead or run the line.\n",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "lineId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "subjectCollectionGet",
+    "method": "GET",
+    "url": "/subjects",
+    "summary": "Read the subject directory for leader/operator pickers",
+    "description": "Admin-only identity read (identity.read) backing the line-screen management pickers: assigned/active leader selection and operator assignment. Returns opaque subject ids plus display/email snapshots; never provider identifiers.\n",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "search",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      {
+        "name": "status",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "DISABLED"
+          ]
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "503": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "linePatch",
+    "method": "PATCH",
+    "url": "/lines/{lineId}",
+    "summary": "Update a line (label, code, leaders, order, enable state)",
+    "description": "Admin management of the line identity. The cover flip (sick-day active leader) is a patch of activeLeaderId; the assigned leader assignment stays untouched (L-5). Requires If-Match with the current rowVersion; 412 on mismatch.\n",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "lineId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "lineDelete",
+    "method": "DELETE",
+    "url": "/lines/{lineId}",
+    "summary": "Soft-disable a line and end its active operator assignments",
+    "description": "Soft-hide (standard §6): the line row is disabled and its ACTIVE operator assignments end; GET /lines no longer returns it and reads of attention return 404. Evidence stays in audit. Requires If-Match.\n",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "lineId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "412": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "operatorAssignmentCreate",
+    "method": "POST",
+    "url": "/operator-assignments",
+    "summary": "Assign an operator to a line (single-line invariant)",
+    "description": "Leader-owned transfer (L-8): the line's active leader (or an admin) assigns an ACTIVE operator. A subject already holding an ACTIVE assignment on another line returns 409 until that assignment ends. The reason is a plain stamp, not a charge-code system.\n",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "201": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
+        "contentTypes": []
+      },
+      "422": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "operatorAssignmentEnd",
+    "method": "DELETE",
+    "url": "/operator-assignments/{assignmentId}",
+    "summary": "End an operator's line assignment",
+    "description": "Marks the assignment ENDED with endedAt evidence; rows are never rewritten beyond ending. Only the line's active leader or an admin may end it.\n",
+    "tags": [
+      "PATS Configuration"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "assignmentId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "contentTypes": []
+      },
+      "403": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "409": {
         "contentTypes": []
       }
     },

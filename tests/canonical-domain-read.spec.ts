@@ -38,7 +38,7 @@ function appFor(
 }
 
 describe("canonical PATS domain read contract", () => {
-	it("returns a paginated production-plan summary from server persistence", async () => {
+	it("returns a paginated project summary from server persistence", async () => {
 		let receivedArgs: Record<string, unknown> | undefined;
 		const app = appFor({
 			project: {
@@ -46,7 +46,7 @@ describe("canonical PATS domain read contract", () => {
 				findMany: async (args: Record<string, unknown>) => {
 					receivedArgs = args;
 					return [{
-						id: "plan-1",
+						id: "project-1",
 						projectCode: "PLAN-001",
 						name: "July production",
 						status: "RELEASED",
@@ -63,15 +63,15 @@ describe("canonical PATS domain read contract", () => {
 		});
 
 		const response = await request(app)
-			.get("/api/v1/production-plans")
+			.get("/api/v1/projects")
 			.query({ page: 2, limit: 1 })
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
 		expect(response.body).to.deep.equal({
 			data: [{
-				planId: "plan-1",
-				planCode: "PLAN-001",
+				projectId: "project-1",
+				projectCode: "PLAN-001",
 				name: "July production",
 				status: "RELEASED",
 				requiredProductionQuantity: 100,
@@ -87,11 +87,11 @@ describe("canonical PATS domain read contract", () => {
 		expect(receivedArgs).to.deep.include({ skip: 1, take: 1 });
 	});
 
-	it("preserves lot execution bindings in production-plan detail reads", async () => {
+	it("preserves lot execution bindings in project detail reads", async () => {
 		const app = appFor({
 			project: {
 				findUnique: async () => ({
-					id: "plan-1",
+					id: "project-1",
 					projectCode: "PLAN-001",
 					name: "July production",
 					status: "DRAFT",
@@ -123,7 +123,7 @@ describe("canonical PATS domain read contract", () => {
 		});
 
 		const response = await request(app)
-			.get("/api/v1/production-plans/plan-1")
+			.get("/api/v1/projects/plan-1")
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
@@ -592,7 +592,7 @@ describe("canonical PATS domain read contract", () => {
 
 		expect(response.status).to.equal(200);
 		expect(response.body).to.include({
-			plans: 4,
+			projects: 4,
 			activeProjects: 2,
 			activeLots: 2,
 			activeBatches: 3,
@@ -731,7 +731,7 @@ describe("canonical PATS domain read contract", () => {
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
-		expect(response.body.plans).to.equal(4);
+		expect(response.body.projects).to.equal(4);
 	});
 
 	it("fails dashboard reads closed when the subject lacks dashboard.read", async () => {
@@ -754,7 +754,7 @@ describe("canonical PATS domain read contract", () => {
 		]);
 
 		const response = await request(app)
-			.get("/api/v1/production-plans")
+			.get("/api/v1/projects")
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(403);
@@ -847,7 +847,7 @@ describe("canonical PATS domain read contract", () => {
 		});
 
 		const response = await request(app)
-			.get("/api/v1/production-plans")
+			.get("/api/v1/projects")
 			.query({ status: "RELEASED" })
 			.set("Authorization", "Bearer read-contract-token");
 

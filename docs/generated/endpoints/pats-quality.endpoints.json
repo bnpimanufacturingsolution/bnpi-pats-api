@@ -4,6 +4,7 @@
     "method": "GET",
     "url": "/quality-inspections/resolve",
     "summary": "Resolve a scanned batch code into an open quality inspection",
+    "description": "Journey D scan-first resolve. Requires quality.resolve. Fail-closed when the gate stage is not in the subject's allowedStages.",
     "tags": [
       "PATS Quality"
     ],

@@ -28,6 +28,15 @@ establish an active app consumer.
 - **Sunset:** 2027-01-01 00:00:00 UTC (more than 90 days after notice).
 - **Exception:** none; v1.2.1 §7's minimum deprecation window is observed.
 
+## Amendment: immediate removal under scoped §7 exception (2026-09-25)
+
+Superseded by the user-approved §7 exception recorded in
+`docs/decisions/2026-07-14-pats-api-design-decision-register.md` ("User-approved §7 exception:
+immediate removal of sunset-gated surfaces"). No production deployment exists and the sibling
+callsite audit verified zero active app API callers, so the ProcessRoute/RouteStage route family
+is removed immediately instead of at the 2027-01-01 sunset. Persistence cleanup proceeds under
+that exception's dev-only disposition; historical migrations remain immutable.
+
 ## Scope boundary
 
 This retires only the distinct `ProcessRoute`/`ProcessRouteStage` resource family. It does **not**

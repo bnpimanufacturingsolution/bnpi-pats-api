@@ -7,20 +7,10 @@ import { parseResolveCode, resolveQualityInspectionByCode } from "./quality-reso
 import { listAllowedQualityStageIds } from "./quality-stage-scope";
 import { hasCapability } from "../identity/policy";
 import type { SubjectAssignmentRecord } from "../identity/types";
-import { setDeprecationHeaders } from "../canonical/response-headers";
 
-// Station→Section rename (2026-09-16) transitional bridge: /sections is
-// CANONICAL, /stations is TRANSITIONAL (§7) with Deprecation/Sunset headers.
-const SECTION_LEGACY_SUNSET = new Date("2027-06-30T00:00:00Z");
-
-function isLegacyStationPath(req: Request): boolean {
-	const path = req.baseUrl + req.path;
-	return /(^|\/)stations(\/|$)/.test(path);
-}
-
-function applyLegacyStationHeaders(req: Request, res: Response): void {
-	if (isLegacyStationPath(req)) setDeprecationHeaders(res, SECTION_LEGACY_SUNSET);
-}
+// Station→Section rename (2026-09-16) completed: /sections is the sole canonical
+// path. The transitional /stations alias rows were removed 2026-09-25 under the
+// scoped §7 exception (no production deployment; zero active app callers).
 
 type DomainReadDatabase = Pick<
 	PatsPrismaClient,
@@ -289,11 +279,11 @@ export function domainReadRouter(
 ): Router {
 	const router = Router();
 
-	router.get(["/projects", "/production-plans"], requireCapability("planning.read"), async (req, res) => {
+	router.get("/projects", requireCapability("planning.read"), async (req, res) => {
 		const page = pagination(req, res);
 		if (!page) return;
 		try {
-			const [totalItems, plans] = await Promise.all([
+			const [totalItems, projects] = await Promise.all([
 				database.project.count(),
 				database.project.findMany({
 					skip: (page.page - 1) * page.limit,
@@ -314,40 +304,29 @@ export function domainReadRouter(
 					},
 				}),
 			]);
-			const isProject = (req.baseUrl + req.path).includes("/projects");
-			const data = plans.map((plan) => {
-				const base = {
-					planId: plan.id,
-					planCode: plan.projectCode,
-					name: plan.name,
-					status: plan.status,
-					requiredProductionQuantity: plan.requiredProductionQuantity,
-					productId: plan.productId,
-					productName: plan.product?.productName ?? null,
-					lotCount: plan.lot ? 1 : 0,
-					rowVersion: plan.rowVersion,
-					createdAt: plan.createdAt.toISOString(),
-					releasedAt: date(plan.releasedAt),
-				};
-				if (isProject) {
-					return {
-						projectId: plan.id,
-						projectCode: plan.projectCode,
-						...base,
-					};
-				}
-				return base;
-			});
+		const data = projects.map((project) => ({
+			projectId: project.id,
+			projectCode: project.projectCode,
+			name: project.name,
+			status: project.status,
+			requiredProductionQuantity: project.requiredProductionQuantity,
+			productId: project.productId,
+			productName: project.product?.productName ?? null,
+			lotCount: project.lot ? 1 : 0,
+			rowVersion: project.rowVersion,
+			createdAt: project.createdAt.toISOString(),
+			releasedAt: date(project.releasedAt),
+		}));
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(data, page, totalItems));
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS project data is unavailable.");
 		}
 	});
 
-	router.get(["/projects/:projectId", "/production-plans/:planId"], requireCapability("planning.read"), async (req, res) => {
-		const targetId = req.params.projectId ?? req.params.planId;
+	router.get("/projects/:projectId", requireCapability("planning.read"), async (req, res) => {
+		const targetId = req.params.projectId;
 		try {
-			const plan = await database.project.findUnique({
+			const project = await database.project.findUnique({
 				where: { id: targetId },
 				include: {
 					product: { select: { id: true, productCode: true, productName: true } },
@@ -363,27 +342,25 @@ export function domainReadRouter(
 					},
 				},
 			});
-			if (!plan) {
+			if (!project) {
 				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested project was not found.");
 				return;
 			}
-			// Mutable plan resources expose the optimistic-concurrency token as a strong ETag.
-			// Clients must send this value (or body.rowVersion) as If-Match on plan commands.
-			res.setHeader("ETag", `"${plan.rowVersion}"`);
+			// Mutable project resources expose the optimistic-concurrency token as a strong ETag.
+			// Clients must send this value (or body.rowVersion) as If-Match on project commands.
+			res.setHeader("ETag", `"${project.rowVersion}"`);
 			res.setHeader("Cache-Control", "no-store").json({
-				projectId: plan.id,
-				planId: plan.id,
-				projectCode: plan.projectCode,
-				planCode: plan.projectCode,
-				name: plan.name,
-				status: plan.status,
-				requiredProductionQuantity: plan.requiredProductionQuantity,
-				rowVersion: plan.rowVersion,
-				createdAt: plan.createdAt.toISOString(),
-				releasedAt: date(plan.releasedAt),
-				product: plan.product,
-				productSpecification: plan.productSpecification,
-				modelAllocations: plan.modelAllocations.map((allocation) => ({
+				projectId: project.id,
+				projectCode: project.projectCode,
+				name: project.name,
+				status: project.status,
+				requiredProductionQuantity: project.requiredProductionQuantity,
+				rowVersion: project.rowVersion,
+				createdAt: project.createdAt.toISOString(),
+				releasedAt: date(project.releasedAt),
+				product: project.product,
+				productSpecification: project.productSpecification,
+				modelAllocations: project.modelAllocations.map((allocation) => ({
 					allocationId: allocation.id,
 					modelId: allocation.modelId,
 					model: allocation.model,
@@ -394,33 +371,33 @@ export function domainReadRouter(
 					lifecycleStatus: allocation.lifecycleStatus,
 					rowVersion: allocation.rowVersion,
 				})),
-				parts: plan.parts,
-				partsListVersions: plan.partsLists.map((partsList) => ({
+				parts: project.parts,
+				partsListVersions: project.partsLists.map((partsList) => ({
 					partsListVersionId: partsList.id,
 					version: partsList.version,
 					status: partsList.status,
 					publishedAt: date(partsList.publishedAt),
 					routeSteps: partsList.steps.map(routeResource),
 				})),
-				lots: plan.lot ? [{
-					lotId: plan.lot.id,
-					lotCode: plan.lot.lotCode,
-					lotName: plan.lot.lotName,
-					partsListId: plan.lot.partsListId,
-					partsListVersion: plan.lot.partsListVersion,
-					status: plan.lot.status,
-					requiredProductionQuantity: plan.lot.requiredProductionQuantity,
-					labelPackSize: plan.lot.labelPackSize,
-					quantityMagnitude: decimal(plan.lot.quantityMagnitude),
-					quantityUom: plan.lot.quantityUom,
-					partAllocations: plan.lot.partAllocations.map((allocation) => ({
+				lots: project.lot ? [{
+					lotId: project.lot.id,
+					lotCode: project.lot.lotCode,
+					lotName: project.lot.lotName,
+					partsListId: project.lot.partsListId,
+					partsListVersion: project.lot.partsListVersion,
+					status: project.lot.status,
+					requiredProductionQuantity: project.lot.requiredProductionQuantity,
+					labelPackSize: project.lot.labelPackSize,
+					quantityMagnitude: decimal(project.lot.quantityMagnitude),
+					quantityUom: project.lot.quantityUom,
+					partAllocations: project.lot.partAllocations.map((allocation) => ({
 						lotPartAllocationId: allocation.id,
 						partId: allocation.partId,
 						partCode: allocation.part.partCode,
 						quantityMagnitude: decimal(allocation.quantityMagnitude),
 						quantityUom: allocation.quantityUom,
 					})),
-					batches: plan.lot.batches.map((batch) => ({
+					batches: project.lot.batches.map((batch) => ({
 						batchId: batch.id,
 						batchCode: batch.batchCode,
 						barcodeValue: batch.barcodeValue,
@@ -432,7 +409,7 @@ export function domainReadRouter(
 				}] : [],
 			});
 		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production plan data is unavailable.");
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS project data is unavailable.");
 		}
 	});
 
@@ -469,7 +446,7 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get(["/sections", "/stations"], requireCapability("execution.read"), async (req, res) => {
+	router.get("/sections", requireCapability("execution.read"), async (req, res) => {
 		const page = pagination(req, res, ["search"]);
 		if (!page) return;
 		try {
@@ -485,7 +462,7 @@ export function domainReadRouter(
 						],
 				  }
 				: undefined;
-			const [totalItems, stations] = await Promise.all([
+			const [totalItems, sections] = await Promise.all([
 				searchText.length >= 3
 					? database.$queryRaw<{ count: number }[]>(Prisma.sql`
 						SELECT COUNT(*)::integer AS count FROM "Section" s
@@ -508,8 +485,7 @@ export function domainReadRouter(
 							include: { boundSteps: true, productionLine: { select: { id: true, lineCode: true, name: true } } },
 					  }),
 			]);
-			applyLegacyStationHeaders(req, res);
-			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(stations.map((s) => ({ ...s, stationCode: s.sectionCode, productionLineId: (s as { productionLineId?: string | null }).productionLineId ?? null })), page, totalItems));
+		res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(sections.map((s) => ({ ...s, stationCode: s.sectionCode, productionLineId: (s as { productionLineId?: string | null }).productionLineId ?? null })), page, totalItems));
 		} catch (error) {
 			console.error("[domain-read] GET /sections failed:", error);
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS section configuration is unavailable.");
@@ -581,10 +557,10 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get(["/sections/:sectionId/history", "/stations/:stationId/history"], requireCapability("execution.read"), async (req, res) => {
+	router.get("/sections/:sectionId/history", requireCapability("execution.read"), async (req, res) => {
 		try {
 			const station = await database.section.findUnique({
-				where: { id: req.params.sectionId ?? req.params.stationId },
+				where: { id: req.params.sectionId },
 				select: {
 					id: true,
 					sectionCode: true,
@@ -628,7 +604,6 @@ export function domainReadRouter(
 			const partsById = new Map(parts.map((part) => [part.id, part]));
 
 			res.setHeader("Cache-Control", "no-store");
-			applyLegacyStationHeaders(req, res);
 			res.json({
 				station: { id: station.id, stationCode: station.sectionCode, name: station.name, stageId: station.stageId },
 				// Canonical alias for the renamed resource; `station` is the TRANSITIONAL shape (§7).
@@ -678,7 +653,7 @@ export function domainReadRouter(
 	 * - wipProgress: same positions (compat)
 	 * - staff / expectedOutput / targetQuantity: null until product owns sources
 	 */
-	router.get(["/sections/:sectionId/support", "/stations/:stationId/support"], requireCapability("execution.read"), async (req, res) => {
+	router.get("/sections/:sectionId/support", requireCapability("execution.read"), async (req, res) => {
 		try {
 			const requestQuery = query(req);
 			const allowedKeys = new Set(["date"]);
@@ -693,7 +668,7 @@ export function domainReadRouter(
 			}
 
 			const station = await database.section.findUnique({
-				where: { id: req.params.sectionId ?? req.params.stationId },
+				where: { id: req.params.sectionId },
 				select: {
 					id: true,
 					sectionCode: true,
@@ -850,15 +825,14 @@ export function domainReadRouter(
 			for (const job of printedHere) {
 				const hop = wipBatches.find((row) => row.batchId === job.batchId);
 				if (!hop) continue;
-				const plan = lotPlanMap.get(hop.lotId);
-				if (!plan) continue;
-				plan.completedBatchCount += 1;
-				plan.completedQuantity += Number(job.quantity) || hop.quantity || 0;
+				const lotPlan = lotPlanMap.get(hop.lotId);
+				if (!lotPlan) continue;
+				lotPlan.completedBatchCount += 1;
+				lotPlan.completedQuantity += Number(job.quantity) || hop.quantity || 0;
 			}
 			const lotPlans = [...lotPlanMap.values()];
 
 			res.setHeader("Cache-Control", "no-store");
-			applyLegacyStationHeaders(req, res);
 			res.json({
 				stationId: station.id,
 				stationCode: station.sectionCode,
@@ -1478,7 +1452,7 @@ export function domainReadRouter(
 
 	router.get("/dashboard-summaries", requireCapability("dashboard.read"), async (req, res) => {
 		try {
-			const [plans, activeBatchRows, stageRows, openViolationRows, qualityHolds, inventoryTransactions] = await Promise.all([
+			const [projects, activeBatchRows, stageRows, openViolationRows, qualityHolds, inventoryTransactions] = await Promise.all([
 				database.project.count(),
 				database.batch.findMany({
 					where: { status: "ACTIVE" },
@@ -1505,7 +1479,7 @@ export function domainReadRouter(
 			const activeProjects = new Set(activeBatchRows.map((row) => row.lot.projectId));
 			res.setHeader("Cache-Control", "no-store").json({
 				generatedAt: new Date().toISOString(),
-				plans,
+				projects,
 				activeProjects: activeProjects.size,
 				activeLots: activeLots.size,
 				activeBatches: activeBatchRows.length,
@@ -1524,7 +1498,7 @@ export function domainReadRouter(
 			const reportNow = new Date();
 			const throughputStart = new Date(Date.UTC(reportNow.getUTCFullYear(), reportNow.getUTCMonth(), reportNow.getUTCDate()));
 			throughputStart.setUTCDate(throughputStart.getUTCDate() - 6);
-			const [plans, batches, events, violations, qualityDecisions, transactions, stages, activityRows, throughputRows, inventoryRows, violationRows, closedBatchRows] = await Promise.all([
+			const [projects, batches, events, violations, qualityDecisions, transactions, stages, activityRows, throughputRows, inventoryRows, violationRows, closedBatchRows] = await Promise.all([
 				database.project.count(),
 				database.batch.count(),
 				database.stageEvent.count({ where: { status: "ACCEPTED" } }),
@@ -1568,20 +1542,20 @@ export function domainReadRouter(
 				const key = reportDateKey(event.occurredAt);
 				actualByDate.set(key, (actualByDate.get(key) ?? 0) + quantity);
 			}
-			// Provisional expected pace: released-plan required qty / 7-day window.
+			// Provisional expected pace: released-project required qty / 7-day window.
 			// Not a formal schedule resource — comparison aid until a schedule API exists.
 			let dailyExpected: number | null = null;
 			try {
-				const releasedPlans = await database.project.findMany({
+				const releasedProjects = await database.project.findMany({
 					where: { status: "RELEASED" },
 					select: { requiredProductionQuantity: true },
 				});
-				const planPaceTotal = releasedPlans.reduce(
-					(sum: number, plan: { requiredProductionQuantity: number }) =>
-						sum + (Number(plan.requiredProductionQuantity) || 0),
+				const projectPaceTotal = releasedProjects.reduce(
+					(sum: number, project: { requiredProductionQuantity: number }) =>
+						sum + (Number(project.requiredProductionQuantity) || 0),
 					0,
 				);
-				if (planPaceTotal > 0) dailyExpected = Math.max(1, Math.round(planPaceTotal / 7));
+				if (projectPaceTotal > 0) dailyExpected = Math.max(1, Math.round(projectPaceTotal / 7));
 			} catch {
 				dailyExpected = null;
 			}
@@ -1642,7 +1616,7 @@ export function domainReadRouter(
 					recordedBy: transaction.recordedBySubject?.displayNameSnapshot ?? transaction.recordedBy,
 				};
 			});
-			res.setHeader("Cache-Control", "no-store").json({ generatedAt: new Date().toISOString(), production: { plans, batches, acceptedStageEvents: events }, exceptions: { routingViolations: violations }, quality: { decisions: qualityDecisions }, traceability: { inventoryTransactions: transactions }, dailyThroughput, activity, closedLots, routingViolations, inventoryTransactions });
+			res.setHeader("Cache-Control", "no-store").json({ generatedAt: new Date().toISOString(), production: { projects, batches, acceptedStageEvents: events }, exceptions: { routingViolations: violations }, quality: { decisions: qualityDecisions }, traceability: { inventoryTransactions: transactions }, dailyThroughput, activity, closedLots, routingViolations, inventoryTransactions });
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS line report data is unavailable.");
 		}

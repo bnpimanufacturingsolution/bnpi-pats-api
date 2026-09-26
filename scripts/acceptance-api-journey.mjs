@@ -124,78 +124,78 @@ async function main() {
 		rec("catalog-product-detail", detail.status === 200 ? "PASS" : "FAIL", `etag=${detail.etag ?? "none"}`);
 	}
 
-	const plans = await api("GET", "/production-plans", { headers: plannerAuth });
-	const planRows = dataOf(plans.body);
+	const projects = await api("GET", "/projects", { headers: plannerAuth });
+	const projectRows = dataOf(projects.body);
 	const seedPlan =
-		planRows.find((p) => String(p.planCode ?? "") === "PLAN-B251-JUL") ??
-		planRows.find((p) => String(p.planCode ?? "").startsWith("PLAN-") && p.status === "RELEASED") ??
-		planRows[0];
-	const planId = seedPlan?.planId ?? seedPlan?.id;
-	rec("production-plans", plans.status === 200 ? "PASS" : "FAIL", `count=${planRows.length} first=${planId} status=${seedPlan?.status}`);
+		projectRows.find((p) => String(p.projectCode ?? "") === "PLAN-B251-JUL") ??
+		projectRows.find((p) => String(p.projectCode ?? "").startsWith("PLAN-") && p.status === "RELEASED") ??
+		projectRows[0];
+	const projectId = seedPlan?.projectId ?? seedPlan?.id;
+	rec("projects", projects.status === 200 ? "PASS" : "FAIL", `count=${projectRows.length} first=${projectId} status=${seedPlan?.status}`);
 
-	let planEtag = null;
-	let planDetail = null;
-	if (planId) {
-		const plan = await api("GET", `/production-plans/${planId}`, { headers: plannerAuth });
-		planDetail = plan.body;
-		planEtag = plan.etag;
-		const etagOk = typeof planEtag === "string" && /^"\d+"$/.test(planEtag);
-		rec("production-plan-detail", plan.status === 200 && etagOk ? "PASS" : "FAIL", `etag=${planEtag} rowVersion=${plan.body?.rowVersion}`);
-		samples.planDetail = { etag: planEtag, status: plan.body?.status, lots: plan.body?.lots?.length };
+	let projectEtag = null;
+	let projectDetail = null;
+	if (projectId) {
+		const project = await api("GET", `/projects/${projectId}`, { headers: plannerAuth });
+		projectDetail = project.body;
+		projectEtag = project.etag;
+		const etagOk = typeof projectEtag === "string" && /^"\d+"$/.test(projectEtag);
+		rec("project-detail", project.status === 200 && etagOk ? "PASS" : "FAIL", `etag=${projectEtag} rowVersion=${project.body?.rowVersion}`);
+		samples.projectDetail = { etag: projectEtag, status: project.body?.status, lots: project.body?.lots?.length };
 	}
 
-	// Create a draft plan for mutation + concurrency checks (unique keys each run)
+	// Create a draft project for mutation + concurrency checks (unique keys each run)
 	const runSuffix = Date.now().toString(36);
-	const draftPlanCode = `ACC-PLAN-${runSuffix}`;
+	const draftProjectCode = `ACC-PRJ-${runSuffix}`;
 	const draftIdemKey = `journey-draft-plan-${runSuffix}`;
 	const draftBody = {
-		planCode: draftPlanCode,
-		name: "Acceptance Draft Plan",
+		projectCode: draftProjectCode,
+		name: "Acceptance Draft Project",
 		requiredProductionQuantity: 120,
 		productId: productId ?? null,
 	};
-	const draftCreate = await api("POST", "/production-plans", {
+	const draftCreate = await api("POST", "/projects", {
 		headers: { ...plannerAuth, "Idempotency-Key": draftIdemKey },
 		body: draftBody,
 	});
-	const draftReplay = await api("POST", "/production-plans", {
+	const draftReplay = await api("POST", "/projects", {
 		headers: { ...plannerAuth, "Idempotency-Key": draftIdemKey },
 		body: draftBody,
 	});
-	const draftId = draftCreate.body?.planId ?? draftCreate.location?.split("/").pop();
+	const draftId = draftCreate.body?.projectId ?? draftCreate.location?.split("/").pop();
 	const createOk = [200, 201].includes(draftCreate.status) && draftReplay.status === draftCreate.status;
-	rec("plan-create-idempotent", createOk ? "PASS" : "FAIL", `first=${draftCreate.status} replay=${draftReplay.status} id=${draftId} ${draftCreate.raw.slice(0, 120)}`);
+	rec("project-create-idempotent", createOk ? "PASS" : "FAIL", `first=${draftCreate.status} replay=${draftReplay.status} id=${draftId} ${draftCreate.raw.slice(0, 120)}`);
 
 	if (draftId) {
-		const draftGet = await api("GET", `/production-plans/${draftId}`, { headers: plannerAuth });
+		const draftGet = await api("GET", `/projects/${draftId}`, { headers: plannerAuth });
 		const draftEtag = draftGet.etag;
-		const stale = await api("PATCH", `/production-plans/${draftId}`, {
+		const stale = await api("PATCH", `/projects/${draftId}`, {
 			headers: { ...plannerAuth, "Idempotency-Key": crypto.randomUUID(), "If-Match": '"0"' },
 			body: { name: "stale" },
 		});
 		rec("stale-if-match", stale.status === 412 || stale.status === 409 ? "PASS" : "FAIL", String(stale.status));
 
-		const goodName = "Acceptance Draft Plan Edited";
-		const patch = await api("PATCH", `/production-plans/${draftId}`, {
+		const goodName = "Acceptance Draft Project Edited";
+		const patch = await api("PATCH", `/projects/${draftId}`, {
 			headers: { ...plannerAuth, "Idempotency-Key": crypto.randomUUID(), "If-Match": draftEtag ?? `"${draftGet.body?.rowVersion}"` },
 			body: { name: goodName },
 		});
 		if (patch.status === 200) {
-			const reload = await api("GET", `/production-plans/${draftId}`, { headers: plannerAuth });
-			rec("plan-edit-persist", reload.body?.name === goodName ? "PASS" : "FAIL", `name=${reload.body?.name} etag=${reload.etag}`);
+			const reload = await api("GET", `/projects/${draftId}`, { headers: plannerAuth });
+			rec("project-edit-persist", reload.body?.name === goodName ? "PASS" : "FAIL", `name=${reload.body?.name} etag=${reload.etag}`);
 		} else {
-			rec("plan-edit-persist", "FAIL", `${patch.status} ${patch.raw.slice(0, 200)}`);
+			rec("project-edit-persist", "FAIL", `${patch.status} ${patch.raw.slice(0, 200)}`);
 		}
 	} else {
 		rec("stale-if-match", "BLOCKED", "no draft");
-		rec("plan-edit-persist", "BLOCKED", "no draft");
+		rec("project-edit-persist", "BLOCKED", "no draft");
 	}
 
 	// Forbidden: quality cannot create plans
 	if (qualityAuth) {
-		const forb = await api("POST", "/production-plans", {
+		const forb = await api("POST", "/projects", {
 			headers: { ...qualityAuth, "Idempotency-Key": crypto.randomUUID() },
-			body: { planCode: "X", name: "Nope", requiredProductionQuantity: 1 },
+			body: { projectCode: "X", name: "Nope", requiredProductionQuantity: 1 },
 		});
 		rec("forbidden-planning-write", forb.status === 403 ? "PASS" : "FAIL", String(forb.status));
 	}
@@ -206,7 +206,7 @@ async function main() {
 	// Operator execution surface
 	if (!operatorAuth) {
 		for (const name of [
-			"stations",
+			"sections",
 			"stages",
 			"batches",
 			"batch-positions",
@@ -217,24 +217,24 @@ async function main() {
 			"reports-line",
 			"workflow-groups",
 			"station-steps",
-			"station-history",
+			"section-history",
 			"stage-event-idempotent",
 			"inventory-idempotent",
 		]) {
 			rec(name, "BLOCKED", "no operator token");
 		}
 	} else {
-		const stations = await api("GET", "/stations", { headers: operatorAuth });
-		const stationRows = dataOf(stations.body);
+		const sections = await api("GET", "/sections", { headers: operatorAuth });
+		const stationRows = dataOf(sections.body);
 		// Prefer the seeded Injection station
 		const station =
 			stationRows.find(
 				(s) =>
-					String(s.stationCode ?? "").includes("ST-INJ") ||
+					String(s.sectionCode ?? s.stationCode ?? "").includes("ST-INJ") ||
 					String(s.name ?? "").includes("Injection"),
 			) ?? stationRows[0];
-		const stationId = station?.stationId ?? station?.id;
-		rec("stations", stations.status === 200 ? "PASS" : "FAIL", `count=${stationRows.length} first=${stationId}`);
+		const stationId = station?.id ?? station?.stationId;
+		rec("sections", sections.status === 200 ? "PASS" : "FAIL", `count=${stationRows.length} first=${stationId}`);
 
 		const stages = await api("GET", "/stages", { headers: operatorAuth });
 		rec("stages", stages.status === 200 ? "PASS" : "FAIL", `count=${dataOf(stages.body).length}`);
@@ -284,8 +284,8 @@ async function main() {
 		rec("station-steps", steps.status === 200 ? "PASS" : "FAIL", `count=${stepRows.length}`);
 
 		if (stationId) {
-			const hist = await api("GET", `/stations/${stationId}/history`, { headers: operatorAuth });
-			rec("station-history", hist.status === 200 ? "PASS" : "FAIL", hist.status === 200 ? "ok" : `${hist.status} ${hist.raw.slice(0, 160)}`);
+			const hist = await api("GET", `/sections/${stationId}/history`, { headers: operatorAuth });
+			rec("section-history", hist.status === 200 ? "PASS" : "FAIL", hist.status === 200 ? "ok" : `${hist.status} ${hist.raw.slice(0, 160)}`);
 			samples.stationHistory = hist.body;
 		} else {
 			rec("station-history", "BLOCKED", "no station");
@@ -316,7 +316,7 @@ async function main() {
 			rec("stage-event-idempotent", "BLOCKED", `batch=${eventBatchId} stage=${eventStageId}`);
 		}
 
-		// Inventory issuance needs a plan-scoped part for the same batch (prefer existing inv, else batch/plan parts).
+		// Inventory issuance needs a project-scoped part for the same batch (prefer existing inv, else batch/plan parts).
 		const invRows = dataOf(inv.body);
 		const existingInv =
 			invRows.find((row) => row.batchId === eventBatchId) ??
@@ -328,8 +328,8 @@ async function main() {
 		const partId =
 			invForSeedBatch?.partId ??
 			batchRow?.parts?.[0]?.partId ??
-			planDetail?.lots?.[0]?.partAllocations?.[0]?.partId ??
-			planDetail?.parts?.[0]?.id ??
+			projectDetail?.lots?.[0]?.partAllocations?.[0]?.partId ??
+			projectDetail?.parts?.[0]?.id ??
 			existingInv?.partId ??
 			null;
 		const toStageId =
