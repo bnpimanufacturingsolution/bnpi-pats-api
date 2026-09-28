@@ -7,7 +7,7 @@
 ## What changed
 
 **API (`bnpi-pats-api`)**
-- `prisma/pats/schema.prisma`: `Model.skuCode` column removed.
+- `prisma/pats/catalog.prisma`: `Model.skuCode` column removed.
 - `prisma/pats/migrations/20260923000000_drop_model_skucode/migration.sql`: single `DROP COLUMN`; no backfill (nullable, never seeded).
 - `app/pats/catalog-foundation.ts`: `skuCode`/`evidenceStatus` removed from all six zod schemas (`.strict()` → sent values get `422`); `deriveModelSkuCode(productCode, modelNumber)` exported; `toModelResource` derives it (product code threaded from parent lookup); `rowVersion`/`ETag`/`If-Match` machinery unchanged.
 - `app/pats/catalog.ts`: collection drops `evidenceStatus` (select + output); detail derives `skuCode`, drops `evidenceStatus`, canonical envelope is now `{ data }` (transitional keeps `{ success, data }`).

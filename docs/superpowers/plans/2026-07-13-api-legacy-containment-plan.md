@@ -68,7 +68,7 @@ and imports from other modules. Mark whether it is platform, legacy, or unclear.
 
 Run rg-based discovery plus pnpm run type-check, pnpm test, pnpm run lint, pnpm
 run build, and `$env:PATS_DATABASE_URL='postgresql://pats:pats@localhost:5432/pats';
-npx prisma validate --schema prisma/pats/schema.prisma`. Record pass/fail and
+npx prisma validate --schema prisma/pats`. Record pass/fail and
 warnings separately.
 
 Write the result to docs/superpowers/reports/2026-07-13-api-surface-inventory.md.
@@ -264,7 +264,7 @@ pnpm run lint
 pnpm run type-check
 pnpm test
 pnpm run build
-$env:PATS_DATABASE_URL='postgresql://pats:pats@localhost:5432/pats'; npx prisma validate --schema prisma/pats/schema.prisma
+$env:PATS_DATABASE_URL='postgresql://pats:pats@localhost:5432/pats'; npx prisma validate --schema prisma/pats
 ```
 
 Expected: record pass/fail, test totals, pending totals, engine warnings, and runtime warning classes separately.
@@ -637,7 +637,7 @@ pnpm run lint
 pnpm run type-check
 pnpm test
 pnpm run build
-$env:PATS_DATABASE_URL='postgresql://pats:pats@localhost:5432/pats'; npx prisma validate --schema prisma/pats/schema.prisma
+$env:PATS_DATABASE_URL='postgresql://pats:pats@localhost:5432/pats'; npx prisma validate --schema prisma/pats
 ```
 
 Expected: lint, typecheck, tests, build, and standalone PATS schema validation pass. Report test totals and pending tests exactly.

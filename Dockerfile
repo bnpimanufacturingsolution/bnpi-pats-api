@@ -46,7 +46,7 @@ COPY index.ts ./
 
 # Generate Prisma client (schema folder includes all .prisma models)
 RUN npx prisma generate --schema prisma/schema
-RUN npx prisma generate --schema prisma/pats/schema.prisma
+RUN npx prisma generate --schema prisma/pats
 RUN npm run export-docs
 
 # Build TypeScript with webpack

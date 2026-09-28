@@ -287,10 +287,12 @@ Purpose: planned production grouping retained by execution.
 
 Core attributes: `id`, `planning_aggregate_id`, released route/version reference, immutable lot code,
 status, planned/active/completed/cancelled times, actor/correlation fields, audit/concurrency
-columns, and bounded metadata.
+columns, and bounded metadata. The `planning_aggregate_id` foreign key is unique, enforcing one Lot
+identity per Project/ProductionPlan. The zero-Lot state is allowed only before the accepted Lot-creation
+trigger.
 
-`lot_part_allocations` below carries cardinality and quantity. The working recommendation is
-controlled multi-Part grouping; a required singular `part_id` remains absent while D-010 is open.
+`lot_part_allocations` below carries the controlled multi-Part grouping and quantity. A required
+singular `part_id` is not part of the target model.
 
 ### `lot_part_allocations`
 
@@ -559,7 +561,8 @@ ownership or arbitrary cross-context references.
 | Route version | Unique `(planning_aggregate_id, version_number)` | Only one accepted published version per aggregate at a release boundary | D-011 working; publication transition open |
 | Route order | Positive `step_order`; candidate unique `(parts_list_version_id, plan_part_id, step_order)` and, if route-wide, `(parts_list_version_id, step_order)` | Route completeness and station eligibility are checked before publication | Route semantics open |
 | Route references | Route step, batch, lot, and event retain the cited parts-list version | Event route/version must match the released lot and batch in one transaction | Required invariant; exact FK shape follows operational-scope strategy |
-| Lot allocation | No singular `part_id` while cardinality is open; candidate uniqueness on `(lot_id, plan_part_id)` | Release requires accepted allocation cardinality and quantity policy | D-010 `NEEDS_CONFIRMATION` |
+| Lot ownership | Unique `planning_aggregate_id` on `lots`; foreign key to the planning aggregate | At most one Lot per Project/ProductionPlan; zero-Lot state only before the accepted creation trigger | D-037 `CONFIRMED` |
+| Lot allocation | No singular `part_id`; candidate uniqueness on `(lot_id, plan_part_id)` | Release requires the controlled multi-Part allocation set and quantity policy | D-010 target multi-Part boundary; D-021 quantity policy remains open |
 | Batch lines | Candidate unique `(batch_id, plan_part_id)` or lot-allocation lineage | Batch composition is frozen at the accepted lifecycle transition | D-010/D-021 open |
 | Temporal values | Checks such as `resolved_at >= detected_at` and end after start | State transition determines which timestamps must be present | Final state literals open |
 | Published snapshots | Published route/instruction/snapshot rows are immutable after publication | Corrections create a new version or append evidence | Trigger/privilege or repository enforcement required |
@@ -1297,3 +1300,14 @@ implemented:
 The remaining normalized catalog, planning, execution, inventory, source-revision, audit, outbox,
 and subject-preference relations are not claimed as implemented by this slice. Controlled source
 correction/effective-revision evidence for D-033/D-035 remains a release gate.
+
+## App-backed Project scope amendment (2026-09-25)
+
+The active app-backed Project flow retains Project/model quantity, Part, Parts List/RoutingStep,
+Lot, Batch, and execution lineage. By explicit user amendment D-038, current PATS persistence no
+longer includes `PlanDemandAllocation`, the placeholder `Pmr` model, or `MaterialRequirement`; it
+also no longer persists demand dimensions on `ProjectModelAllocation` or a MaterialRequirement FK
+on `InventoryTransaction`. This dated amendment supersedes those specific Gate 0 target structures
+for the current implementation scope without rewriting their historical review records. The
+MaterialRequirement/Demand/PMRS tables are removed through a new destructive migration with
+coordinated backup and row-count preflight.

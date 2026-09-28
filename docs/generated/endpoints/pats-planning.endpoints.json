@@ -1,9 +1,9 @@
 [
   {
-    "id": "productionPlanCollectionGet",
+    "id": "projectCollectionGet",
     "method": "GET",
-    "url": "/production-plans",
-    "summary": "List production-plan summaries",
+    "url": "/projects",
+    "summary": "List project summaries",
     "tags": [
       "PATS Planning"
     ],
@@ -32,10 +32,10 @@
     }
   },
   {
-    "id": "productionPlanCreate",
+    "id": "projectCreate",
     "method": "POST",
-    "url": "/production-plans",
-    "summary": "Create a draft production plan",
+    "url": "/projects",
+    "summary": "Create a draft project",
     "tags": [
       "PATS Planning"
     ],
@@ -67,10 +67,11 @@
     }
   },
   {
-    "id": "productionPlanGet",
+    "id": "projectGet",
     "method": "GET",
-    "url": "/production-plans/{planId}",
-    "summary": "Read a production plan and its planning snapshot",
+    "url": "/projects/{projectId}",
+    "summary": "Read a project and its planning snapshot",
+    "description": "Returns the active Project snapshot, model quantities, Parts, Parts List versions, Lot, and execution lineage. Demand allocation, PMRS placeholder, and MaterialRequirement properties were removed by the user-approved 2026-09-25 v1 scope amendment.",
     "tags": [
       "PATS Planning"
     ],
@@ -99,10 +100,10 @@
     }
   },
   {
-    "id": "productionPlanPatch",
+    "id": "projectPatch",
     "method": "PATCH",
-    "url": "/production-plans/{planId}",
-    "summary": "Update a draft production plan",
+    "url": "/projects/{projectId}",
+    "summary": "Update a draft project",
     "tags": [
       "PATS Planning"
     ],
@@ -134,10 +135,11 @@
     }
   },
   {
-    "id": "productionPlanModelAllocationUpsert",
+    "id": "projectModelAllocationUpsert",
     "method": "POST",
-    "url": "/production-plans/{planId}/model-allocations",
+    "url": "/projects/{projectId}/model-allocations",
     "summary": "Upsert a model allocation and materialize plan-part evidence",
+    "description": "Accepts model identity, planned quantity/UOM/usage basis, and source revision. Demand dimensions marketRegion and demandPurpose are retired and rejected.",
     "tags": [
       "PATS Planning"
     ],
@@ -172,9 +174,9 @@
     }
   },
   {
-    "id": "productionPlanPartsListVersionCreate",
+    "id": "projectPartsListVersionCreate",
     "method": "POST",
-    "url": "/production-plans/{planId}/parts-list-versions",
+    "url": "/projects/{projectId}/parts-list-versions",
     "summary": "Create an immutable draft parts-list route version",
     "tags": [
       "PATS Planning"
@@ -210,10 +212,10 @@
     }
   },
   {
-    "id": "productionPlanRelease",
+    "id": "projectRelease",
     "method": "POST",
-    "url": "/production-plans/{planId}/release",
-    "summary": "Release a draft or ready production plan",
+    "url": "/projects/{projectId}/release",
+    "summary": "Release a draft or ready project (mints missing tray batches, then activates PLANNED→ACTIVE)",
     "tags": [
       "PATS Planning"
     ],
@@ -242,10 +244,11 @@
     }
   },
   {
-    "id": "productionPlanLotCreate",
+    "id": "projectLotCreate",
     "method": "POST",
-    "url": "/production-plans/{planId}/lots",
-    "summary": "Create a planned lot and its part allocation",
+    "url": "/projects/{projectId}/lots",
+    "summary": "Create the single planned lot and its part allocation",
+    "description": "A project can have at most one lot. A second distinct lot creation returns a 409 cardinality conflict; idempotent retries replay the original response.",
     "tags": [
       "PATS Planning"
     ],

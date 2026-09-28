@@ -33,7 +33,7 @@
 | assemblyStageId | "Assembly" | 3 |
 | warehouseStageId | "Warehouse" | 4 |
 
-### API model (`prisma/pats/schema.prisma:362-377`)
+### API model (`prisma/pats/catalog.prisma:208-224`)
 
 `Stage`: `id`, `workflowGroupId`, `name`, `nameLocalized`, `displayOrder`, `isSystemSeed`. No `supportsBaseRouteStep`.
 
@@ -128,7 +128,7 @@
 | C12 | App Capsulation/Assortment eligible under STG-ASSEMBLY + STG-WAREHOUSE; API SubStageEligibility has same mapping | ✅ MATCH | None |
 | C13 | App displayOrder for Warehouse sub-stages: Sealing=1, Main Packing=5, Palletizing=6. API: Main Packing=1 | MEDIUM | Fix displayOrder: Sealing=1, Main Packing=5, Palletizing=6 |
 
-### Note on API SubStage model (`prisma/pats/schema.prisma:379-396`)
+### Note on API SubStage model (`prisma/pats/catalog.prisma:226-243`)
 
 API SubStage has: `id`, `name`, `nameLocalized`, `displayOrder`, `isSystemSeed`, `isConfigurable`, `isBuffer`, `hasQualityCheckpoint`, `isMandatoryCheckpoint`, `alwaysAlertOnRoutingViolation`, `subProcessGroup`, `isDisabled`. Eligibility via `SubStageEligibility` join table (no direct FK — multi-stage eligible).
 

@@ -3,12 +3,16 @@ import fs from "node:fs";
 import path from "node:path";
 
 const repositoryRoot = path.resolve(__dirname, "..");
-const schemaPath = path.join(repositoryRoot, "prisma", "pats", "schema.prisma");
+const schemaDirectory = path.join(repositoryRoot, "prisma", "pats");
 const packagePath = path.join(repositoryRoot, "package.json");
 const migrationsPath = path.join(repositoryRoot, "prisma", "pats", "migrations");
 
 function readSchema(): string {
-  return fs.readFileSync(schemaPath, "utf8");
+  return fs.readdirSync(schemaDirectory)
+    .filter((fileName) => fileName.endsWith(".prisma"))
+    .sort()
+    .map((fileName) => fs.readFileSync(path.join(schemaDirectory, fileName), "utf8"))
+    .join("\n");
 }
 
 function readPackage(): { scripts?: Record<string, string> } {
@@ -40,7 +44,8 @@ describe("PATS Prisma boundary", () => {
       "model Lot {",
       "model Batch {",
       "model BatchPartLine {",
-	      "model Section {",
+      "model ProductionLine {",
+      "model Section {",
       "model StationStep {",
       "model SourceRun {",
       "model SourceArtifact {",

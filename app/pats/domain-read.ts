@@ -7,20 +7,10 @@ import { parseResolveCode, resolveQualityInspectionByCode } from "./quality-reso
 import { listAllowedQualityStageIds } from "./quality-stage-scope";
 import { hasCapability } from "../identity/policy";
 import type { SubjectAssignmentRecord } from "../identity/types";
-import { setDeprecationHeaders } from "../canonical/response-headers";
 
-// Station→Section rename (2026-09-16) transitional bridge: /sections is
-// CANONICAL, /stations is TRANSITIONAL (§7) with Deprecation/Sunset headers.
-const SECTION_LEGACY_SUNSET = new Date("2027-06-30T00:00:00Z");
-
-function isLegacyStationPath(req: Request): boolean {
-	const path = req.baseUrl + req.path;
-	return /(^|\/)stations(\/|$)/.test(path);
-}
-
-function applyLegacyStationHeaders(req: Request, res: Response): void {
-	if (isLegacyStationPath(req)) setDeprecationHeaders(res, SECTION_LEGACY_SUNSET);
-}
+// Station→Section rename (2026-09-16) completed: /sections is the sole canonical
+// path. The transitional /stations alias rows were removed 2026-09-25 under the
+// scoped §7 exception (no production deployment; zero active app callers).
 
 type DomainReadDatabase = Pick<
 	PatsPrismaClient,
@@ -49,10 +39,10 @@ type DomainReadDatabase = Pick<
 	| "qualityDecision"
 	| "qualityStageAssignment"
 	| "printJob"
-	| "planDemandAllocation"
 	| "lot"
 	| "part"
 	| "section"
+	| "productionLine"
 >;
 
 const PROBLEM_TYPE = {
@@ -150,6 +140,11 @@ function dashboardProgress(
 	}> = [],
 ) {
 	const blockedBatchIds = new Set(openViolationRows.map((violation) => violation.batchId));
+	// Only real floor stages count toward progress. Release-minted batches sit at
+	// the STG-PROJECTS pre-floor marker (no Stage row); counting them as active
+	// yields segment-less rows (or 100% "Not started") that crowd out projects
+	// with real stage progress in the top-5 widget slice.
+	const knownStageIds = new Set(stageRows.map((stage) => stage.id));
 	const projects = new Map<
 		string,
 		{
@@ -184,6 +179,7 @@ function dashboardProgress(
 		const quantity = Number(batch.positionProjection?.quantityMagnitude ?? batch.plannedQuantity);
 		const stageId = batch.positionProjection?.stageId;
 		if (!stageId || !Number.isFinite(quantity)) continue;
+		if (!knownStageIds.has(stageId)) continue;
 		const subStageId = (batch.positionProjection as { subStageId?: string | null })?.subStageId ?? null;
 
 		let slotKey = stageId;
@@ -290,11 +286,12 @@ function dashboardProgress(
 				segments,
 			};
 		})
-		.sort(
-			(left, right) =>
-				right.activeBatchCount - left.activeBatchCount ||
-				left.productName.localeCompare(right.productName),
-		);
+		.filter((row) => row.segments.length > 0)
+		.sort((left, right) => {
+			const leftProgress = left.segments.some((segment) => segment.kind !== "remaining") ? 1 : 0;
+			const rightProgress = right.segments.some((segment) => segment.kind !== "remaining") ? 1 : 0;
+			return rightProgress - leftProgress || right.activeBatchCount - left.activeBatchCount || left.productName.localeCompare(right.productName);
+		});
 }
 
 function reportDateKey(value: Date): string {
@@ -378,11 +375,11 @@ export function domainReadRouter(
 ): Router {
 	const router = Router();
 
-	router.get(["/projects", "/production-plans"], requireCapability("planning.read"), async (req, res) => {
+	router.get("/projects", requireCapability("planning.read"), async (req, res) => {
 		const page = pagination(req, res);
 		if (!page) return;
 		try {
-			const [totalItems, plans] = await Promise.all([
+			const [totalItems, projects] = await Promise.all([
 				database.project.count(),
 				database.project.findMany({
 					skip: (page.page - 1) * page.limit,
@@ -399,56 +396,41 @@ export function domainReadRouter(
 						createdAt: true,
 						releasedAt: true,
 						product: { select: { productName: true } },
-						lots: { select: { id: true } },
+						lot: { select: { id: true } },
 					},
 				}),
 			]);
-			const isProject = (req.baseUrl + req.path).includes("/projects");
-			const data = plans.map((plan) => {
-				const base = {
-					planId: plan.id,
-					planCode: plan.projectCode,
-					name: plan.name,
-					status: plan.status,
-					requiredProductionQuantity: plan.requiredProductionQuantity,
-					productId: plan.productId,
-					productName: plan.product?.productName ?? null,
-					lotCount: plan.lots.length,
-					rowVersion: plan.rowVersion,
-					createdAt: plan.createdAt.toISOString(),
-					releasedAt: date(plan.releasedAt),
-				};
-				if (isProject) {
-					return {
-						projectId: plan.id,
-						projectCode: plan.projectCode,
-						...base,
-					};
-				}
-				return base;
-			});
+		const data = projects.map((project) => ({
+			projectId: project.id,
+			projectCode: project.projectCode,
+			name: project.name,
+			status: project.status,
+			requiredProductionQuantity: project.requiredProductionQuantity,
+			productId: project.productId,
+			productName: project.product?.productName ?? null,
+			lotCount: project.lot ? 1 : 0,
+			rowVersion: project.rowVersion,
+			createdAt: project.createdAt.toISOString(),
+			releasedAt: date(project.releasedAt),
+		}));
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(data, page, totalItems));
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS project data is unavailable.");
 		}
 	});
 
-	router.get(["/projects/:projectId", "/production-plans/:planId"], requireCapability("planning.read"), async (req, res) => {
-		const targetId = req.params.projectId ?? req.params.planId;
+	router.get("/projects/:projectId", requireCapability("planning.read"), async (req, res) => {
+		const targetId = req.params.projectId;
 		try {
-			const plan = await database.project.findUnique({
+			const project = await database.project.findUnique({
 				where: { id: targetId },
 				include: {
 					product: { select: { id: true, productCode: true, productName: true } },
 					productSpecification: true,
 					modelAllocations: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { model: { select: { id: true, modelNumber: true, modelName: true } } } },
-					demandAllocations: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { model: { select: { id: true, modelNumber: true, modelName: true } } } },
-					materialRequirements: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
 					parts: { orderBy: [{ partCode: "asc" }, { id: "asc" }] },
 					partsLists: { orderBy: [{ version: "desc" }, { id: "asc" }], include: { steps: { orderBy: [{ stepOrder: "asc" }, { id: "asc" }], include: { part: { select: { partCode: true, partName: true } } } } } },
-					pmrs: true,
-					lots: {
-						orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+					lot: {
 						include: {
 							partAllocations: { include: { part: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
 							batches: { include: { parts: true, positionProjection: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
@@ -456,27 +438,25 @@ export function domainReadRouter(
 					},
 				},
 			});
-			if (!plan) {
+			if (!project) {
 				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested project was not found.");
 				return;
 			}
-			// Mutable plan resources expose the optimistic-concurrency token as a strong ETag.
-			// Clients must send this value (or body.rowVersion) as If-Match on plan commands.
-			res.setHeader("ETag", `"${plan.rowVersion}"`);
+			// Mutable project resources expose the optimistic-concurrency token as a strong ETag.
+			// Clients must send this value (or body.rowVersion) as If-Match on project commands.
+			res.setHeader("ETag", `"${project.rowVersion}"`);
 			res.setHeader("Cache-Control", "no-store").json({
-				projectId: plan.id,
-				planId: plan.id,
-				projectCode: plan.projectCode,
-				planCode: plan.projectCode,
-				name: plan.name,
-				status: plan.status,
-				requiredProductionQuantity: plan.requiredProductionQuantity,
-				rowVersion: plan.rowVersion,
-				createdAt: plan.createdAt.toISOString(),
-				releasedAt: date(plan.releasedAt),
-				product: plan.product,
-				productSpecification: plan.productSpecification,
-				modelAllocations: plan.modelAllocations.map((allocation) => ({
+				projectId: project.id,
+				projectCode: project.projectCode,
+				name: project.name,
+				status: project.status,
+				requiredProductionQuantity: project.requiredProductionQuantity,
+				rowVersion: project.rowVersion,
+				createdAt: project.createdAt.toISOString(),
+				releasedAt: date(project.releasedAt),
+				product: project.product,
+				productSpecification: project.productSpecification,
+				modelAllocations: project.modelAllocations.map((allocation) => ({
 					allocationId: allocation.id,
 					modelId: allocation.modelId,
 					model: allocation.model,
@@ -487,53 +467,33 @@ export function domainReadRouter(
 					lifecycleStatus: allocation.lifecycleStatus,
 					rowVersion: allocation.rowVersion,
 				})),
-				allocations: plan.demandAllocations.map((allocation) => ({
-					allocationId: allocation.id,
-					modelId: allocation.modelId,
-					model: allocation.model,
-					marketRegion: allocation.marketRegion,
-					demandPurpose: allocation.demandPurpose,
-					quantityMagnitude: decimal(allocation.quantityMagnitude),
-					quantityUom: allocation.quantityUom,
-					usageBasis: allocation.usageBasis,
-					lifecycleStatus: allocation.lifecycleStatus,
-				})),
-				parts: plan.parts,
-				partsListVersions: plan.partsLists.map((partsList) => ({
+				parts: project.parts,
+				partsListVersions: project.partsLists.map((partsList) => ({
 					partsListVersionId: partsList.id,
 					version: partsList.version,
 					status: partsList.status,
 					publishedAt: date(partsList.publishedAt),
 					routeSteps: partsList.steps.map(routeResource),
 				})),
-				materialRequirements: plan.materialRequirements.map((requirement) => ({
-					materialRequirementId: requirement.id,
-					partId: requirement.partId,
-					quantityMagnitude: decimal(requirement.quantityMagnitude),
-					quantityUom: requirement.quantityUom,
-					status: requirement.status,
-					externalReference: requirement.externalReference,
-				})),
-				pmrsReference: plan.pmrs,
-				lots: plan.lots.map((lot) => ({
-					lotId: lot.id,
-					lotCode: lot.lotCode,
-					lotName: lot.lotName,
-					partsListId: lot.partsListId,
-					partsListVersion: lot.partsListVersion,
-					status: lot.status,
-					requiredProductionQuantity: lot.requiredProductionQuantity,
-					labelPackSize: lot.labelPackSize,
-					quantityMagnitude: decimal(lot.quantityMagnitude),
-					quantityUom: lot.quantityUom,
-					partAllocations: lot.partAllocations.map((allocation) => ({
+				lots: project.lot ? [{
+					lotId: project.lot.id,
+					lotCode: project.lot.lotCode,
+					lotName: project.lot.lotName,
+					partsListId: project.lot.partsListId,
+					partsListVersion: project.lot.partsListVersion,
+					status: project.lot.status,
+					requiredProductionQuantity: project.lot.requiredProductionQuantity,
+					labelPackSize: project.lot.labelPackSize,
+					quantityMagnitude: decimal(project.lot.quantityMagnitude),
+					quantityUom: project.lot.quantityUom,
+					partAllocations: project.lot.partAllocations.map((allocation) => ({
 						lotPartAllocationId: allocation.id,
 						partId: allocation.partId,
 						partCode: allocation.part.partCode,
 						quantityMagnitude: decimal(allocation.quantityMagnitude),
 						quantityUom: allocation.quantityUom,
 					})),
-					batches: lot.batches.map((batch) => ({
+					batches: project.lot.batches.map((batch) => ({
 						batchId: batch.id,
 						batchCode: batch.batchCode,
 						barcodeValue: batch.barcodeValue,
@@ -542,10 +502,10 @@ export function domainReadRouter(
 						parts: batch.parts,
 						position: batch.positionProjection,
 					})),
-				})),
+				}] : [],
 			});
 		} catch {
-			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production plan data is unavailable.");
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS project data is unavailable.");
 		}
 	});
 
@@ -582,7 +542,7 @@ export function domainReadRouter(
 		}
 	});
 
-	router.get(["/sections", "/stations"], requireCapability("execution.read"), async (req, res) => {
+	router.get("/sections", requireCapability("execution.read"), async (req, res) => {
 		const page = pagination(req, res, ["search"]);
 		if (!page) return;
 		try {
@@ -598,7 +558,7 @@ export function domainReadRouter(
 						],
 				  }
 				: undefined;
-			const [totalItems, stations] = await Promise.all([
+			const [totalItems, sections] = await Promise.all([
 				searchText.length >= 3
 					? database.$queryRaw<{ count: number }[]>(Prisma.sql`
 						SELECT COUNT(*)::integer AS count FROM "Section" s
@@ -618,21 +578,85 @@ export function domainReadRouter(
 							orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
 							skip,
 							take: page.limit,
-							include: { boundSteps: true },
+							include: { boundSteps: true, productionLine: { select: { id: true, lineCode: true, name: true } } },
 					  }),
 			]);
-			applyLegacyStationHeaders(req, res);
-			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(stations.map((s) => ({ ...s, stationCode: s.sectionCode })), page, totalItems));
+		res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(sections.map((s) => ({ ...s, stationCode: s.sectionCode, productionLineId: (s as { productionLineId?: string | null }).productionLineId ?? null })), page, totalItems));
 		} catch (error) {
 			console.error("[domain-read] GET /sections failed:", error);
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS section configuration is unavailable.");
 		}
 	});
 
-	router.get(["/sections/:sectionId/history", "/stations/:stationId/history"], requireCapability("execution.read"), async (req, res) => {
+	/**
+	 * @openapi
+	 * /api/v1/production-lines:
+	 *   get:
+	 *     operationId: productionLineCollectionGet
+	 *     summary: List production-line umbrellas for the Section tree
+	 *     description: A ProductionLine owns Sections; multiple Sections may belong to one line. The collection carries no Station identity.
+	 *     tags: [PATS Floor]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: query
+	 *         name: search
+	 *         schema: { type: string }
+	 *       - in: query
+	 *         name: page
+	 *         schema: { type: integer, minimum: 1, default: 1 }
+	 *       - in: query
+	 *         name: limit
+	 *         schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+	 *     responses:
+	 *       200: { description: Paginated production-line summaries }
+	 *       400: { description: Malformed or incomplete collection query }
+	 *       401: { description: Authentication required }
+	 *       403: { description: operations.manage capability required }
+	 *       503: { description: Production-line data unavailable }
+	 */
+	router.get("/production-lines", requireCapability("execution.read"), async (req, res) => {
+		const page = pagination(req, res, ["search"]);
+		if (!page) return;
+		try {
+			const requestQuery = query(req);
+			const searchRaw = requestQuery.search;
+			const searchText = (Array.isArray(searchRaw) ? searchRaw[0] : searchRaw)?.toString().trim() ?? "";
+			const skip = (page.page - 1) * page.limit;
+			const whereClause = searchText
+				? {
+						OR: [
+							{ name: { contains: searchText, mode: "insensitive" as const } },
+							{ lineCode: { contains: searchText, mode: "insensitive" as const } },
+						],
+				  }
+				: undefined;
+			const [totalItems, lines] = await Promise.all([
+				database.productionLine.count({ where: whereClause }),
+				database.productionLine.findMany({
+					where: whereClause,
+					orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+					skip,
+					take: page.limit,
+					select: { id: true, lineCode: true, name: true, displayOrder: true, isEnabled: true },
+				}),
+			]);
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(lines.map((line) => ({
+				productionLineId: line.id,
+				lineCode: line.lineCode,
+				name: line.name,
+				displayOrder: line.displayOrder,
+				isEnabled: line.isEnabled,
+			})), page, totalItems));
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production-line data is unavailable.");
+		}
+	});
+
+	router.get("/sections/:sectionId/history", requireCapability("execution.read"), async (req, res) => {
 		try {
 			const station = await database.section.findUnique({
-				where: { id: req.params.sectionId ?? req.params.stationId },
+				where: { id: req.params.sectionId },
 				select: {
 					id: true,
 					sectionCode: true,
@@ -676,7 +700,6 @@ export function domainReadRouter(
 			const partsById = new Map(parts.map((part) => [part.id, part]));
 
 			res.setHeader("Cache-Control", "no-store");
-			applyLegacyStationHeaders(req, res);
 			res.json({
 				station: { id: station.id, stationCode: station.sectionCode, name: station.name, stageId: station.stageId },
 				// Canonical alias for the renamed resource; `station` is the TRANSITIONAL shape (§7).
@@ -726,7 +749,7 @@ export function domainReadRouter(
 	 * - wipProgress: same positions (compat)
 	 * - staff / expectedOutput / targetQuantity: null until product owns sources
 	 */
-	router.get(["/sections/:sectionId/support", "/stations/:stationId/support"], requireCapability("execution.read"), async (req, res) => {
+	router.get("/sections/:sectionId/support", requireCapability("execution.read"), async (req, res) => {
 		try {
 			const requestQuery = query(req);
 			const allowedKeys = new Set(["date"]);
@@ -741,7 +764,7 @@ export function domainReadRouter(
 			}
 
 			const station = await database.section.findUnique({
-				where: { id: req.params.sectionId ?? req.params.stationId },
+				where: { id: req.params.sectionId },
 				select: {
 					id: true,
 					sectionCode: true,
@@ -898,15 +921,14 @@ export function domainReadRouter(
 			for (const job of printedHere) {
 				const hop = wipBatches.find((row) => row.batchId === job.batchId);
 				if (!hop) continue;
-				const plan = lotPlanMap.get(hop.lotId);
-				if (!plan) continue;
-				plan.completedBatchCount += 1;
-				plan.completedQuantity += Number(job.quantity) || hop.quantity || 0;
+				const lotPlan = lotPlanMap.get(hop.lotId);
+				if (!lotPlan) continue;
+				lotPlan.completedBatchCount += 1;
+				lotPlan.completedQuantity += Number(job.quantity) || hop.quantity || 0;
 			}
 			const lotPlans = [...lotPlanMap.values()];
 
 			res.setHeader("Cache-Control", "no-store");
-			applyLegacyStationHeaders(req, res);
 			res.json({
 				stationId: station.id,
 				stationCode: station.sectionCode,
@@ -1004,7 +1026,7 @@ export function domainReadRouter(
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(processes.map((p) => ({
 				id: p.id,
 				subStageId: p.subStageId,
-				subStageName: "subStage" in p ? p.subStage.name : p.subStageName,
+				subStageName: "subStage" in p ? (p.subStage?.name ?? null) : p.subStageName,
 				name: p.name,
 				displayOrder: p.displayOrder,
 				isEnabled: p.isEnabled,
@@ -1128,6 +1150,7 @@ export function domainReadRouter(
 				displayOrder: line.displayOrder,
 				isEnabled: line.isEnabled,
 				rowVersion: line.rowVersion,
+				stationScreen: line.isEnabled && Boolean(line.activeLeader ?? line.assignedLeader),
 			})), page, totalItems));
 		} catch (error) {
 			console.error("[domain-read] GET /lines failed:", error);
@@ -1174,8 +1197,8 @@ export function domainReadRouter(
 			const stuckThreshold = new Date(Date.now() - 8 * 60 * 60 * 1000);
 			const productionDate = new Date().toISOString().slice(0, 10);
 			const [openViolations, stuckWip, todaysSheets] = await Promise.all([
-				database.routingViolation.count({ where: { status: "OPEN", attemptedSubStageId: subStageId } }),
-				database.batchPositionProjection.count({ where: { subStageId, updatedAt: { lt: stuckThreshold } } }),
+				subStageId ? database.routingViolation.count({ where: { status: "OPEN", attemptedSubStageId: subStageId } }) : Promise.resolve(0),
+				subStageId ? database.batchPositionProjection.count({ where: { subStageId, updatedAt: { lt: stuckThreshold } } }) : Promise.resolve(0),
 				database.monitoringDailySheet.count({ where: { productionDate, workProcessId: line.workProcess.id } }),
 			]);
 			res.setHeader("Cache-Control", "no-store").json({
@@ -1525,7 +1548,7 @@ export function domainReadRouter(
 
 	router.get("/dashboard-summaries", requireCapability("dashboard.read"), async (req, res) => {
 		try {
-			const [plans, activeBatchRows, stageRows, openViolationRows, qualityHolds, inventoryTransactions, stationRows] = await Promise.all([
+			const [projects, activeBatchRows, stageRows, openViolationRows, qualityHolds, inventoryTransactions, stationRows] = await Promise.all([
 				database.project.count(),
 				database.batch.findMany({
 					where: { status: "ACTIVE" },
@@ -1547,8 +1570,12 @@ export function domainReadRouter(
 				database.routingViolation.findMany({ where: { status: "OPEN" }, select: { batchId: true, attemptedStageId: true } }),
 				database.qualityDecision.count({ where: { decision: "HOLD" } }),
 				database.inventoryTransaction.count(),
-				typeof (database as { station?: { findMany?: unknown } }).station?.findMany === "function"
-					? (database as { station: { findMany: (args: unknown) => Promise<unknown[]> } }).station.findMany({
+				// NOTE: the Station model was renamed to Section, so this legacy
+				// `station` probe never resolves and always yields []. Kept as-is to
+				// preserve existing dashboard behavior; the cast goes through unknown
+				// because `station` is no longer a key of DomainReadDatabase.
+				typeof (database as unknown as { station?: { findMany?: unknown } }).station?.findMany === "function"
+					? (database as unknown as { station: { findMany: (args: unknown) => Promise<unknown[]> } }).station.findMany({
 							where: { isEnabled: true, NOT: { stageId: "STG-WAREHOUSE" } },
 							orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
 							include: { boundSteps: true },
@@ -1559,7 +1586,7 @@ export function domainReadRouter(
 			const activeProjects = new Set(activeBatchRows.map((row) => row.lot.projectId));
 			res.setHeader("Cache-Control", "no-store").json({
 				generatedAt: new Date().toISOString(),
-				plans,
+				projects,
 				activeProjects: activeProjects.size,
 				activeLots: activeLots.size,
 				activeBatches: activeBatchRows.length,
@@ -1589,7 +1616,7 @@ export function domainReadRouter(
 			const reportNow = new Date();
 			const throughputStart = new Date(Date.UTC(reportNow.getUTCFullYear(), reportNow.getUTCMonth(), reportNow.getUTCDate()));
 			throughputStart.setUTCDate(throughputStart.getUTCDate() - 6);
-			const [plans, batches, events, violations, qualityDecisions, transactions, stages, activityRows, throughputRows, inventoryRows, violationRows, closedBatchRows] = await Promise.all([
+			const [projects, batches, events, violations, qualityDecisions, transactions, stages, activityRows, throughputRows, inventoryRows, violationRows, closedBatchRows] = await Promise.all([
 				database.project.count(),
 				database.batch.count(),
 				database.stageEvent.count({ where: { status: "ACCEPTED" } }),
@@ -1633,20 +1660,20 @@ export function domainReadRouter(
 				const key = reportDateKey(event.occurredAt);
 				actualByDate.set(key, (actualByDate.get(key) ?? 0) + quantity);
 			}
-			// Provisional expected pace: released-plan required qty / 7-day window.
+			// Provisional expected pace: released-project required qty / 7-day window.
 			// Not a formal schedule resource — comparison aid until a schedule API exists.
 			let dailyExpected: number | null = null;
 			try {
-				const releasedPlans = await database.project.findMany({
+				const releasedProjects = await database.project.findMany({
 					where: { status: "RELEASED" },
 					select: { requiredProductionQuantity: true },
 				});
-				const planPaceTotal = releasedPlans.reduce(
-					(sum: number, plan: { requiredProductionQuantity: number }) =>
-						sum + (Number(plan.requiredProductionQuantity) || 0),
+				const projectPaceTotal = releasedProjects.reduce(
+					(sum: number, project: { requiredProductionQuantity: number }) =>
+						sum + (Number(project.requiredProductionQuantity) || 0),
 					0,
 				);
-				if (planPaceTotal > 0) dailyExpected = Math.max(1, Math.round(planPaceTotal / 7));
+				if (projectPaceTotal > 0) dailyExpected = Math.max(1, Math.round(projectPaceTotal / 7));
 			} catch {
 				dailyExpected = null;
 			}
@@ -1707,7 +1734,7 @@ export function domainReadRouter(
 					recordedBy: transaction.recordedBySubject?.displayNameSnapshot ?? transaction.recordedBy,
 				};
 			});
-			res.setHeader("Cache-Control", "no-store").json({ generatedAt: new Date().toISOString(), production: { plans, batches, acceptedStageEvents: events }, exceptions: { routingViolations: violations }, quality: { decisions: qualityDecisions }, traceability: { inventoryTransactions: transactions }, dailyThroughput, activity, closedLots, routingViolations, inventoryTransactions });
+			res.setHeader("Cache-Control", "no-store").json({ generatedAt: new Date().toISOString(), production: { projects, batches, acceptedStageEvents: events }, exceptions: { routingViolations: violations }, quality: { decisions: qualityDecisions }, traceability: { inventoryTransactions: transactions }, dailyThroughput, activity, closedLots, routingViolations, inventoryTransactions });
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS line report data is unavailable.");
 		}

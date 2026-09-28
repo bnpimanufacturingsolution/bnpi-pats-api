@@ -66,11 +66,13 @@ implementation begins:
 - Gate 2 identity/authorization chain: `docs/superpowers/chains/2026-07-15-pats-api-gate-2-identity-authorization-chain.md`
 - Gate 2 identity/authorization handover: `docs/superpowers/prompts/2026-07-15-pats-api-gate-2-identity-authorization-handover.md`
 
-Gate 0 is now frozen and implementation is approved by the user as recorded in
-`docs/decisions/2026-07-15-pats-api-gate-0-review-record.md`. Begin implementation through the
-separate Gate 1 chain. Do not add business endpoints or change the PATS schema outside that chain,
-and do not silently alter frozen target decisions. Corrected source revisions remain release
-gates for affected production data.
+Gate 0 remains frozen except for explicit, dated user amendments recorded in the decision register.
+Gate 1 common HTTP and Gate 2 identity are implemented; later business/schema changes require an
+explicit scoped decision and migration/release gate. The current app-backed Project scope amendment
+is D-038 in `docs/decisions/2026-07-14-pats-api-design-decision-register.md`; it authorizes only the
+listed Demand/PMRS/MaterialRequirement and demand-field removals. The BOM routes remain transitional
+until their published sunset. Do not generalize either approval to unrelated schema or endpoint
+changes. Corrected source revisions remain release gates for affected production data.
 
 ## Architecture and Scope Rules
 
@@ -84,6 +86,29 @@ gates for affected production data.
   or data-retention behavior without a reviewed design and explicit approval.
 - No endpoint is complete until focused tests, API contract validation, and relevant operational
   checks pass.
+
+## Sibling App/API Coordination
+
+For any app-facing PATS contract, resource, schema, or UI integration change, coordinate with the
+sibling repository `../bnpi-pats-app` before implementation:
+
+1. Read the sibling `AGENTS.md` and the relevant `.wwg/workspace/current-task.md`,
+   `.wwg/wiki/project-truth-summary.md`, `.wwg/wiki/terminology.md`,
+   `.wwg/governance/drift-guard.md`, and latest App–API handoff.
+2. Verify active route/component/service callsites in the app. Types, fixtures, tests, old routes,
+   and dormant components alone do not establish active app usage.
+3. Classify each side as `ACTIVE`, `DORMANT`, `DEFERRED`, or `COMPATIBILITY`; do not equate
+   “not used by the current app UI” with “safe to remove from the public v1 API.”
+4. Keep API contract ownership explicit. Independent app/API implementation may proceed in parallel
+   only after the shared contract and migration/deprecation boundary are settled; otherwise do
+   parallel evidence gathering and reconcile before changing either contract.
+5. Record coordinated changes in both repositories: API review/decision evidence here and a new
+   additive WWG report or accepted current-task update in the app repo. Preserve dirty user work in
+   both worktrees; do not overwrite existing current-task or truth files to record a handoff.
+
+For floor-organization alignment, distinguish manufacturing route `Stage`/`SubStage` from the app's
+floor hierarchy `Section` → `Process` → `Sub-process`. A shared word such as “stage” is not proof
+that the models are interchangeable.
 
 ## Required Handoff
 

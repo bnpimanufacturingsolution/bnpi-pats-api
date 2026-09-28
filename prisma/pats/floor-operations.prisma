@@ -1,0 +1,262 @@
+// ---------------------------------------------------------------------------
+// Stations, localization, walkthrough (2026-07-07 model additions)
+// ---------------------------------------------------------------------------
+
+enum ScreenType {
+  COMPUTER
+  TABLET
+}
+
+model ProductionLine {
+  id           String    @id @default(uuid())
+  lineCode     String    @unique
+  name         String
+  displayOrder Int       @default(0)
+  isEnabled    Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sections     Section[]
+}
+
+model Section {
+  id                    String         @id @default(uuid())
+  workspaceId           String
+  name                  String
+  // Nullable during the compatibility bridge; all new API-created sections require a code.
+  sectionCode           String?        @unique
+  operationalContextKey String         @default("PATS")
+  productionLineId      String?
+  productionLine        ProductionLine? @relation(fields: [productionLineId], references: [id])
+  stageId               String
+  screenType            ScreenType     @default(COMPUTER)
+  scannerAttached       Boolean        @default(true)
+  printerAttached       Boolean        @default(true)
+  displayOrder          Int
+  isEnabled             Boolean        @default(true)
+  printerConnection     String?
+  printerAddress        String?
+  printerLanguage       String?
+  printerDpi            Int?
+  printerModel          String?
+  labelWidthMm          Int?
+  labelHeightMm         Int?
+  printerAgent          String?
+  boundSteps            StationStep[]
+  booths                Booth[]
+  lines                 Line[]
+  printJobs             PrintJob[]
+
+  @@index([workspaceId])
+  @@index([productionLineId])
+}
+
+enum PrintJobStatus {
+  QUEUED
+  SENT
+  FAILED
+  SIMULATED
+}
+
+model PrintJob {
+  id               String         @id @default(uuid())
+  batchId          String
+  sectionId        String
+  section          Section        @relation(fields: [sectionId], references: [id])
+  fromStageId      String
+  fromSubStageId   String?
+  toStageId        String?
+  toSubStageId     String?
+  barcodeValue     String
+  quantity         Int
+  sequence         Int
+  reprintOf        String?
+  language         String
+  renderedPayload  String
+  status           PrintJobStatus @default(QUEUED)
+  failureReason    String?
+  actor            String
+  actorSubjectId   String?
+  occurredAt       DateTime       @default(now())
+
+  @@index([batchId, occurredAt])
+  @@index([sectionId, occurredAt])
+}
+
+/// Floor work-process node in the Section → Process → Sub-process tree. Not a device mount.
+/// The SubStage link is an optional explicit manufacturing-route mapping, never inferred.
+model WorkProcess {
+  id              String        @id @default(uuid())
+  subStageId      String?
+  subStage        SubStage?     @relation(fields: [subStageId], references: [id])
+  sectionId       String?
+  parentProcessId String?
+  parentProcess   WorkProcess?  @relation("WorkProcessChildren", fields: [parentProcessId], references: [id])
+  children        WorkProcess[] @relation("WorkProcessChildren")
+  name            String
+  displayOrder    Int
+  isEnabled       Boolean       @default(true)
+  isSystemSeed    Boolean       @default(false)
+  booths          Booth[]
+  lines           Line[]
+  dailySheets     MonitoringDailySheet[]
+  stationBoards   MonitoringStationBoard[]
+
+  @@index([subStageId])
+  @@index([name])
+  @@index([sectionId])
+  @@index([parentProcessId])
+}
+
+/// Station-screen line instance (1 line = 1 screen). Leaf-owned: hangs under a
+/// leaf WorkProcess; parent counts roll up. Identity is place, not person.
+model Line {
+  id               String   @id @default(uuid())
+  sectionId        String
+  section          Section  @relation(fields: [sectionId], references: [id])
+  processId        String
+  workProcess      WorkProcess @relation(fields: [processId], references: [id])
+  lineCode         String   @unique
+  label            String?
+  assignedLeaderId String
+  assignedLeader   Subject  @relation("LineAssignedLeader", fields: [assignedLeaderId], references: [id])
+  activeLeaderId   String?
+  activeLeader     Subject? @relation("LineActiveLeader", fields: [activeLeaderId], references: [id])
+  displayOrder     Int
+  isEnabled        Boolean  @default(true)
+  operatorAssignments LineOperatorAssignment[]
+  batches          Batch[]
+  rowVersion       Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([sectionId])
+  @@index([processId])
+  @@index([activeLeaderId])
+}
+
+enum LineOperatorAssignmentStatus {
+  ACTIVE
+  ENDED
+}
+
+/// Operator-on-line assignment (single-line invariant). Ending a row creates
+/// ENDED evidence; rows are never rewritten except to end them.
+model LineOperatorAssignment {
+  id             String                     @id @default(uuid())
+  lineId         String
+  line           Line                       @relation(fields: [lineId], references: [id])
+  subjectId      String
+  subject        Subject                    @relation("LineOperatorAssignmentSubject", fields: [subjectId], references: [id])
+  reason         String?
+  status         LineOperatorAssignmentStatus @default(ACTIVE)
+  actorSubjectId String
+  startedAt      DateTime                   @default(now())
+  endedAt        DateTime?
+
+  @@index([subjectId, status])
+  @@index([lineId, status])
+}
+
+/// Physical floor capacity cell. Many booths may share one Station PC (1:N).
+model Booth {
+  id             String       @id @default(uuid())
+  workspaceId    String
+  boothCode      String
+  label          String?
+  sectionId      String?
+  section        Section?     @relation(fields: [sectionId], references: [id])
+  stageId        String
+  subStageId     String?
+  workProcessId  String?
+  workProcess    WorkProcess? @relation(fields: [workProcessId], references: [id])
+  displayOrder   Int
+  isEnabled      Boolean      @default(true)
+  stationBoards  MonitoringStationBoard[]
+
+  @@unique([workspaceId, boothCode])
+  @@index([sectionId])
+  @@index([stageId, subStageId])
+}
+
+/// Line Leader day encode (durable). payload mirrors app DailyMonitoringSheet fields.
+model MonitoringDailySheet {
+  id              String       @id @default(uuid())
+  workspaceId     String
+  productionDate  String
+  lineLabel       String
+  workProcessId   String?
+  workProcess     WorkProcess? @relation(fields: [workProcessId], references: [id])
+  processName     String
+  lineLeaderName  String       @default("")
+  productName     String       @default("")
+  modelName       String       @default("")
+  partName        String       @default("")
+  lotCode         String       @default("")
+  targetPerShift  Int          @default(0)
+  hourlyTarget    Int          @default(0)
+  operatorNames   String       @default("")
+  inputPartsAvailable Int?
+  defectiveQty    Int?
+  status          String       @default("draft")
+  slotsJson       Json
+  payloadJson     Json
+  rowVersion      Int          @default(1)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([workspaceId, productionDate])
+  @@index([workProcessId])
+}
+
+/// Process Station Board encode (booth-level). payload mirrors app StationBoardEntry.
+model MonitoringStationBoard {
+  id             String       @id @default(uuid())
+  workspaceId    String
+  productionDate String
+  boothId        String?
+  booth          Booth?       @relation(fields: [boothId], references: [id])
+  workProcessId  String?
+  workProcess    WorkProcess? @relation(fields: [workProcessId], references: [id])
+  boothLabel     String       @default("")
+  processName    String       @default("")
+  partName       String       @default("")
+  lotCode        String       @default("")
+  labelledCycleTimeSec Int    @default(0)
+  targetPerHour  Int          @default(0)
+  targetPerDay   Int          @default(0)
+  slotsJson      Json
+  payloadJson    Json
+  rowVersion     Int          @default(1)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([workspaceId, productionDate])
+  @@index([boothId])
+}
+
+model StationStep {
+  sectionId  String
+  section    Section   @relation(fields: [sectionId], references: [id])
+  stageId    String
+  stage      Stage     @relation(fields: [stageId], references: [id])
+  subStageId String?
+  subStage   SubStage? @relation(fields: [subStageId], references: [id])
+  // Composite id needs a non-null member for subStageId-null base steps.
+  id         String    @id @default(uuid())
+
+  @@unique([sectionId, stageId, subStageId])
+}
+
+model WorkInstruction {
+  id                String             @id @default(uuid())
+  stageId           String
+  subStageId        String?
+  // Ordered steps, each a LocalizedText: [{ en, ja?, fil? }, ...]
+  steps             Json
+  version           Int                @default(1)
+  status            RouteVersionStatus @default(DRAFT)
+  sourceRevisionRef String?
+  updatedAt         DateTime           @updatedAt
+
+  @@unique([stageId, subStageId, version])
+}

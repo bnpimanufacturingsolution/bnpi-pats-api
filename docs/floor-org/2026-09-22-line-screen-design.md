@@ -50,7 +50,7 @@ A 1:1 process=screen model collapses: Tampo is 1 process / 5 lines; Line Spray i
 
 ## 3. Model
 
-New `Line` model in `prisma/pats/schema.prisma`:
+New `Line` model in `prisma/pats/floor-operations.prisma`:
 
 ```prisma
 model Line {

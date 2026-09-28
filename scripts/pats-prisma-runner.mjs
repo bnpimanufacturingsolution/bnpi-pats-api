@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-export const schemaPath = "prisma/pats/schema.prisma";
+export const schemaPath = "prisma/pats";
 const prismaCliPath = fileURLToPath(new URL("../node_modules/prisma/build/index.js", import.meta.url));
 
 export function requirePatsDatabaseUrl() {

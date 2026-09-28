@@ -14,7 +14,7 @@ Host bindings used for the smoke were API `3301`, PostgreSQL `55433`, and MinIO 
 ## Persistence and migration
 
 `pnpm run prisma:pats:migrate:deploy` applied all seven committed migrations successfully. A final
-`pnpm exec prisma migrate status --schema prisma/pats/schema.prisma` reported the primary database
+`pnpm exec prisma migrate status --schema prisma/pats` reported the primary database
 up to date.
 
 The synthetic target ended with 8 Products, 8 Models, and 8 ModelParts. No client workbook, PDF,

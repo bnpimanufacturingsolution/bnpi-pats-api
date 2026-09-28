@@ -1,0 +1,310 @@
+enum LotPartAllocationStatus {
+  PLANNED
+  COMMITTED
+  CLOSED
+}
+
+enum StageEventStatus {
+  RECORDED
+  ACCEPTED
+  BLOCKED
+  CORRECTED
+}
+
+enum InventoryTransactionStatus {
+  RECORDED
+  ACCEPTED
+  CORRECTED
+}
+
+enum RoutingViolationStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  WAIVED
+}
+
+enum QualityInspectionStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum QualityDecisionType {
+  PASSED
+  FAILED
+  HOLD
+}
+
+// ---------------------------------------------------------------------------
+// Execution containers
+// ---------------------------------------------------------------------------
+
+enum BatchStatus {
+  PLANNED
+  ACTIVE
+  HELD
+  CLOSED
+  SCRAPPED
+}
+
+model Batch {
+  id                       String                   @id @default(uuid())
+  batchCode                String                   @unique
+  barcodeValue             String                   @unique
+  lotId                    String
+  lot                      Lot                      @relation(fields: [lotId], references: [id])
+  /** Physical line this batch is published to; null = not yet assigned to a line. */
+  lineId                   String?
+  line                     Line?                    @relation(fields: [lineId], references: [id])
+  plannedQuantity          Int
+  labelPackSize            Int
+  projectModelAllocationId String?
+  projectModelAllocation   ProjectModelAllocation?  @relation(fields: [projectModelAllocationId], references: [id])
+  currentStageId           String
+  currentSubStageId        String?
+  status                   BatchStatus              @default(PLANNED)
+  rowVersion               Int                      @default(1)
+  createdBySubjectId       String?
+  createdBySubject         Subject?                 @relation("BatchCreator", fields: [createdBySubjectId], references: [id])
+  createdAt                DateTime                 @default(now())
+  parts                    BatchPartLine[]
+  positionProjection       BatchPositionProjection?
+  qualityInspections       QualityInspection[]
+
+  @@index([lotId])
+  @@index([projectModelAllocationId])
+  @@index([currentStageId])
+  @@index([lineId])
+}
+
+// Batch <-> Part cardinality is unconfirmed (domain foundation, Section 8) — modeled
+// many-per-batch as the more general reading, same as the frontend.
+model BatchPartLine {
+  batchId             String
+  batch               Batch              @relation(fields: [batchId], references: [id])
+  partId              String
+  part                Part               @relation(fields: [partId], references: [id])
+  quantity            Int
+  lotPartAllocationId String?
+  lotPartAllocation   LotPartAllocation? @relation(fields: [lotPartAllocationId], references: [id])
+  quantityMagnitude   Decimal?           @db.Decimal(18, 6)
+  quantityUom         String?
+
+  @@id([batchId, partId])
+}
+
+// ---------------------------------------------------------------------------
+// Execution ledger (append-oriented, auditable)
+// ---------------------------------------------------------------------------
+
+enum StageEventType {
+  STAGE_SCAN_RECORDED
+  ROUTE_VALIDATED
+  ROUTING_VIOLATION_DETECTED
+  STAGE_COMPLETED
+  VARIANCE_FLAG_RAISED
+}
+
+model StageEvent {
+  id                   String            @id @default(uuid())
+  stageId              String
+  subStageId           String?
+  eventType            StageEventType
+  batchId              String
+  lotId                String
+  partId               String?
+  quantity             Int?
+  occurredAt           DateTime
+  actor                String
+  isRoutingViolation   Boolean           @default(false)
+  status               StageEventStatus  @default(RECORDED)
+  routeStepId          String?
+  routeStep            RoutingStep?      @relation(fields: [routeStepId], references: [id])
+  actorSubjectId       String?
+  actorSubject         Subject?          @relation("StageEventActor", fields: [actorSubjectId], references: [id])
+  quantityMagnitude    Decimal?          @db.Decimal(18, 6)
+  quantityUom          String?
+  usageBasis           String?
+  sourceRepresentation String?
+  routingViolation     RoutingViolation?
+
+  @@index([batchId, occurredAt])
+  @@index([stageId])
+}
+
+enum InventoryTransactionType {
+  RECEIVING
+  ISSUANCE
+}
+
+model InventoryTransaction {
+  id                        String                     @id @default(uuid())
+  transactionType           InventoryTransactionType
+  batchId                   String
+  part                      Part                       @relation(fields: [partId], references: [id])
+  partId                    String
+  lotId                     String
+  fromStageId               String?
+  fromSubStageId            String?
+  toStageId                 String
+  toSubStageId              String?
+  expectedQuantity          Int
+  actualQuantity            Int
+  withdrawalFormRef         String?
+  recordedAt                DateTime
+  recordedBy                String
+  status                    InventoryTransactionStatus @default(RECORDED)
+  expectedQuantityMagnitude Decimal?                   @db.Decimal(18, 6)
+  actualQuantityMagnitude   Decimal?                   @db.Decimal(18, 6)
+  quantityUom               String?
+  usageBasis                String?
+  sourceRepresentation      String?
+  recordedBySubjectId       String?
+  recordedBySubject         Subject?                   @relation("InventoryTransactionRecorder", fields: [recordedBySubjectId], references: [id])
+  @@index([batchId, recordedAt])
+  @@index([lotId])
+}
+
+model RoutingViolation {
+  id                  String                 @id @default(uuid())
+  stageEventId        String                 @unique
+  stageEvent          StageEvent             @relation(fields: [stageEventId], references: [id])
+  batchId             String
+  lotId               String
+  partId              String
+  attemptedStageId    String
+  attemptedSubStageId String?
+  // The allowed route at detection time, denormalized as [{stageId, subStageId, order}] so the
+  // violation stays auditable even after the PartsList is versioned forward.
+  expectedSteps       Json
+  detectedAt          DateTime
+  resolved            Boolean                @default(false)
+  status              RoutingViolationStatus @default(OPEN)
+  resolvedAt          DateTime?
+  resolvedBy          String?
+  resolvedBySubjectId String?
+  resolvedBySubject   Subject?               @relation("RoutingViolationResolver", fields: [resolvedBySubjectId], references: [id])
+  resolutionNote      String?
+
+  @@index([batchId])
+  @@index([resolved])
+}
+
+model ProcessChangeLog {
+  id                 String   @id @default(uuid())
+  projectId          String
+  project            Project  @relation(fields: [projectId], references: [id])
+  lotId              String
+  batchId            String?
+  partId             String
+  previousStageId    String
+  previousSubStageId String?
+  newStageId         String
+  newSubStageId      String?
+  actor              String
+  actorSubjectId     String?
+  actorSubject       Subject? @relation("ProcessChangeActor", fields: [actorSubjectId], references: [id])
+  reason             String
+  changedAt          DateTime
+
+  @@index([projectId, changedAt])
+}
+
+model LotPartAllocation {
+  id                String                  @id @default(uuid())
+  lotId             String
+  lot               Lot                     @relation(fields: [lotId], references: [id])
+  partId            String
+  part              Part                    @relation(fields: [partId], references: [id])
+  quantityMagnitude Decimal                 @db.Decimal(18, 6)
+  quantityUom       String
+  usageBasis        String?
+  status            LotPartAllocationStatus @default(PLANNED)
+  rowVersion        Int                     @default(1)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  batchPartLines    BatchPartLine[]
+
+  @@unique([lotId, partId])
+  @@index([partId])
+}
+
+model BatchPositionProjection {
+  batchId           String           @id
+  batch             Batch            @relation(fields: [batchId], references: [id])
+  stageId           String
+  subStageId        String?
+  routeStepId       String?
+  lastEventId       String?          @unique
+  positionStatus    StageEventStatus @default(ACCEPTED)
+  quantityMagnitude Decimal?         @db.Decimal(18, 6)
+  quantityUom       String?
+  projectionVersion Int              @default(1)
+  updatedAt         DateTime         @updatedAt
+
+  @@index([stageId, subStageId])
+}
+
+model QualityInspection {
+  id                   String                  @id @default(uuid())
+  batchId              String
+  batch                Batch                   @relation(fields: [batchId], references: [id])
+  stageId              String
+  subStageId           String?
+  sectionId            String?
+  inspectedQuantity    Decimal?                @db.Decimal(18, 6)
+  quantityUom          String?
+  status               QualityInspectionStatus @default(OPEN)
+  inspectedBySubjectId String?
+  inspectedBySubject   Subject?                @relation("QualityInspectionInspector", fields: [inspectedBySubjectId], references: [id])
+  evidence             Json?
+  startedAt            DateTime                @default(now())
+  completedAt          DateTime?
+  rowVersion           Int                     @default(1)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  decisions            QualityDecision[]
+
+  @@index([batchId, createdAt])
+  @@index([status, createdAt])
+}
+
+model QualityDecision {
+  id                 String              @id @default(uuid())
+  inspectionId       String
+  inspection         QualityInspection   @relation(fields: [inspectionId], references: [id])
+  decision           QualityDecisionType
+  reasonCode         String?
+  reasonNote         String?
+  decidedBySubjectId String?
+  decidedBySubject   Subject?            @relation("QualityDecisionActor", fields: [decidedBySubjectId], references: [id])
+  decidedAt          DateTime            @default(now())
+
+  @@index([inspectionId, decidedAt])
+}
+
+enum QualityStageAssignmentStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+/// Journey D stage allow-list (v1 stage grain only). Not a SubjectAssignment.key.
+/// Fail closed: quality.resolve with zero ACTIVE rows cannot create/decide.
+model QualityStageAssignment {
+  id          String                       @id @default(uuid())
+  subjectId   String
+  subject     Subject                      @relation("QualityStageAssignee", fields: [subjectId], references: [id])
+  workspaceId String
+  stageId     String
+  stage       Stage                        @relation(fields: [stageId], references: [id])
+  status      QualityStageAssignmentStatus @default(ACTIVE)
+  assignedAt  DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+
+  @@unique([subjectId, workspaceId, stageId])
+  @@index([subjectId, workspaceId, status])
+  @@index([stageId])
+}

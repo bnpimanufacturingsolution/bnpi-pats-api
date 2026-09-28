@@ -26,8 +26,6 @@ describe("PATS seed contract", () => {
     );
 
     for (const required of [
-      "planDemandAllocation",
-      "materialRequirement",
       "lotPartAllocation",
       "stageEvent",
       "inventoryTransaction",
@@ -47,15 +45,24 @@ describe("PATS seed contract", () => {
       "stage-warehouse",
       "BNI-2607-001",
       "Machibouke Hamburger Shop 3",
-      // B251 capsule/deco/paint BOM lines — not the (dropped) B308 family.
-      "PACKAGING_COMPONENT",
-      "DECORATION_INPUT",
+      // B251 capsule/deco/paint ModelParts — not the (dropped) B308 family.
+      // (BOM-line PACKAGING_COMPONENT/DECORATION_INPUT writes were removed
+      // 2026-09-25 with BomLine; the catalog parts themselves stay.)
       "sharedCapsule",
       "decoPartsByModel",
       "paintNumbers",
     ]) {
       expect(script, `seed is missing ${required}`).to.contain(required);
     }
+
+    expect(script).not.to.contain("planDemandAllocation");
+    expect(script).not.to.contain("materialRequirement");
+    expect(script).not.to.contain("pmrs");
+    // BOM/ProcessRoute writes removed 2026-09-25 (scoped §7 exception).
+    expect(script).not.to.contain("tx.bomDefinition");
+    expect(script).not.to.contain("tx.bomLine");
+    expect(script).not.to.contain("tx.processRoute");
+    expect(script).not.to.contain("tx.processRouteStage");
 
     expect(clientFragment).to.contain('productCode: "B251"');
     expect(clientFragment).to.contain("B251-01-01");
@@ -85,13 +92,13 @@ describe("PATS seed contract", () => {
     // route-configuration working set in demo/UAT.
     const catalogRegion = script.slice(
       script.indexOf("Client-evidence catalog: B251"),
-      script.indexOf("BOM + process route for model 01"),
+      script.indexOf("── Line configuration (factory stage vocabulary)"),
     );
     expect(catalogRegion).to.contain('lifecycleStatus: "DRAFT"');
     expect(catalogRegion, "catalog upserts must not re-publish rows").to.not.contain(
       'lifecycleStatus: "PUBLISHED"',
     );
-    // BOM / process-route revisions keep their PUBLISHED seed state.
+    // Other seeded execution resources keep their PUBLISHED seed state.
     expect(script).to.contain('lifecycleStatus: "PUBLISHED"');
   });
 
@@ -152,7 +159,7 @@ describe("PATS seed contract", () => {
       script.indexOf("async function seedProfile"),
     );
     expect(wipeRegion).to.match(/\.deleteMany\s*\(/);
-    for (const table of ["outboxMessage", "auditRecord", "stageEvent", "batch", "qualityInspection", "qualityStageAssignment", "subjectAssignment", "subject", "section"]) {
+    for (const table of ["outboxMessage", "auditRecord", "stageEvent", "batch", "qualityInspection", "qualityStageAssignment", "subjectAssignment", "subject", "section", "productionLine"]) {
       expect(wipeRegion, `wipe is missing table ${table}`).to.contain(`"${table}"`);
     }
     // The Station→Section model rename must be reflected in the wipe list —
@@ -212,6 +219,7 @@ describe("PATS seed contract", () => {
 		expect(script).to.contain('batchIds["batch-fw-inj"]');
 		expect(script).to.contain('"printJob"');
 		expect(script).to.contain("workProcesses: 17,");
+		expect(script).to.contain("productionLines: 1,");
 		// Floor layout: Injection 3 + Decoration 17 + Assembly 11 = 31 station-screen lines.
 		expect(script).to.contain('["INJ-MO-01", processInjMachineOpId, "Machine Operator #1"]');
 		expect(script).to.contain('["DEC-FS-MS-01", processFsManualId, "Manual Spray #1"]');

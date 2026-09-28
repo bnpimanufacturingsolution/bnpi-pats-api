@@ -17,6 +17,10 @@ contracts.
 | D-008 | Station granularity | **Station = device endpoint** bound to Stage and/or SubStage steps (configurable bundle via StationStep). **Default install:** one Station per SubStage when sub-stages exist; Stage-level Station when no sub-stages or shared PC. **Process is not a device mount** (cost). Physical **Booth** is separate capacity (N booths : 1 Station). Product owner 2026-08-10. | WORKING DEFAULT |
 | D-009 | Rework and reversal | Current working rule is forward-only; define hold, correction, rework, and reversal policy | NEEDS_CONFIRMATION |
 | D-010 | Lot cardinality | Resolve whether a Lot is plan-wide, part-specific, or a controlled grouping | NEEDS_CONFIRMATION |
+| D-037 | Project–Lot cardinality | Each Project/ProductionPlan has one Lot identity and at most one persisted Lot; each Lot belongs to exactly one Project/ProductionPlan. A draft plan may have no Lot until the accepted Lot-creation trigger | CONFIRMED |
+| D-038 | App-backed Project scope | Keep Project, model quantity lineage, Parts, Parts List routes, Lots, and execution. Remove unwired Demand/PMRS/MaterialRequirement surfaces and demand-only fields from the current app/API contract | USER_CONFIRMED_AMENDMENT |
+| D-039 | Model ProcessRoute API adoption | Retire the parallel ProcessRoute/ProcessRouteStage API slice because the active app authors routing on ModelPart; retain Stage/SubStage for manufacturing route and execution use | USER_CONFIRMED_AMENDMENT — TRANSITIONAL TO 2027-01-01 |
+| D-040 | Floor identity model | Final work tree is ProductionLine → Section → Process → Sub-process; Line is the management/screen grouping with one StationScreen per published Line; StationScreen is Line publication state, not a separate table; floor bindings use Section/Process/Sub-process only | USER_CONFIRMED_AMENDMENT — FINAL DESIGN; MIGRATION PENDING |
 | D-011 | Route versioning | Published Parts List versions are immutable; active batches retain their version | PROPOSED |
 | D-012 | Current batch position | Derive from valid StageEvents and maintain a rebuildable projection | PROPOSED |
 | D-013 | Event and audit strategy | Append-oriented ledgers plus transactional outbox and audit records | PROPOSED |
@@ -79,7 +83,7 @@ The following distinctions apply to every decision in this register:
 | D-022 | The app uses localStorage release snapshots and seeded fixtures for planning/execution alignment | `STALE` | Prototype transport/state behavior is not an API persistence or concurrency contract |
 | D-023 | The on-prem readiness document proposes Docker-first air-gapped deployment but leaves identity, backup ownership, recovery objectives, and topology open | `NEEDS_CONFIRMATION` | Operations design must define control boundaries and test hooks without inventing client-owned values |
 
-| D-024 | Draft business documents call the planning aggregate `Project`, while the target endpoint inventory calls it `ProductionPlan` | `NEEDS_CONFIRMATION` | No public planning route or database identity is canonical until the domain noun and compatibility mapping are accepted |
+| D-024 | Draft business documents call the planning aggregate `Project`, while the target endpoint inventory calls it `ProductionPlan` | `CONFIRMED` — canonical noun is `Project` (see resolution entry 2026-09-25) | `Project` is the canonical domain noun, route family, and schema identity; `ProductionPlan` is a retired synonym pending twin removal per the canonicalization plan |
 
 | D-025 | The current schema uses `String actor`, while audit requirements need a stable subject reference plus an optional historical snapshot | `NEEDS_CONFIRMATION` | Identity mapping and snapshot fields must be accepted before audit or operational writes are implemented |
 
@@ -370,3 +374,189 @@ idempotency behavior changed; the fix is confined to the two existing delete han
 - **OpenAPI:** N/A — no per-endpoint OpenAPI artifact exists for command routes in this repo; the
   contract spec above is the review evidence.
 - **Exception:** none.
+## User-confirmed Project–Lot cardinality (2026-09-25)
+
+The user confirmed that one Project equals one Lot.
+
+- **Decision:** D-037 is `CONFIRMED`. A Project/ProductionPlan has one Lot identity, with at most one persisted Lot; every Lot belongs to exactly one Project/ProductionPlan.
+- **Lifecycle clarification:** The approved zero-Lot state is allowed only before the accepted Lot-creation trigger. After that trigger, the Project/ProductionPlan must have its one Lot. This does not change the D-010 multi-Part allocation decision.
+- **Rationale:** Project and Lot are one planning/production identity pair, so a second Lot for the same Project/ProductionPlan must not be created.
+- **Affected design surfaces:** Planning data model, normalized schema, Prisma relation constraints, planning reads/writes, migration reconciliation, and API behavior for Lot creation.
+- **Implementation impact:** Enforce a unique project/plan foreign key on Lot. A second distinct Lot creation returns `409 Conflict`; idempotent replay of the original create remains valid. Lot reads may return zero or one Lot for a plan depending on lifecycle state. LotPartAllocation remains the source for a Lot's Parts and quantities.
+- **Migration impact:** Existing databases must be checked for duplicate Lots per Project before the unique constraint is applied. Existing duplicates require an explicit reconciliation decision; this change does not merge or delete them automatically.
+- **Rollback/compatibility:** The route family remains `GET/POST /api/v1/lots` with plan filtering/subresource creation; no new verb path is introduced. Rolling back the unique constraint requires restoring a reviewed pre-change database state and must not be used to silently restore duplicate Lots.
+- **Owner and evidence:** User confirmation, 2026-09-25, this repository conversation.
+- **Review condition:** Reopen only if the business changes to permit multiple Lots for one Project/ProductionPlan.
+- **Endpoint standard review:** No route-shape exception. The existing `/api/v1/lots` and `/api/v1/production-plans/{planId}/lots` shapes remain canonical under v1.2.1 §2–§5; the create behavior must follow §3, §6, §9, and §11 as documented in the endpoint catalog.
+
+## User amendment: app-backed Project, no Demand/PMRS/MaterialRequirement (2026-09-25)
+
+The user confirmed that the Project feature remains in scope, while separately modeled Demand,
+PMRS, and MaterialRequirement data are out of scope because the active app does not use them. The
+user selected immediate removal from v1 for the affected fields after being shown the breaking
+response/request behavior.
+
+- **Keep:** Project and its active app-backed ProductSpecification, ProjectModelAllocation quantity
+  lineage, Part snapshots, PartsList/RoutingStep, one Lot, Batch, and execution records.
+- **Remove:** `PlanDemandAllocation`, `Pmr`, and `MaterialRequirement` Prisma models/tables and seed
+  writes; Project/Model demand relations; `marketRegion` and `demandPurpose` from
+  `ProjectModelAllocation`; `materialRequirementId` from `InventoryTransaction`.
+- **Project detail contract:** Remove `allocations`, `materialRequirements`, and `pmrsReference` from
+  `GET /api/v1/production-plans/{planId}`. The app does not consume those fields.
+- **Write request contracts:** Remove optional `marketRegion`/`demandPurpose` from
+  `POST /api/v1/production-plans/{planId}/model-allocations`, and optional `materialRequirementId`
+  from `POST /api/v1/inventory-transactions`. The strict validators will reject those retired
+  properties with `422`.
+- **Rationale/evidence:** Active sibling app Project screens use model quantities, Part/Parts List
+  routing, Lots, and execution. No active app caller uses Demand or PMRS data; the app BOM/Project
+  runtime audit and `.wwg` reports are recorded in the sibling repository. Seeded rows were
+  provisional examples, not an app workflow.
+- **Migration impact:** New migration drops the three retired tables, the `MaterialRequirementStatus`
+  enum, the InventoryTransaction FK/column, and the two demand-only model-allocation columns. The
+  migration is destructive to those stored rows; a coordinated backup and row-count review is
+  required before applying it to a persistent database. Historical migration files remain
+  unchanged.
+- **REST standard exception:** v1.2.1 §7 ordinarily requires a new major version for these response
+  and request contract breaks. The user explicitly approved the scoped v1 exception on 2026-09-25.
+  Scope is limited to the fields/models listed above; it does not authorize other v1 contract
+  breaks. **Owner:** user. **Reason:** these surfaces are absent from the active app and excluded
+  from the current Project flow. **Review condition:** reopen before adding an external consumer or
+  reintroducing Demand/PMRS/MaterialRequirement to the app.
+- **Other sections checked:** §2 resource identity/paths unchanged; §3 method semantics unchanged;
+  §6 success/error shape and strict `422` validation remain; §8 auth/object checks unchanged; §9
+  concurrency unchanged; §10 removed fields are no longer accepted/returned; §11 idempotency
+  behavior unchanged. OpenAPI and focused tests are updated with the implementation.
+- **Historical decision handling:** D-007/D-034 Gate 0 target records remain historical evidence;
+  this dated user amendment supersedes those targets only for the current app-backed implementation
+  scope described above. Reopen the broader domain design before future planning/demand workflows.
+
+## User amendment: retire app-unwired ProcessRoute API slice (2026-09-25)
+
+The active app authors model-part route steps through `ModelPart.routingSteps` and the Project
+PartsList route flow. No active app adapter/callsite uses the separate API `ProcessRoute` or
+`ProcessRouteStage` resources. The user directed removal of app-unwired surfaces.
+
+- **Retiring API resources:** `POST/PATCH /api/v1/catalog/process-routes`,
+  `POST/PATCH /api/v1/catalog/route-stages`.
+- **Classification/transition:** `TRANSITIONAL`, with `Deprecation: true` and
+  `Sunset: Fri, 01 Jan 2027 00:00:00 GMT`. During the transition, behavior/auth/idempotency/ETag
+  remain unchanged. The 90-day v1.2.1 §7 window is met; no exception is required.
+- **Persistence cleanup after sunset:** Remove `ProcessRoute`/`ProcessRouteStage`, their canonical
+  evidence subject enum values and seed writes through a reviewed migration after row-count/evidence
+  preflight. Historical migration files remain immutable.
+- **Keep Stage/SubStage:** They remain active manufacturing-route and execution identities and are
+  used by the app's ModelPart routing editor, station-step configuration, quality scope, and stage
+  events. They are distinct from the floor hierarchy Section → Process → Sub-process.
+- **Owner/evidence:** User direction, 2026-09-25; sibling app runtime callsite audit; API route and
+  seed inventory.
+- **Review condition:** Reopen only if the app adopts `ProcessRoute`/`ProcessRouteStage` or another
+  approved consumer is identified before sunset.
+
+## User amendment: final floor identity model (2026-09-25)
+
+The user finalized the following floor-organization design. This entry authorizes the target model
+and phased migration; it does not apply a database migration by itself.
+
+- **Work tree:** `ProductionLine → Section → Process → Sub-process`. `Section` groups multiple
+  Processes; a `Process` has multiple child Sub-processes through `WorkProcess.parentProcessId`. No
+  extra umbrella entity is introduced.
+- **Line:** `Line` is the management/screen grouping created under Section/Process/Sub-process.
+  Multiple Lines may manage the same Section/Process/Sub-process. Do not rename `Line` to
+  `ProductionLine`.
+- **StationScreen:** A `StationScreen`/Work Station Interface is the published state of a `Line`,
+  not a separate persistent table. A created Line becomes a StationScreen when published with the
+  required line-leader assignment. The published Line/screen is also the station device for that
+  line; no separate Station entity is created for this slice.
+- **Floor bindings:** Floor setup uses `Section`/`Process`/`Sub-process` and `Line`/StationScreen
+  only. Do not use `Stage`/`SubStage` as floor parents and do not infer floor mappings from them.
+  Existing `Stage`/`SubStage` identities remain only where manufacturing route/execution evidence
+  already depends on them, pending a separate product-routing migration.
+- **WorkProcess mapping:** Floor `WorkProcess` records are independent of manufacturing
+  `Stage`/`SubStage`. Remove the API behavior that assigns the first bound SubStage when none is
+  supplied; an explicit route mapping must be provided only where manufacturing routing truly needs
+  it.
+- **Owner/evidence:** User direction, 2026-09-25; sibling app setup/lines editor callsite audit; API
+  `floor-operations.prisma`, command/read inventory, and current seeder sample.
+- **Route/versioning constraint:** Canonical `/stations` remains occupied by the transitional Section
+  alias until 2027-06-30. The migration must therefore use versioned or additive floor paths and
+  must not silently repurpose v1 `/sections` identity. Historical migrations remain immutable.
+- **Review condition:** Reopen before changing `/sections` identity, adding canonical station paths,
+  dropping floor `Stage`/`SubStage` links, or migrating existing floor data.
+
+## D-040 implementation evidence (2026-09-25)
+
+- **Schema:** `ProductionLine` added (`floor-operations.prisma`); `Section.productionLineId` is an
+  optional FK; `WorkProcess.subStageId` is now nullable with no first-bound inference. Migration
+  `20260925170000_floor_identity_production_line` is additive; historical migrations untouched.
+- **Endpoints:** `GET/POST /api/v1/production-lines` (`operations.manage` for create,
+  `execution.read` for list; idempotent create; duplicate `lineCode` → `409`). `POST /sections`
+  accepts optional `productionLineId` with a `404` for unknown lines; response shape unchanged.
+  `POST /work-processes` accepts a null/absent `subStageId` without inference. `GET /lines` adds
+  the derived `stationScreen` flag (published = enabled with a leader); no existing response field
+  changed.
+- **Seed:** `PL-MAIN` umbrella owns the four seeded Sections; wipe list and summary include
+  `productionLine`.
+- **Standards checked:** v1.2.1 §2 (plural nouns, `/api/v1`), §3 (POST create semantics),
+  §4 (one-level paths), §5 (paginated `{data,pagination}` + `search`), §6 (`201` + `Location`,
+  RFC 9457 errors), §8 (`operations.manage`/`execution.read`, object checks), §10 (camelCase),
+  §11 (`Idempotency-Key` on create). No exception.
+- **Tests:** production-line create/duplicate/list, work-process creation without a SubStage, seed
+  wipe/summary assertions; full suite green.
+- **App UI:** untouched per the frozen-layout constraint; the app's existing setup editors continue
+  against unchanged v1 shapes plus additive fields.
+
+## User-confirmed planning noun: Project (2026-09-25)
+
+D-024 is resolved. The canonical planning aggregate noun is **Project**.
+
+- **Decision:** `Project` is the canonical domain noun, route family (`/api/v1/projects…`),
+  schema identity (`model Project`), and UI term. `ProductionPlan`/`productionPlan` is a retired
+  synonym: route twins, code identifiers, audit names, and error strings still carrying it are
+  compatibility residue, not a second concept.
+- **Rationale/evidence:** UI routes/labels, Prisma schema, and user direction agree on `Project`;
+  the sibling callsite audit (2026-09-25) showed the app displays `Project` while calling
+  `/production-plans` on the wire — one noun end-to-end removes the split.
+- **Implementation impact:** Executed per
+  `docs/superpowers/plans/2026-09-25-project-noun-canonicalization-plan.md` (app wire switch →
+  API twin removal + renames → app renames with compat aliases). Response keys `planId`/`planCode`
+  are retained in this slice; trimming them is a separate contract decision.
+- **Owner:** user, 2026-09-25.
+- **Review condition:** reopen only if an external consumer requires the `ProductionPlan` noun.
+
+## User-approved §7 exception: immediate removal of sunset-gated surfaces (2026-09-25)
+
+The user approved immediate removal of the 2027-gated transitional surfaces without waiting for
+sunset, as a scoped v1.2.1 §7 exception (same mechanism as D-038).
+
+- **Excepted section:** v1.2.1 §7 minimum 90-day deprecation window.
+- **Scope (only):** `GET/POST/PATCH /api/v1/catalog/bom-definitions`,
+  `POST/PATCH /api/v1/catalog/bom-lines`, `POST/PATCH /api/v1/catalog/process-routes`,
+  `POST/PATCH /api/v1/catalog/route-stages`, and the `/stations` route-path alias rows for
+  `/sections`, `/sections/{id}/history`, `/sections/{id}/support`. `Stage`/`SubStage`, ModelPart
+  `routingSteps`, PartsList/RoutingStep, and the Section → Process → Sub-process hierarchy stay.
+- **Why conformance is not appropriate:** no production deployment exists; the dev database is
+  disposable. Sibling callsite audit (2026-09-25) verified zero active app API callers: the app
+  calls canonical `/api/v1/sections/...` (`endpoints.ts` `SECTIONS`/`STATION_HISTORY`) and never
+  `/api/v1/stations`, `bom-definitions`, `bom-lines`, `process-routes`, or `route-stages`.
+  The 2027 sunset dates assumed a production consumer that does not exist.
+- **Owner:** user. **Reason:** dead transitional weight on an unshipped v1; nothing to migrate.
+- **Review condition:** reopen before any external consumer is introduced or any removed surface
+  is reintroduced to the app. One-time; no expiry.
+- **Explicitly retained (outside this scope):** response compat fields (`stationCode`, history/
+  support `station` + `stationId` shapes, station-step `station` shape) and the `stationId`
+  request-body alias on work-process create. The app hook (`useCreateWorkProcess`) now sends
+  `sectionId`-only on the wire (2026-09-25 service/hook alignment; frozen components untouched);
+  the API alias remains as a safety net until components are editable. The app's
+  `/line/stations/*` UI routes are frontend paths and are untouched.
+- **Migration impact:** new additive migration drops `BomDefinition`, `BomLine`, `ProcessRoute`,
+  `ProcessRouteStage`, and `BomRelationshipKind`; historical migrations untouched. Dev-only
+  row disposition (disposable DB, reseed after migrate).
+- **Other sections checked:** §2 resource identity/paths (§7 alias rows removed, canonical
+  `/sections` unchanged); §3 method semantics unchanged; §6 RFC 9457 shape unchanged (removed
+  routes fall through to the existing canonical `404`/`405` boundary); §8 auth/object checks
+  unchanged (removed capability gates leave with their routes); §9 concurrency unchanged;
+  §10 removed fields no longer accepted/returned at route scope; §11 idempotency middleware
+  for removed catalog paths leaves with them. OpenAPI and focused tests updated.
+- **Supersedes:** the "Exception: None" lines in `docs/decisions/2026-09-25-bom-api-retirement-decision.md`
+  and `docs/decisions/2026-09-25-process-route-api-retirement-decision.md`, and the D-040
+  `/stations`-until-2027-06-30 hold, only for the route-path scope above.
