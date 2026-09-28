@@ -163,6 +163,9 @@ describe("Journey D quality stage allow-list", () => {
 				}),
 				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
 			},
+			batch: {
+				update: async () => ({}),
+			},
 			qualityDecision: {
 				create: async () => {
 					decided += 1;
@@ -200,6 +203,9 @@ describe("Journey D quality stage allow-list", () => {
 					rowVersion: 1,
 				}),
 				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
+			},
+			batch: {
+				update: async () => ({}),
 			},
 			qualityDecision: {
 				create: async () => {
@@ -263,11 +269,10 @@ describe("Journey D quality stage allow-list", () => {
 					lot: {
 						id: "lot-1",
 						lotCode: "LOT-01",
-						partName: "Body",
 						project: { product: { productName: "Fruits" } },
 					},
-					projectModelAllocation: { model: { modelName: "M03", modelNumber: "M03" } },
-					parts: [{ partId: "part-1", quantity: 50, part: { partName: "Body", partCode: "P-BODY" } }],
+					projectModelRequirement: { model: { modelName: "M03", modelNumber: "M03" } },
+					part: { id: "part-1", partName: "Body", partCode: "P-BODY" },
 					qualityInspections: [],
 				}),
 			},
@@ -375,6 +380,9 @@ describe("Journey D quality stage allow-list", () => {
 				}),
 				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
 			},
+			batch: {
+				update: async () => ({}),
+			},
 			qualityDecision: {
 				create: async () => {
 					decided += 1;
@@ -415,6 +423,9 @@ describe("Journey D quality stage allow-list", () => {
 				}),
 				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
 			},
+			batch: {
+				update: async () => ({}),
+			},
 			qualityDecision: {
 				create: async ({ data }: { data: { reasonCode: string | null } }) => {
 					recordedReasonCode = data.reasonCode;
@@ -449,6 +460,9 @@ describe("Journey D quality stage allow-list", () => {
 					rowVersion: 1,
 				}),
 				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
+			},
+			batch: {
+				update: async () => ({}),
 			},
 			qualityDecision: {
 				create: async () => {
@@ -532,7 +546,10 @@ describe("Journey D quality stage allow-list", () => {
 					}),
 					update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
 				},
-				qualityDecision: {
+				batch: {
+				update: async () => ({}),
+			},
+			qualityDecision: {
 					create: async () => {
 						decided += 1;
 						return { id: "decision-1", decision: "PASSED" };
@@ -567,11 +584,10 @@ describe("Journey D quality stage allow-list", () => {
 					lot: {
 						id: "lot-1",
 						lotCode: "LOT-01",
-						partName: "Body",
 						project: { product: { productName: "Fruits" } },
 					},
-					projectModelAllocation: { model: { modelName: "M03", modelNumber: "M03" } },
-					parts: [{ partId: "part-1", quantity: 50, part: { partName: "Body", partCode: "P-BODY" } }],
+					projectModelRequirement: { model: { modelName: "M03", modelNumber: "M03" } },
+					part: { id: "part-1", partName: "Body", partCode: "P-BODY" },
 					qualityInspections: [],
 				}),
 			},
@@ -597,6 +613,9 @@ describe("Journey D quality stage allow-list", () => {
 					rowVersion: 1,
 				}),
 				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
+			},
+			batch: {
+				update: async () => ({}),
 			},
 			qualityDecision: {
 				create: async () => {

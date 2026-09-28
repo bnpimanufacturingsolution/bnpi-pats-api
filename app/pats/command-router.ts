@@ -59,26 +59,32 @@ function isLegacyStationPath(req: Request): boolean {
 
 const decimalString = z.string().trim().regex(/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/, "Must be a non-negative decimal with up to 6 places.");
 
+const projectModelRequirementInputSchema = z.object({
+	modelId: z.string().trim().min(1).max(100),
+	requiredQuantity: z.number().int().positive(),
+}).strict();
+
 const projectCreateSchema = z.object({
 	projectCode: z.string().trim().min(1).max(120),
 	name: z.string().trim().min(1).max(240),
-	requiredProductionQuantity: z.number().int().positive(),
 	productId: z.string().trim().min(1).max(100).nullable().optional(),
+	batchSize: z.number().int().positive().max(1000000).optional(),
+	// Creating a project also creates its single lot (paper flow: Lot No is
+	// suggested at creation). The lot name is the project name.
+	// Requirements may follow on the draft.
+	lotCode: z.string().trim().min(1).max(120).optional(),
+	modelRequirements: z.array(projectModelRequirementInputSchema).max(100).default([]),
 }).strict();
 
 const projectPatchSchema = z.object({
 	name: z.string().trim().min(1).max(240).optional(),
-	requiredProductionQuantity: z.number().int().positive().optional(),
 	productId: z.string().trim().min(1).max(100).nullable().optional(),
+	batchSize: z.number().int().positive().max(1000000).optional(),
+	status: z.enum(["RELEASED", "COMPLETED"]).optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
 
-const projectModelAllocationSchema = z.object({
-	modelId: z.string().trim().min(1).max(100),
-	plannedQuantity: z.number().int().positive(),
-	quantityMagnitude: decimalString.nullable().optional(),
-	quantityUom: z.string().trim().min(1).max(40).nullable().optional(),
-	usageBasis: z.string().trim().max(120).nullable().optional(),
-	sourceRevisionRef: z.string().trim().max(160).nullable().optional(),
+const projectModelRequirementsSchema = z.object({
+	modelRequirements: z.array(projectModelRequirementInputSchema).max(100),
 }).strict();
 
 const projectPartsListVersionSchema = z.object({
@@ -91,37 +97,17 @@ const projectPartsListVersionSchema = z.object({
 	sourceRevisionRef: z.string().trim().max(160).nullable().optional(),
 }).strict();
 
-const lotCreateSchema = z.object({
-	lotCode: z.string().trim().min(1).max(120),
-	lotName: z.string().trim().min(1).max(240),
-	partId: z.string().trim().min(1).max(100),
-	partsListId: z.string().trim().min(1).max(100),
-	partsListVersion: z.number().int().positive(),
-	requiredProductionQuantity: z.number().int().positive(),
-	labelPackSize: z.number().int().positive(),
-	quantityMagnitude: decimalString.nullable().optional(),
-	quantityUom: z.string().trim().min(1).max(40).nullable().optional(),
-	usageBasis: z.string().trim().max(120).nullable().optional(),
-}).strict();
-
-const batchPartSchema = z.object({
-	partId: z.string().trim().min(1).max(100),
-	quantity: z.number().int().positive(),
-	quantityMagnitude: decimalString.nullable().optional(),
-	quantityUom: z.string().trim().min(1).max(40).nullable().optional(),
-}).strict();
-
 const batchCreateSchema = z.object({
 	batchCode: z.string().trim().min(1).max(120),
 	barcodeValue: z.string().trim().min(1).max(240),
 	lotId: z.string().trim().min(1).max(100),
+	partId: z.string().trim().min(1).max(100),
 	/** Physical line this batch is published to; omit/null = unassigned. */
 	lineId: z.string().trim().min(1).max(100).nullable().optional(),
 	plannedQuantity: z.number().int().positive(),
 	labelPackSize: z.number().int().positive(),
 	currentStageId: z.string().trim().min(1).max(100),
 	currentSubStageId: z.string().trim().min(1).max(100).nullable().optional(),
-	parts: z.array(batchPartSchema).max(100).optional(),
 }).strict();
 
 const stageEventCreateSchema = z.object({
@@ -204,6 +190,7 @@ const projectPartCycleTimesSchema = z.object({
 const qualityDecisionSchema = z
 	.object({
 		decision: z.enum(["PASSED", "FAILED", "HOLD"]),
+		failureDisposition: z.enum(["REWORK", "TRUE_NG"]).nullable().optional(),
 		reasonCode: z.string().trim().max(80).nullable().optional(),
 		reasonNote: z.string().trim().max(500).nullable().optional(),
 	})
@@ -215,6 +202,13 @@ const qualityDecisionSchema = z
 				code: z.ZodIssueCode.custom,
 				path: ["reasonCode"],
 				message: "A FAILED decision requires a reason code.",
+			});
+		}
+		if (body.decision !== "FAILED" && body.failureDisposition !== undefined && body.failureDisposition !== null) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ["failureDisposition"],
+				message: "failureDisposition only applies to a FAILED decision.",
 			});
 		}
 	});
@@ -348,15 +342,17 @@ function batchHeaders(id: string, rowVersion: number): Record<string, string> {
 	return { Location: `/api/v1/batches/${id}`, ETag: `"${rowVersion}"` };
 }
 
-function projectResponse(project: { id: string; projectCode: string; name: string; status: string; requiredProductionQuantity: number; productId: string | null; rowVersion: number }) {
+function projectResponse(project: { id: string; projectCode: string; name: string; status: string; requiredProductionQuantity: number; productId: string | null; rowVersion: number; completedAt?: Date | null; batchSize?: number }) {
 	return {
 		projectId: project.id,
 		projectCode: project.projectCode,
 		name: project.name,
 		status: project.status,
 		requiredProductionQuantity: project.requiredProductionQuantity,
+		batchSize: project.batchSize ?? 200,
 		productId: project.productId,
 		rowVersion: project.rowVersion,
+		completedAt: project.completedAt ? project.completedAt.toISOString() : null,
 	};
 }
 
@@ -366,10 +362,6 @@ function notFound(detail: string): never {
 
 function conflict(detail: string): never {
 	throw new CommandProblem(409, "urn:bandai:pats:problem:conflict", "Conflict", detail);
-}
-
-function cardinalityConflict(detail: string): never {
-	throw new CommandProblem(409, "urn:bandai:pats:problem:project-lot-cardinality-conflict", "Conflict", detail);
 }
 
 function staleVersion(): never {
@@ -385,7 +377,7 @@ function forbidden(detail: string): never {
 }
 
 function ensureProjectEditable(project: { status: string }): void {
-	const immutableStatuses: string[] = [ProjectLifecycleStatus.RELEASED, ProjectLifecycleStatus.COMPLETED, ProjectLifecycleStatus.CANCELLED];
+	const immutableStatuses: string[] = [ProjectLifecycleStatus.RELEASED, ProjectLifecycleStatus.COMPLETED];
 	if (immutableStatuses.includes(project.status)) {
 		conflict("Released or completed projects cannot be edited.");
 	}
@@ -427,19 +419,18 @@ function requireInventoryTransactionCapability(gate: (capability: string) => Req
 }
 
 async function batchRouteContext(transaction: CommandTransaction, batchId: string) {
-	const batch = await transaction.batch.findUnique({ where: { id: batchId }, include: { lot: true, parts: true, positionProjection: true } });
+	const batch = await transaction.batch.findUnique({ where: { id: batchId }, include: { lot: true, positionProjection: true } });
 	if (!batch) notFound("The requested batch was not found.");
 	const partsList = await transaction.partsList.findUnique({ where: { id: batch.lot.partsListId }, include: { steps: { orderBy: { stepOrder: "asc" } } } });
 	if (!partsList) conflict("The batch does not have a readable published route version.");
-	const partIds = batch.parts.map((part) => part.partId);
-	const routeSteps = partsList.steps.filter((step) => partIds.length === 0 || partIds.includes(step.partId));
+	const routeSteps = partsList.steps.filter((step) => step.partId === batch.partId);
 	if (routeSteps.length === 0) conflict("The batch does not have an ordered route step for execution.");
 	const currentIndex = batch.positionProjection?.routeStepId
 		? routeSteps.findIndex((step) => step.id === batch.positionProjection?.routeStepId)
 		: -1;
 	const expected = routeSteps.find((step) => step.stepOrder > (currentIndex < 0 ? -1 : routeSteps[currentIndex].stepOrder));
 	if (!expected) conflict("The batch has no remaining forward route step.");
-	return { batch, routeSteps, expected, defaultPartId: batch.parts[0]?.partId ?? null };
+	return { batch, routeSteps, expected, defaultPartId: batch.partId };
 }
 
 export function commandRouter(
@@ -456,18 +447,93 @@ export function commandRouter(
 					const product = await transaction.product.findUnique({ where: { id: body.productId }, select: { id: true } });
 					if (!product) notFound("The requested catalog product was not found.");
 				}
+			const requirementInputs = body.modelRequirements ?? [];
+			const modelIds = requirementInputs.map((row) => row.modelId);
+			if (new Set(modelIds).size !== modelIds.length) conflict("Each model may appear only once in the requirements.");
+			const models = await transaction.model.findMany({ where: { id: { in: modelIds } }, include: { modelParts: true } });
+			if (models.length !== modelIds.length) notFound("Every requirement model was not found.");
+			if (body.productId) {
+				const foreign = models.filter((model) => model.productId !== body.productId);
+				if (foreign.length > 0) conflict("Every requirement model must belong to the project product.");
+			}
+			const totalQuantity = requirementInputs.reduce((sum, row) => sum + row.requiredQuantity, 0);
 				const project = await transaction.project.create({
 					data: {
 						workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS",
 						projectCode: body.projectCode,
 						name: body.name,
-						requiredProductionQuantity: body.requiredProductionQuantity,
+						requiredProductionQuantity: totalQuantity,
 						status: ProjectLifecycleStatus.DRAFT,
 						productId: body.productId ?? null,
 					},
 				});
-				await recordCommandSuccess(transaction, req, "PROJECT_CREATED", "Project", project.id, { projectCode: project.projectCode });
-				return { status: 201, body: projectResponse(project), headers: resourceHeaders(project.id, project.rowVersion) };
+				await transaction.productSpecification.create({
+					data: {
+						projectId: project.id,
+						skuCode: body.projectCode,
+						productName: body.name,
+						trayQuantityStandard: body.batchSize ?? 200,
+					},
+				});
+			const modelsById = new Map(models.map((model) => [model.id, model]));
+			const createdRequirements: Array<{ id: string; modelId: string; requiredQuantity: number }> = [];
+			for (const row of requirementInputs) {
+				const created = await transaction.projectModelRequirement.create({
+					data: { projectId: project.id, modelId: row.modelId, requiredQuantity: row.requiredQuantity },
+					select: { id: true, modelId: true, requiredQuantity: true },
+				});
+				createdRequirements.push(created);
+			}
+			// Snapshot one Project Part per ModelPart; each listed part is one unit per
+			// finished model for the stated product structure, so its required quantity
+			// equals the parent model requirement.
+				const requirementByModelId = new Map(createdRequirements.map((row) => [row.modelId, row]));
+				const allSteps: Array<{ partId: string; stageId: string; subStageId: string | null; stepOrder: number }> = [];
+				const validStageIds = new Set((await transaction.stage.findMany({ select: { id: true } })).map((stage) => stage.id));
+				const configuredSubStages = await transaction.subStage.findMany({ select: { id: true, eligibleStages: { select: { stageId: true } } } });
+				const validSubStagePairs = new Set(configuredSubStages.flatMap((subStage) => subStage.eligibleStages.map((eligibility) => `${subStage.id}:${eligibility.stageId}`)));
+				for (const model of models) {
+					const requirement = requirementByModelId.get(model.id);
+					if (!requirement) continue;
+					for (const modelPart of model.modelParts) {
+						const part = await transaction.part.create({
+							data: {
+								projectId: project.id,
+								partCode: modelPart.partCode,
+								partName: modelPart.partName,
+								plannedCycleTimes: (modelPart.plannedCycleTimes as Record<string, number> | null) ?? undefined,
+								sourceModelId: model.id,
+								sourceModelPartId: modelPart.id,
+								projectModelRequirementId: requirement.id,
+							},
+							select: { id: true },
+						});
+						for (const step of catalogRoutingSteps(modelPart.routingSteps)) {
+							if (!validStageIds.has(step.stageId)) continue;
+							if (step.subStageId !== null && !validSubStagePairs.has(`${step.subStageId}:${step.stageId}`)) continue;
+							allSteps.push({ ...step, partId: part.id });
+						}
+					}
+				}
+			const partsList = await transaction.partsList.create({ data: { projectId: project.id, version: 1, status: "DRAFT", steps: { create: allSteps } }, select: { id: true } });
+			// The project owns exactly one lot: it is created here, never separately.
+			// The lot name is the project name.
+			const lotCode = body.lotCode ?? `${body.projectCode}-L1`;
+			const lot = await transaction.lot.create({
+				data: {
+					projectId: project.id,
+					lotCode,
+					lotName: body.name,
+					partsListId: partsList.id,
+					partsListVersion: 1,
+					requiredProductionQuantity: totalQuantity,
+					status: LotStatus.PLANNED,
+					labelPackSize: body.batchSize ?? 200,
+				},
+				select: { id: true, lotCode: true },
+			});
+			await recordCommandSuccess(transaction, req, "PROJECT_CREATED", "Project", project.id, { projectCode: project.projectCode });
+			return { status: 201, body: { ...projectResponse({ ...project, requiredProductionQuantity: totalQuantity, batchSize: body.batchSize ?? 200 }), modelRequirements: createdRequirements, partsListVersionId: partsList.id, lotId: lot.id, lotCode: lot.lotCode }, headers: resourceHeaders(project.id, project.rowVersion) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -480,24 +546,169 @@ export function commandRouter(
 			const targetId = req.params.projectId;
 			const body = parseCommandBody(req, projectPatchSchema);
 			const expectedVersion = requireIfMatch(req, "project");
+			if (body.status !== undefined) {
+				if (body.name !== undefined || body.productId !== undefined || body.batchSize !== undefined) malformed("Status transitions cannot be combined with field edits.");
+				if (body.status === "RELEASED") {
+					const response = await executeCommand(database, req, "projectRelease", { projectId: targetId, expectedVersion }, async (transaction) => {
+						const current = await transaction.project.findUnique({ where: { id: targetId } });
+						if (!current) notFound("The requested project was not found.");
+						if (current.rowVersion !== expectedVersion) staleVersion();
+						if (current.status !== ProjectLifecycleStatus.DRAFT) conflict("Only draft projects can be released.");
+						const requirements = await transaction.projectModelRequirement.findMany({ where: { projectId: current.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+						if (requirements.length === 0) conflict("A project with no model requirements cannot be released.");
+						const parts = await transaction.part.findMany({ where: { projectId: current.id }, orderBy: [{ partCode: "asc" }, { id: "asc" }], select: { id: true, partCode: true, projectModelRequirementId: true } });
+						if (parts.length === 0) conflict("A project with no parts cannot be released.");
+						const requirementIds = new Set(requirements.map((row) => row.id));
+						const orphanParts = parts.filter((part) => !part.projectModelRequirementId || !requirementIds.has(part.projectModelRequirementId));
+						if (orphanParts.length > 0) conflict("Every project part must belong to a model requirement before release.");
+						const lot = await transaction.lot.findUnique({ where: { projectId: current.id }, include: { batches: { select: { id: true } } } });
+						if (!lot) conflict("Create the lot before releasing the project.");
+						const spec = await transaction.productSpecification.findUnique({ where: { projectId: current.id }, select: { trayQuantityStandard: true } });
+						const batchSize = spec && spec.trayQuantityStandard > 0 ? spec.trayQuantityStandard : 200;
+						const requirementById = new Map(requirements.map((row) => [row.id, row]));
+						// Release = publish: mint missing tray-sized series per ModelPart so the
+						// floor queue is non-empty without a separate Create batches step.
+						let mintedBatchCount = 0;
+						let globalSequence = lot.batches.length;
+						const orderedParts = [...parts].sort((a, b) => a.partCode.localeCompare(b.partCode));
+						for (const part of orderedParts) {
+							const requirement = requirementById.get(part.projectModelRequirementId as string);
+							if (!requirement) continue;
+							const existingCount = await transaction.batch.count({ where: { lotId: lot.id, partId: part.id } });
+							const seriesCount = Math.max(1, Math.ceil(requirement.requiredQuantity / batchSize));
+							let left = requirement.requiredQuantity;
+							// Account for already-planned quantity from a previous partial release.
+							const alreadyPlanned = await transaction.batch.aggregate({ where: { lotId: lot.id, partId: part.id }, _sum: { plannedQuantity: true } });
+							left = Math.max(0, requirement.requiredQuantity - (alreadyPlanned._sum.plannedQuantity ?? 0));
+							for (let series = existingCount + 1; series <= seriesCount && left > 0; series += 1) {
+								globalSequence += 1;
+								const plannedQuantity = Math.min(batchSize, left);
+								left -= plannedQuantity;
+								const batchCode = `${lot.lotCode}-B${String(globalSequence).padStart(3, "0")}`;
+								const batch = await transaction.batch.create({
+									data: {
+										batchCode,
+										barcodeValue: batchCode,
+										lotId: lot.id,
+										lineId: null,
+										plannedQuantity,
+										labelPackSize: batchSize,
+										projectModelRequirementId: requirement.id,
+										seriesNumber: series,
+										seriesCount,
+										partId: part.id,
+										currentStageId: "STG-PROJECTS",
+										status: BatchStatus.PLANNED,
+										createdBySubjectId: actorId(req),
+									},
+									select: { id: true },
+								});
+								await transaction.batchPositionProjection.create({
+									data: {
+										batchId: batch.id,
+										stageId: "STG-PROJECTS",
+										quantityMagnitude: String(plannedQuantity),
+										quantityUom: "EA",
+									},
+								});
+								mintedBatchCount += 1;
+							}
+						}
+						const project = await transaction.project.update({
+							where: { id: current.id },
+							data: { status: ProjectLifecycleStatus.RELEASED, releasedAt: new Date(), releasedBySubjectId: actorId(req), rowVersion: { increment: 1 } },
+						});
+						// Floor arrival queue only lists ACTIVE batches; releasing the project activates
+						// its PLANNED batches (including just-minted trays) for the next-hop station.
+						await transaction.batch.updateMany({
+							where: { lot: { projectId: project.id }, status: BatchStatus.PLANNED },
+							data: { status: BatchStatus.ACTIVE },
+						});
+						await recordCommandSuccess(transaction, req, "PROJECT_RELEASED", "Project", project.id, { rowVersion: project.rowVersion, mintedBatchCount });
+						return { status: 200, body: projectResponse(project), headers: resourceHeaders(project.id, project.rowVersion) };
+					});
+					respondCommand(res, response);
+					return;
+				}
+				// RELEASED → COMPLETED: explicit close after all execution/QC is terminal.
+				const response = await executeCommand(database, req, "projectComplete", { projectId: targetId, expectedVersion }, async (transaction) => {
+					const current = await transaction.project.findUnique({ where: { id: targetId } });
+					if (!current) notFound("The requested project was not found.");
+					if (current.rowVersion !== expectedVersion) staleVersion();
+					if (current.status !== ProjectLifecycleStatus.RELEASED) conflict("Only released projects can be completed.");
+					const batches = await transaction.batch.findMany({
+						where: { lot: { projectId: current.id } },
+						select: {
+							id: true,
+							status: true,
+							qualityInspections: {
+								orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+									take: 1,
+									select: {
+										decisions: {
+											orderBy: [{ decidedAt: "desc" }, { id: "desc" }],
+											take: 1,
+											select: { decision: true, failureDisposition: true },
+										},
+									},
+							},
+						},
+					});
+					if (batches.length === 0) conflict("A project with no batches cannot be completed.");
+					const unresolved = batches.filter((batch) => {
+						const latest = batch.qualityInspections[0]?.decisions[0];
+						return !(
+							(batch.status === BatchStatus.CLOSED && latest?.decision === "PASSED") ||
+							(batch.status === BatchStatus.SCRAPPED &&
+								latest?.decision === "FAILED" &&
+								latest.failureDisposition === "TRUE_NG")
+						);
+					});
+					if (unresolved.length > 0) conflict("Every batch requires a final QC disposition of PASSED or TRUE_NG; unresolved rework or hold prevents completion.");
+					const project = await transaction.project.update({
+						where: { id: current.id },
+						data: { status: ProjectLifecycleStatus.COMPLETED, completedAt: new Date(), completedBySubjectId: actorId(req), rowVersion: { increment: 1 } },
+					});
+					await recordCommandSuccess(transaction, req, "PROJECT_COMPLETED", "Project", project.id, { rowVersion: project.rowVersion });
+					return { status: 200, body: projectResponse(project), headers: resourceHeaders(project.id, project.rowVersion) };
+				});
+				respondCommand(res, response);
+				return;
+			}
 			const response = await executeCommand(database, req, "projectPatch", { projectId: targetId, body }, async (transaction) => {
 				const current = await transaction.project.findUnique({ where: { id: targetId } });
 				if (!current) notFound("The requested project was not found.");
 				if (current.rowVersion !== expectedVersion) staleVersion();
-				if (current.status === ProjectLifecycleStatus.RELEASED || current.status === ProjectLifecycleStatus.COMPLETED || current.status === ProjectLifecycleStatus.CANCELLED) conflict("Released or completed projects cannot be edited.");
+				if (current.status === ProjectLifecycleStatus.RELEASED || current.status === ProjectLifecycleStatus.COMPLETED) conflict("Released or completed projects cannot be edited.");
 				if (body.productId) {
 					const product = await transaction.product.findUnique({ where: { id: body.productId }, select: { id: true } });
 					if (!product) notFound("The requested catalog product was not found.");
 				}
-				const project = await transaction.project.update({
-					where: { id: current.id },
-					data: {
-						...(body.name === undefined ? {} : { name: body.name }),
-						...(body.requiredProductionQuantity === undefined ? {} : { requiredProductionQuantity: body.requiredProductionQuantity }),
-						...(body.productId === undefined ? {} : { productId: body.productId }),
-						rowVersion: { increment: 1 },
-					},
+			if (body.batchSize !== undefined) {
+				await transaction.productSpecification.updateMany({
+					where: { projectId: current.id },
+					data: { trayQuantityStandard: body.batchSize },
 				});
+				await transaction.lot.updateMany({
+					where: { projectId: current.id },
+					data: { labelPackSize: body.batchSize },
+				});
+			}
+			const project = await transaction.project.update({
+				where: { id: current.id },
+				data: {
+					...(body.name === undefined ? {} : { name: body.name }),
+					...(body.productId === undefined ? {} : { productId: body.productId }),
+					rowVersion: { increment: 1 },
+				},
+			});
+			// The lot name is the project name.
+			if (body.name !== undefined) {
+				await transaction.lot.updateMany({
+					where: { projectId: current.id },
+					data: { lotName: body.name },
+				});
+			}
 				await recordCommandSuccess(transaction, req, "PROJECT_UPDATED", "Project", project.id, { rowVersion: project.rowVersion });
 				return { status: 200, body: projectResponse(project), headers: resourceHeaders(project.id, project.rowVersion) };
 			});
@@ -507,81 +718,118 @@ export function commandRouter(
 		}
 	});
 
-	router.post("/projects/:projectId/model-allocations", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.put("/projects/:projectId/model-requirements", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const targetId = req.params.projectId;
-			const body = parseCommandBody(req, projectModelAllocationSchema);
+			const body = parseCommandBody(req, projectModelRequirementsSchema);
 			const expectedVersion = requireIfMatch(req, "project");
-			const response = await executeCommand(database, req, "projectModelAllocationUpsert", { projectId: targetId, body }, async (transaction) => {
+			const response = await executeCommand(database, req, "projectModelRequirementsReplace", { projectId: targetId, body }, async (transaction) => {
 				const project = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, productId: true, status: true, rowVersion: true } });
 				if (!project) notFound("The requested project was not found.");
 				if (project.rowVersion !== expectedVersion) staleVersion();
 				ensureProjectEditable(project);
+			if (project.status !== ProjectLifecycleStatus.DRAFT) conflict("Model requirements can only change while the project is a draft.");
+			// The lot is owned by the project (created with it), so a requirement
+			// replacement re-derives the lot target and re-points its route version.
 
-				const model = await transaction.model.findUnique({ where: { id: body.modelId }, include: { modelParts: true } });
-				if (!model) notFound("The requested catalog model was not found.");
-				if (project.productId !== null && model.productId !== project.productId) conflict("The selected model does not belong to the project product.");
-
-				const allocation = await transaction.projectModelAllocation.upsert({
-					where: { projectId_modelId: { projectId: project.id, modelId: model.id } },
-					create: {
-						projectId: project.id,
-						modelId: model.id,
-						plannedQuantity: body.plannedQuantity,
-						quantityMagnitude: body.quantityMagnitude ?? null,
-						quantityUom: body.quantityUom ?? null,
-						usageBasis: body.usageBasis ?? null,
-						sourceRevisionRef: body.sourceRevisionRef ?? null,
-					},
-					update: {
-						plannedQuantity: body.plannedQuantity,
-						quantityMagnitude: body.quantityMagnitude ?? null,
-						quantityUom: body.quantityUom ?? null,
-						usageBasis: body.usageBasis ?? null,
-						sourceRevisionRef: body.sourceRevisionRef ?? null,
-						rowVersion: { increment: 1 },
-					},
+				const modelIds = body.modelRequirements.map((row) => row.modelId);
+				if (new Set(modelIds).size !== modelIds.length) conflict("Each model may appear only once in the requirements.");
+				const models = await transaction.model.findMany({ where: { id: { in: modelIds } }, include: { modelParts: true } });
+				if (models.length !== modelIds.length) notFound("Every requirement model was not found.");
+				if (project.productId !== null) {
+					const foreign = models.filter((model) => model.productId !== project.productId);
+					if (foreign.length > 0) conflict("Every requirement model must belong to the project product.");
+				}
+				const priorRequirements = await transaction.projectModelRequirement.findMany({
+					where: { projectId: project.id },
+					select: { id: true, modelId: true, requiredQuantity: true },
 				});
-
-				const modelPartIds = model.modelParts.map((modelPart) => modelPart.id);
-				const existingParts = modelPartIds.length === 0
-					? []
-					: await transaction.part.findMany({ where: { projectId: project.id, sourceModelPartId: { in: modelPartIds } }, select: { sourceModelPartId: true } });
-				const existingPartIds = new Set(existingParts.map((part) => part.sourceModelPartId));
-				for (const modelPart of model.modelParts) {
-					if (existingPartIds.has(modelPart.id)) continue;
-					await transaction.part.create({
-						data: {
-							projectId: project.id,
-							partCode: modelPart.partCode,
-							partName: modelPart.partName,
-							plannedCycleTimes: (modelPart.plannedCycleTimes as Record<string, number> | null) ?? undefined,
-							sourceModelId: model.id,
-							sourceModelPartId: modelPart.id,
-						},
+				const sameModelSet =
+					priorRequirements.length === modelIds.length &&
+					priorRequirements.every((row) => modelIds.includes(row.modelId));
+				const totalQuantity = body.modelRequirements.reduce((sum, row) => sum + row.requiredQuantity, 0);
+				if (sameModelSet) {
+					const priorByModel = new Map(priorRequirements.map((row) => [row.modelId, row]));
+					for (const row of body.modelRequirements) {
+						const prior = priorByModel.get(row.modelId);
+						if (prior && prior.requiredQuantity !== row.requiredQuantity) {
+							await transaction.projectModelRequirement.update({
+								where: { id: prior.id },
+								data: { requiredQuantity: row.requiredQuantity },
+							});
+						}
+					}
+					const latestPartsList = await transaction.partsList.findFirst({
+						where: { projectId: project.id },
+						orderBy: [{ version: "desc" }, { id: "asc" }],
+						select: { id: true },
 					});
-				}
-
-				const currentPartsList = await transaction.partsList.findFirst({ where: { projectId: project.id }, orderBy: [{ version: "desc" }, { id: "desc" }], include: { steps: true } });
-				let partsListVersionId = currentPartsList?.id ?? null;
-				if (!currentPartsList) {
-					const projectParts = await transaction.part.findMany({ where: { projectId: project.id }, select: { id: true, sourceModelPartId: true } });
-					const projectPartByModelPartId = new Map(projectParts.flatMap((part) => part.sourceModelPartId ? [[part.sourceModelPartId, part.id] as const] : []));
-					const validStageIds = new Set((await transaction.stage.findMany({ select: { id: true } })).map((stage) => stage.id));
-					const configuredSubStages = await transaction.subStage.findMany({ select: { id: true, eligibleStages: { select: { stageId: true } } } });
-					const validSubStagePairs = new Set(configuredSubStages.flatMap((subStage) => subStage.eligibleStages.map((eligibility) => `${subStage.id}:${eligibility.stageId}`)));
-					const initialSteps = model.modelParts.flatMap((modelPart) => {
-						const partId = projectPartByModelPartId.get(modelPart.id);
-						if (!partId) return [];
-						return catalogRoutingSteps(modelPart.routingSteps).filter((step) => validStageIds.has(step.stageId) && (step.subStageId === null || validSubStagePairs.has(`${step.subStageId}:${step.stageId}`))).map((step) => ({ ...step, partId }));
+					if (!latestPartsList) conflict("The draft project has no parts-list version.");
+					await transaction.lot.updateMany({
+						where: { projectId: project.id },
+						data: { requiredProductionQuantity: totalQuantity },
 					});
-					const partsList = await transaction.partsList.create({ data: { projectId: project.id, version: 1, status: "DRAFT", steps: { create: initialSteps } }, select: { id: true } });
-					partsListVersionId = partsList.id;
+					const updatedProject = await transaction.project.update({
+						where: { id: project.id },
+						data: { requiredProductionQuantity: totalQuantity, rowVersion: { increment: 1 } },
+						select: { id: true, rowVersion: true },
+					});
+					await recordCommandSuccess(transaction, req, "PROJECT_MODEL_REQUIREMENTS_REPLACED", "Project", project.id, { modelCount: priorRequirements.length, partsListVersionId: latestPartsList.id });
+					return { status: 200, body: { modelRequirements: priorRequirements.map((prior) => ({ ...prior, requiredQuantity: body.modelRequirements.find((row) => row.modelId === prior.modelId)!.requiredQuantity })), partsListVersionId: latestPartsList.id, projectRowVersion: updatedProject.rowVersion }, headers: resourceHeaders(project.id, updatedProject.rowVersion) };
 				}
+				// Full replacement: reset requirement set, part snapshots, and route
+				// versions, then rebuild from the catalog. Route customizations made
+				// after creation are reset by a requirement-set replacement.
+				const oldLists = await transaction.partsList.findMany({ where: { projectId: project.id }, select: { id: true } });
+				if (oldLists.length > 0) {
+					await transaction.routingStep.deleteMany({ where: { partsListId: { in: oldLists.map((row) => row.id) } } });
+					await transaction.partsList.deleteMany({ where: { projectId: project.id } });
+				}
+				await transaction.part.deleteMany({ where: { projectId: project.id } });
+				await transaction.projectModelRequirement.deleteMany({ where: { projectId: project.id } });
 
-				const updatedProject = await transaction.project.update({ where: { id: project.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
-				await recordCommandSuccess(transaction, req, "PROJECT_MODEL_ALLOCATION_UPSERTED", "Project", project.id, { allocationId: allocation.id, modelId: model.id, partsListVersionId });
-				return { status: 200, body: { allocationId: allocation.id, modelId: allocation.modelId, plannedQuantity: allocation.plannedQuantity, partsListVersionId, projectRowVersion: updatedProject.rowVersion }, headers: resourceHeaders(project.id, updatedProject.rowVersion) };
+				const modelsById = new Map(models.map((model) => [model.id, model]));
+				const createdRequirements: Array<{ id: string; modelId: string; requiredQuantity: number }> = [];
+				for (const row of body.modelRequirements) {
+					const created = await transaction.projectModelRequirement.create({
+						data: { projectId: project.id, modelId: row.modelId, requiredQuantity: row.requiredQuantity },
+						select: { id: true, modelId: true, requiredQuantity: true },
+					});
+					createdRequirements.push(created);
+				}
+				const validStageIds = new Set((await transaction.stage.findMany({ select: { id: true } })).map((stage) => stage.id));
+				const configuredSubStages = await transaction.subStage.findMany({ select: { id: true, eligibleStages: { select: { stageId: true } } } });
+				const validSubStagePairs = new Set(configuredSubStages.flatMap((subStage) => subStage.eligibleStages.map((eligibility) => `${subStage.id}:${eligibility.stageId}`)));
+				const allSteps: Array<{ partId: string; stageId: string; subStageId: string | null; stepOrder: number }> = [];
+				for (const modelId of modelIds) {
+					const model = modelsById.get(modelId);
+					const requirement = createdRequirements.find((row) => row.modelId === modelId);
+					if (!model || !requirement) continue;
+					for (const modelPart of model.modelParts) {
+						const part = await transaction.part.create({
+							data: {
+								projectId: project.id,
+								partCode: modelPart.partCode,
+								partName: modelPart.partName,
+								plannedCycleTimes: (modelPart.plannedCycleTimes as Record<string, number> | null) ?? undefined,
+								sourceModelId: model.id,
+								sourceModelPartId: modelPart.id,
+								projectModelRequirementId: requirement.id,
+							},
+							select: { id: true },
+						});
+						for (const step of catalogRoutingSteps(modelPart.routingSteps)) {
+							if (!validStageIds.has(step.stageId)) continue;
+							if (step.subStageId !== null && !validSubStagePairs.has(`${step.subStageId}:${step.stageId}`)) continue;
+							allSteps.push({ ...step, partId: part.id });
+						}
+					}
+				}
+			const partsList = await transaction.partsList.create({ data: { projectId: project.id, version: 1, status: "DRAFT", steps: { create: allSteps } }, select: { id: true } });
+			await transaction.lot.updateMany({ where: { projectId: project.id }, data: { partsListId: partsList.id, partsListVersion: 1, requiredProductionQuantity: totalQuantity } });
+			const updatedProject = await transaction.project.update({ where: { id: project.id }, data: { requiredProductionQuantity: totalQuantity, rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
+				await recordCommandSuccess(transaction, req, "PROJECT_MODEL_REQUIREMENTS_REPLACED", "Project", project.id, { modelCount: createdRequirements.length, partsListVersionId: partsList.id });
+				return { status: 200, body: { modelRequirements: createdRequirements, partsListVersionId: partsList.id, projectRowVersion: updatedProject.rowVersion }, headers: resourceHeaders(project.id, updatedProject.rowVersion) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -669,92 +917,37 @@ export function commandRouter(
 						: (value as Record<string, number>);
 				const snapshot = asCycleMap(updated.plannedCycleTimes);
 				const override = asCycleMap(updated.plannedCycleTimesOverride);
-				await recordCommandSuccess(transaction, req, "PLAN_PART_CYCLE_TIME_OVERRIDDEN", "Part", updated.id, { projectId: targetId, rowVersion: updated.rowVersion });
-				return { status: 200, body: { partId: updated.id, plannedCycleTimes: snapshot, plannedCycleTimesOverride: override }, headers: { ETag: `"${updated.rowVersion}"` } };
-			});
-			respondCommand(res, response);
-		} catch (error) {
-			commandError(error, req, res, next);
-		}
-	});
+			await recordCommandSuccess(transaction, req, "PLAN_PART_CYCLE_TIME_OVERRIDDEN", "Part", updated.id, { projectId: targetId, rowVersion: updated.rowVersion });
+			return { status: 200, body: { partId: updated.id, plannedCycleTimes: snapshot, plannedCycleTimesOverride: override }, headers: { ETag: `"${updated.rowVersion}"` } };
+		});
+		respondCommand(res, response);
+	} catch (error) {
+		commandError(error, req, res, next);
+	}
+});
 
-	router.post("/projects/:projectId/release", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
+	router.delete("/projects/:projectId/parts/:partId", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const targetId = req.params.projectId;
+			const partId = req.params.partId;
 			const expectedVersion = requireIfMatch(req, "project");
-			const response = await executeCommand(database, req, "projectRelease", { projectId: targetId, expectedVersion }, async (transaction) => {
-				const current = await transaction.project.findUnique({ where: { id: targetId } });
-				if (!current) notFound("The requested project was not found.");
-				if (current.rowVersion !== expectedVersion) staleVersion();
-				if (current.status !== ProjectLifecycleStatus.DRAFT && current.status !== ProjectLifecycleStatus.READY) conflict("Only draft or ready projects can be released.");
-				// Release = publish: mint missing tray-sized scan units so the floor
-				// queue is non-empty without a separate Create batches step.
-				const lots = await transaction.lot.findMany({
-					where: { projectId: current.id },
-					select: {
-						id: true,
-						lotCode: true,
-						requiredProductionQuantity: true,
-						labelPackSize: true,
-						partId: true,
-						batches: { select: { plannedQuantity: true } },
-					},
-					orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-				});
-				let mintedBatchCount = 0;
-				for (const lot of lots) {
-					const packSize = lot.labelPackSize > 0 ? lot.labelPackSize : 240;
-					const alreadyPlanned = lot.batches.reduce((sum, batch) => sum + batch.plannedQuantity, 0);
-					const remaining = Math.max(0, lot.requiredProductionQuantity - alreadyPlanned);
-					const batchCount = Math.ceil(remaining / packSize);
-					let left = remaining;
-					for (let index = 1; index <= batchCount; index += 1) {
-						const sequence = lot.batches.length + index;
-						const batchCode = `${lot.lotCode}-B${String(sequence).padStart(3, "0")}`;
-						const plannedQuantity = Math.min(packSize, left);
-						left -= plannedQuantity;
-						const batch = await transaction.batch.create({
-							data: {
-								batchCode,
-								barcodeValue: batchCode,
-								lotId: lot.id,
-								// Unassigned line until product/line ownership is modeled (null passes line filters).
-								lineId: null,
-								plannedQuantity,
-								labelPackSize: packSize,
-								// Pre-floor marker: next expected hop = route step 1.
-								currentStageId: "STG-PROJECTS",
-								status: BatchStatus.PLANNED,
-								createdBySubjectId: actorId(req),
-							},
-							select: { id: true },
-						});
-						await transaction.batchPartLine.create({
-							data: { batchId: batch.id, partId: lot.partId, quantity: plannedQuantity },
-						});
-						await transaction.batchPositionProjection.create({
-							data: {
-								batchId: batch.id,
-								stageId: "STG-PROJECTS",
-								quantityMagnitude: String(plannedQuantity),
-								quantityUom: "EA",
-							},
-						});
-						mintedBatchCount += 1;
-					}
-				}
-				const project = await transaction.project.update({
-					where: { id: current.id },
-					data: { status: ProjectLifecycleStatus.RELEASED, releasedAt: new Date(), releasedBySubjectId: actorId(req), rowVersion: { increment: 1 } },
-				});
-				// Floor arrival queue only lists ACTIVE batches; releasing the project activates
-				// its PLANNED batches (including just-minted trays) for the next-hop station.
-				await transaction.batch.updateMany({
-					where: { lot: { projectId: project.id }, status: BatchStatus.PLANNED },
-					data: { status: BatchStatus.ACTIVE },
-				});
-				await recordCommandSuccess(transaction, req, "PROJECT_RELEASED", "Project", project.id, { rowVersion: project.rowVersion, mintedBatchCount });
-				return { status: 200, body: projectResponse(project), headers: resourceHeaders(project.id, project.rowVersion) };
+			const response = await executeCommand(database, req, "projectPartRemove", { projectId: targetId, partId }, async (transaction) => {
+				const project = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true, status: true, rowVersion: true } });
+				if (!project) notFound("The requested project was not found.");
+				if (project.rowVersion !== expectedVersion) staleVersion();
+				// Project-scoped removal only: the catalog ModelPart is untouched.
+				// Draft only — released batches carry Batch identity that must survive.
+				ensureProjectEditable(project);
+				const part = await transaction.part.findFirst({ where: { id: partId, projectId: targetId }, select: { id: true, partCode: true } });
+				if (!part) notFound("The requested project part was not found in this project.");
+				const referencingBatches = await transaction.batch.count({ where: { partId: part.id } });
+				if (referencingBatches > 0) conflict("Parts with batches cannot be removed.");
+				await transaction.routingStep.deleteMany({ where: { partId: part.id } });
+				await transaction.lotPartAllocation.deleteMany({ where: { partId: part.id } });
+				await transaction.part.delete({ where: { id: part.id } });
+				const updatedProject = await transaction.project.update({ where: { id: project.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
+				await recordCommandSuccess(transaction, req, "PROJECT_PART_REMOVED", "Part", part.id, { projectId: targetId, partCode: part.partCode });
+				return { status: 200, body: { partId: part.id, projectRowVersion: updatedProject.rowVersion }, headers: resourceHeaders(project.id, updatedProject.rowVersion) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -774,12 +967,14 @@ export function commandRouter(
 				});
 				if (!current) notFound("The requested project was not found.");
 				if (expectedVersion !== undefined && current.rowVersion !== expectedVersion) staleVersion();
-				if (current.status !== ProjectLifecycleStatus.DRAFT) {
-					conflict("Released or completed projects cannot be deleted.");
-				}
-				if (current.lot) {
-					conflict("Projects with lots cannot be deleted.");
-				}
+			if (current.status !== ProjectLifecycleStatus.DRAFT) {
+				conflict("Released or completed projects cannot be deleted.");
+			}
+			if (current.lot) {
+				const batchCount = await transaction.batch.count({ where: { lotId: current.lot.id } });
+				if (batchCount > 0) conflict("Projects with batches cannot be deleted.");
+				await transaction.lot.delete({ where: { id: current.lot.id } });
+			}
 				const partsLists = await transaction.partsList.findMany({ where: { projectId: current.id }, select: { id: true } });
 				if (partsLists.length > 0) {
 					const partsListIds = partsLists.map((p) => p.id);
@@ -787,7 +982,7 @@ export function commandRouter(
 					await transaction.partsList.deleteMany({ where: { id: { in: partsListIds } } });
 				}
 				await transaction.part.deleteMany({ where: { projectId: current.id } });
-				await transaction.projectModelAllocation.deleteMany({ where: { projectId: current.id } });
+				await transaction.projectModelRequirement.deleteMany({ where: { projectId: current.id } });
 				await transaction.productSpecification.deleteMany({ where: { projectId: current.id } });
 				await transaction.workflowGroup.deleteMany({ where: { projectId: current.id } });
 				await transaction.processChangeLog.deleteMany({ where: { projectId: current.id } });
@@ -807,54 +1002,6 @@ export function commandRouter(
 		}
 	});
 
-	router.post("/projects/:projectId/lots", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
-		try {
-			const targetId = req.params.projectId;
-			const body = parseCommandBody(req, lotCreateSchema);
-			const response = await executeCommand(database, req, "projectLotCreate", { projectId: targetId, body }, async (transaction) => {
-				const project = await transaction.project.findUnique({ where: { id: targetId }, select: { id: true } });
-				if (!project) notFound("The requested project was not found.");
-				const existingLot = await transaction.lot.findUnique({ where: { projectId: targetId }, select: { id: true } });
-				if (existingLot) cardinalityConflict("The production project already has a lot.");
-				const partsList = await transaction.partsList.findFirst({ where: { id: body.partsListId, projectId: targetId, version: body.partsListVersion }, select: { id: true } });
-				if (!partsList) notFound("The requested parts-list version was not found for this production project.");
-				const part = await transaction.part.findFirst({ where: { id: body.partId, projectId: targetId }, select: { id: true, partName: true } });
-				if (!part) notFound("The requested project part was not found.");
-				const lot = await transaction.lot.create({
-					data: {
-						projectId: targetId,
-						lotCode: body.lotCode,
-						lotName: body.lotName,
-						partsListId: body.partsListId,
-						partsListVersion: body.partsListVersion,
-						partId: body.partId,
-						partName: part.partName,
-						requiredProductionQuantity: body.requiredProductionQuantity,
-						status: LotStatus.PLANNED,
-						quantityMagnitude: body.quantityMagnitude ?? null,
-						quantityUom: body.quantityUom ?? null,
-						usageBasis: body.usageBasis ?? null,
-						labelPackSize: body.labelPackSize,
-					},
-				});
-				await transaction.lotPartAllocation.create({
-					data: {
-						lotId: lot.id,
-						partId: body.partId,
-						quantityMagnitude: body.quantityMagnitude ?? String(body.requiredProductionQuantity),
-						quantityUom: body.quantityUom ?? "EA",
-						usageBasis: body.usageBasis ?? null,
-					},
-				});
-				await recordCommandSuccess(transaction, req, "LOT_CREATED", "Lot", lot.id, { projectId: targetId, lotCode: lot.lotCode });
-				return { status: 201, body: { lotId: lot.id, lotCode: lot.lotCode, status: lot.status }, headers: { Location: `/api/v1/lots/${lot.id}` } };
-			});
-			respondCommand(res, response);
-		} catch (error) {
-			commandError(error, req, res, next);
-		}
-	});
-
 	router.post("/batches", requireCapability("planning.manage", requireCanonicalCapability), async (req, res, next) => {
 		try {
 			const body = parseCommandBody(req, batchCreateSchema);
@@ -865,10 +1012,11 @@ export function commandRouter(
 					const line = await transaction.line.findUnique({ where: { id: body.lineId }, select: { id: true } });
 					if (!line) notFound("The requested production line was not found.");
 				}
-				const parts = body.parts ?? [];
-				const uniquePartIds = [...new Set(parts.map((part) => part.partId))];
-				const validParts = await transaction.part.findMany({ where: { id: { in: uniquePartIds }, projectId: lot.projectId }, select: { id: true } });
-				if (validParts.length !== uniquePartIds.length) notFound("Every batch part must belong to the lot's project.");
+				const part = await transaction.part.findFirst({
+					where: { id: body.partId, projectId: lot.projectId },
+					select: { id: true, projectModelRequirementId: true },
+				});
+				if (!part) notFound("The batch part must belong to the lot's project.");
 				const batch = await transaction.batch.create({
 					data: {
 						batchCode: body.batchCode,
@@ -877,17 +1025,14 @@ export function commandRouter(
 						lineId: body.lineId ?? null,
 						plannedQuantity: body.plannedQuantity,
 						labelPackSize: body.labelPackSize,
+						partId: part.id,
+						projectModelRequirementId: part.projectModelRequirementId,
 						currentStageId: body.currentStageId,
 						currentSubStageId: body.currentSubStageId ?? null,
 						status: BatchStatus.PLANNED,
 						createdBySubjectId: actorId(req),
 					},
 				});
-				if (parts.length > 0) {
-					await transaction.batchPartLine.createMany({
-						data: parts.map((part) => ({ batchId: batch.id, partId: part.partId, quantity: part.quantity, quantityMagnitude: part.quantityMagnitude ?? null, quantityUom: part.quantityUom ?? null })),
-					});
-				}
 				await transaction.batchPositionProjection.create({
 					data: { batchId: batch.id, stageId: body.currentStageId, subStageId: body.currentSubStageId ?? null, quantityMagnitude: String(body.plannedQuantity), quantityUom: "EA" },
 				});
@@ -907,8 +1052,10 @@ export function commandRouter(
 				const context = await batchRouteContext(transaction, body.batchId);
 				const attemptedSubStageId = body.subStageId ?? null;
 				const accepted = context.expected.stageId === body.stageId && context.expected.subStageId === attemptedSubStageId;
-				const partId = body.partId ?? context.defaultPartId;
-				if (!partId) conflict("A stage event requires a batch part so route evidence remains traceable.");
+				if (body.partId !== undefined && body.partId !== null && body.partId !== context.defaultPartId) {
+					conflict("A stage event Part must match the Batch's assigned Project Part.");
+				}
+				const partId = context.defaultPartId;
 				const event = await transaction.stageEvent.create({
 					data: {
 						stageId: body.stageId,
@@ -1139,6 +1286,7 @@ export function commandRouter(
 					data: {
 						inspectionId: inspection.id,
 						decision: body.decision,
+						failureDisposition: body.decision === "FAILED" ? (body.failureDisposition ?? null) : null,
 						reasonCode: body.reasonCode ?? null,
 						reasonNote: body.reasonNote ?? null,
 						decidedBySubjectId: actorId(req),
@@ -1148,8 +1296,22 @@ export function commandRouter(
 					where: { id: inspection.id },
 					data: { status: body.decision === "HOLD" ? QualityInspectionStatus.IN_PROGRESS : QualityInspectionStatus.COMPLETED, completedAt: body.decision === "HOLD" ? null : new Date(), rowVersion: { increment: 1 } },
 				});
-				await recordCommandSuccess(transaction, req, "QUALITY_DECISION_RECORDED", "QualityInspection", inspection.id, { qualityDecisionId: decision.id, decision: decision.decision });
-				return { status: 201, body: { qualityDecisionId: decision.id, qualityInspectionId: updatedInspection.id, decision: decision.decision, inspectionStatus: updatedInspection.status, rowVersion: updatedInspection.rowVersion }, headers: { Location: `/api/v1/quality-inspections/${inspection.id}/decisions/${decision.id}`, ETag: `"${updatedInspection.rowVersion}"` } };
+				// Batch disposition follows the output QC verdict: a passing final gate
+				// closes the batch, True-NG scraps it, and rework/hold keeps it held for
+				// another inspection attempt. Intermediate-stage QC that is not the final
+				// output gate is a floor-design boundary; this slice treats the recorded
+				// output verdict as the batch disposition.
+				const batchStatus = body.decision === "PASSED"
+					? BatchStatus.CLOSED
+					: body.decision === "FAILED" && body.failureDisposition === "TRUE_NG"
+						? BatchStatus.SCRAPPED
+						: BatchStatus.HELD;
+				await transaction.batch.update({
+					where: { id: inspection.batchId },
+					data: { status: batchStatus, rowVersion: { increment: 1 } },
+				});
+				await recordCommandSuccess(transaction, req, "QUALITY_DECISION_RECORDED", "QualityInspection", inspection.id, { qualityDecisionId: decision.id, decision: decision.decision, batchStatus });
+				return { status: 201, body: { qualityDecisionId: decision.id, qualityInspectionId: updatedInspection.id, decision: decision.decision, inspectionStatus: updatedInspection.status, batchStatus, rowVersion: updatedInspection.rowVersion }, headers: { Location: `/api/v1/quality-inspections/${inspection.id}/decisions/${decision.id}`, ETag: `"${updatedInspection.rowVersion}"` } };
 			});
 			respondCommand(res, response);
 		} catch (error) {

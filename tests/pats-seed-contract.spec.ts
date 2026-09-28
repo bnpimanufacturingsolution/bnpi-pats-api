@@ -26,7 +26,6 @@ describe("PATS seed contract", () => {
     );
 
     for (const required of [
-      "lotPartAllocation",
       "stageEvent",
       "inventoryTransaction",
       "routingViolation",
@@ -58,6 +57,11 @@ describe("PATS seed contract", () => {
     expect(script).not.to.contain("planDemandAllocation");
     expect(script).not.to.contain("materialRequirement");
     expect(script).not.to.contain("pmrs");
+    // D-041: model requirements carry the Project quantities; batches carry series identity.
+    expect(script).to.contain("projectModelRequirement");
+    expect(script).to.contain("seriesNumber");
+    expect(script).not.to.contain("projectModelAllocation");
+    expect(script).not.to.contain("lifecycleStatus: \"COMMITTED\"");
     // BOM/ProcessRoute writes removed 2026-09-25 (scoped §7 exception).
     expect(script).not.to.contain("tx.bomDefinition");
     expect(script).not.to.contain("tx.bomLine");

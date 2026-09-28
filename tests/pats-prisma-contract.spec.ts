@@ -35,7 +35,7 @@ describe("PATS Prisma boundary", () => {
       "model Product {",
       "model Model {",
       "model ModelPart {",
-      "model ProjectModelAllocation {",
+      "model ProjectModelRequirement {",
       "model Project {",
       "model ProductSpecification {",
       "model PartsList {",
@@ -43,7 +43,6 @@ describe("PATS Prisma boundary", () => {
       "model Part {",
       "model Lot {",
       "model Batch {",
-      "model BatchPartLine {",
       "model ProductionLine {",
       "model Section {",
       "model StationStep {",
@@ -57,14 +56,18 @@ describe("PATS Prisma boundary", () => {
     }
 
     expect(schema).to.match(/productId\s+String\?/);
-    expect(schema).to.match(/modelAllocations\s+ProjectModelAllocation\[\]/);
-    expect(schema).to.match(/projectModelAllocationId\s+String\?/);
+    expect(schema).to.match(/modelRequirements\s+ProjectModelRequirement\[\]/);
+    expect(schema).to.match(/projectModelRequirementId\s+String\?/);
     expect(schema).to.match(/batchCode\s+String\s+@unique/);
     expect(schema).to.match(/plannedQuantity\s+Int/);
     expect(schema).to.match(/labelPackSize\s+Int/);
     expect(schema).to.match(/enum BatchStatus[\s\S]*?\bPLANNED\b/);
     expect(schema).to.match(/model Batch \{[\s\S]*?lineId\s+String\?/);
     expect(schema).to.match(/model Batch \{[\s\S]*?line\s+Line\?/);
+    expect(schema).to.match(/model Batch \{[\s\S]*?partId\s+String/);
+    expect(schema).to.match(/model Batch \{[\s\S]*?part\s+Part/);
+    expect(schema).not.to.contain("model BatchPartLine {");
+    expect(schema).not.to.match(/model Lot \{[\s\S]*?partId\s+String/);
     expect(schema).to.match(/enum SourceRunStatus[\s\S]*?\bPARTIAL\b/);
     expect(schema).to.match(/enum SourceArtifactType[\s\S]*?\bPDF\b/);
     expect(schema).to.match(/enum SourceExtractionStatus[\s\S]*?\bFAILED\b/);

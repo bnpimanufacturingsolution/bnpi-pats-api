@@ -14,11 +14,10 @@ function batch(overrides: Partial<QcResolveBatch> = {}): QcResolveBatch {
 		lot: {
 			id: "lot-1",
 			lotCode: "LOT-01",
-			partName: "Body",
 			project: { product: { productName: "Fruits" } },
 		},
-		projectModelAllocation: { model: { modelName: "M03", modelNumber: "M03" } },
-		parts: [{ partId: "part-1", quantity: 50, part: { partName: "Body", partCode: "P-BODY" } }],
+		projectModelRequirement: { model: { modelName: "M03", modelNumber: "M03" } },
+		part: { id: "part-1", partName: "Body", partCode: "P-BODY" },
 		qualityInspections: [],
 		...overrides,
 	};

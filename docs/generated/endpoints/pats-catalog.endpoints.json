@@ -413,5 +413,54 @@
       "hasSearchParam": false,
       "hasSortParams": false
     }
+  },
+  {
+    "id": "catalogModelPartDelete",
+    "method": "DELETE",
+    "url": "/api/v1/catalog/model-parts/{modelPartId}",
+    "summary": "Delete a draft catalog model part",
+    "tags": [
+      "PATS Catalog"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "modelPartId",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Draft model part deleted; the owning model version is bumped",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Catalog model part not found",
+        "contentTypes": []
+      },
+      "409": {
+        "description": "Published part or project parts still reference it",
+        "contentTypes": []
+      },
+      "412": {
+        "description": "Stale or missing If-Match",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
   }
 ]

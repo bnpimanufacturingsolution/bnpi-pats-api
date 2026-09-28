@@ -323,39 +323,45 @@ components:
         batch: { $ref: '#/components/schemas/QualityBatch' }
     QualityDecision:
       type: object
-      required: [id, decision, reasonCode, reasonNote, decidedAt]
+      required: [id, decision, failureDisposition, reasonCode, reasonNote, decidedAt]
       properties:
         id: { type: string }
         decision: { type: string, enum: [PASSED, FAILED, HOLD] }
+        failureDisposition: { type: string, enum: [REWORK, TRUE_NG], nullable: true }
         reasonCode: { type: string, nullable: true }
         reasonNote: { type: string, nullable: true }
         decidedAt: { type: string, format: date-time }
     QualityBatch:
       type: object
-      required: [id, batchCode, lotId, plannedQuantity, parts]
+      required: [id, batchCode, lotId, plannedQuantity, seriesNumber, seriesCount, part]
       properties:
         id: { type: string }
         batchCode: { type: string }
         lotId: { type: string }
         plannedQuantity: { type: integer, minimum: 0 }
-        parts:
-          type: array
-          items: { $ref: '#/components/schemas/QualityBatchPart' }
+        seriesNumber: { type: integer, nullable: true }
+        seriesCount: { type: integer, nullable: true }
+        part: { $ref: '#/components/schemas/QualityBatchPart' }
+        lot: { type: object, required: [lotCode], properties: { lotCode: { type: string } } }
+        projectModelRequirement:
+          type: object
+          nullable: true
+          required: [model]
+          properties:
+            model:
+              type: object
+              required: [modelNumber, modelName]
+              properties:
+                modelNumber: { type: string }
+                modelName: { type: string, nullable: true }
+        status: { type: string }
     QualityBatchPart:
       type: object
-      required: [partId, quantity, quantityMagnitude, quantityUom, part]
+      required: [partId, partCode, partName]
       properties:
         partId: { type: string }
-        quantity: { type: integer, minimum: 0 }
-        quantityMagnitude: { type: string, nullable: true }
-        quantityUom: { type: string, nullable: true }
-        part:
-          type: object
-          required: [id, partCode, partName]
-          properties:
-            id: { type: string }
-            partCode: { type: string }
-            partName: { type: string }
+        partCode: { type: string }
+        partName: { type: string }
     DashboardSummary:
       type: object
       required: [generatedAt, plans, activeProjects, activeLots, activeBatches, openViolations, qualityHolds, inventoryTransactions]

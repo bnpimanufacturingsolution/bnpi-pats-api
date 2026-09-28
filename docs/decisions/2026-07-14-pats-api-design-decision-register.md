@@ -21,6 +21,7 @@ contracts.
 | D-038 | App-backed Project scope | Keep Project, model quantity lineage, Parts, Parts List routes, Lots, and execution. Remove unwired Demand/PMRS/MaterialRequirement surfaces and demand-only fields from the current app/API contract | USER_CONFIRMED_AMENDMENT |
 | D-039 | Model ProcessRoute API adoption | Retire the parallel ProcessRoute/ProcessRouteStage API slice because the active app authors routing on ModelPart; retain Stage/SubStage for manufacturing route and execution use | USER_CONFIRMED_AMENDMENT — TRANSITIONAL TO 2027-01-01 |
 | D-040 | Floor identity model | Final work tree is ProductionLine → Section → Process → Sub-process; Line is the management/screen grouping with one StationScreen per published Line; StationScreen is Line publication state, not a separate table; floor bindings use Section/Process/Sub-process only | USER_CONFIRMED_AMENDMENT — FINAL DESIGN; MIGRATION PENDING |
+| D-041 | Project model quantities and Part series | Project is the requirement; per-Model required quantities in EA sum to its target; for the stated Product Pack structure, each ModelPart is one per finished Model; each Batch/Series is one ModelPart, default 200 configurable, partial final Batch allowed, stable `x/y` per ModelPart | USER_CONFIRMED — IMPLEMENTED 2026-09-27; future multi-quantity ModelParts need source evidence |
 | D-011 | Route versioning | Published Parts List versions are immutable; active batches retain their version | PROPOSED |
 | D-012 | Current batch position | Derive from valid StageEvents and maintain a rebuildable projection | PROPOSED |
 | D-013 | Event and audit strategy | Append-oriented ledgers plus transactional outbox and audit records | PROPOSED |
@@ -504,6 +505,111 @@ and phased migration; it does not apply a database migration by itself.
   wipe/summary assertions; full suite green.
 - **App UI:** untouched per the frozen-layout constraint; the app's existing setup editors continue
   against unchanged v1 shapes plus additive fields.
+
+## User-approved Project model-quantity/series direction (2026-09-27)
+
+- **Project is the production requirement.** A Project records required finished quantity per
+  selected Model; the Project target is their sum in EA.
+- **Execution unit for this flow:** each Batch/Series is for one ModelPart. Default batch quantity
+  is 200 and configurable; partial final Batches are allowed. Each ModelPart has its own stable FIFO
+  series `x/y`; QC failure never renumbers later series.
+- **QC unit:** Batch. Rework retains Batch/series identity. True-NG keeps its QC disposition and
+  original series. The floor physically obtains needed units from upcoming production, but the
+  quantity/source transfer rule is unconfirmed and will not be automatically represented.
+- **Project close:** readiness is derived from terminal Batch/QC work; a user explicitly confirms
+  completion. Detailed Receiving/Issuance, scanning/inventory and line-screen work remains a
+  separate floor-execution design, except minimal Batch/label/QC data needed for Project truth.
+- **Quantity basis (confirmed 2026-09-27):** for the stated Product Pack each ModelPart is one
+  per finished Model, so each Project Part requirement equals its parent Model requirement. No
+  usage multiplier or per-Part entry in this slice; future packs with repeated usage need source
+  evidence and a separate decision.
+
+## User-approved scoped v1.2.1 §7 exception: Project requirement contract redesign (2026-09-27)
+
+The user approved immediate v1 replacement of the listed contracts because no production deployment
+exists and the active sibling app is the only known consumer.
+
+- **Excepted section:** REST v1.2.1 §7 minimum 90-day deprecation window for breaking public-v1
+  request/response/operation changes.
+- **Scope only:** replace `POST /api/v1/projects/{projectId}/model-allocations` with the canonical
+  Project Model Requirements contract; replace `POST /api/v1/projects/{projectId}/release` with the
+  Project lifecycle PATCH contract; remove independently writable `requiredProductionQuantity`
+  from Project create/update requests (Project total becomes derived from Model requirements);
+  replace `modelAllocations` Project response with `modelRequirements`; remove Lot's single-Part
+  request/response fields as multi-ModelPart Lots are represented by the requirement/Batch
+  relations. Other Project, Lot, Batch, QC, or v1 fields are outside this exception unless separately
+  approved.
+- **Reason:** pre-production design correction; no deployed production consumer and sibling app
+  migrated in the same coordinated implementation.
+- **Owner:** user, 2026-09-27.
+- **Review condition:** before production deployment or introduction of any external v1 consumer.
+- **Required evidence:** endpoint review checklist and REST sections §2–§6, §8–§12; OpenAPI matches
+  behavior; contract tests; migration and row-count preflight; app/API headed integration evidence.
+- **No implementation approval by this decision alone:** the ModelPart quantity source remains
+  `NEEDS_CONFIRMATION`; the implementation plan is gated on that value. Historical migrations are
+  immutable.
+
+## User-approved scoped v1.2.1 §7 extension: Batch/Lot cleanup (2026-09-27)
+
+The user approved the additional cleanup scope because each output Batch/Series is one ModelPart.
+
+- **Excepted section:** REST v1.2.1 §7 minimum 90-day deprecation window.
+- **Scope only:** replace Batch `parts[]`/`BatchPartLine[]` with direct `Batch.partId`; remove unused
+  Lot `partAllocations` response list. Project Part requirements remain available from the Project.
+- **Reason:** faithful one-Batch/one-ModelPart model; no production deployment exists and the active
+  sibling app is the only known consumer.
+- **Owner:** user, 2026-09-27.
+- **Review condition:** before production deployment or introduction of any external v1 consumer.
+
+## User-approved scoped v1.2.1 §7 extension: project-owned Lot + paper identity (2026-09-28)
+
+The Control No portion is superseded by the dated correction immediately following this entry.
+
+The user directed that creating a project means creating its lot (paper flow: Lot No
+suggested at creation; Control No auto-generated, customizable; product code
+auto-generated, customizable).
+
+- **Excepted section:** REST v1.2.1 §7 minimum 90-day deprecation window.
+- **Scope only:** `POST /api/v1/projects` creates the draft **and its single lot**
+  (optional `lotCode` suggestion, paper `controlNumber`; the lot name is the
+  project name, propagated on rename); `POST
+  /api/v1/projects/{projectId}/lots` **REMOVED**; `PUT .../model-requirements`
+  re-derives the owned lot target instead of blocking on lot existence (empty
+  set allowed, so a product-pack change can clear stale requirements); draft
+  `PATCH` accepts `productId` (pack stays editable until release) and
+  `batchSize`; new draft `PATCH .../lot` edits only `controlNumber`;
+  `Lot.controlNumber` added (migration
+  `20260928120000_project_lot_autocreate_control_number`); draft delete removes
+  its owned lot (blocked when batches exist); draft `DELETE .../parts/{partId}`
+  removes a project Part and its route steps (catalog untouched; restore by
+  re-applying requirements).
+- **Reason:** one Lot per Project (D-037) makes a separate lot step meaningless;
+  no production deployment exists and the active sibling app is the only known
+  consumer, migrated in the same slice.
+- **Owner:** user, 2026-09-28.
+- **Review condition:** before production deployment or introduction of any external v1 consumer.
+
+## User correction: park paper Control No outside Project/Lot (2026-09-28)
+
+This dated correction supersedes only the Control No portion of the preceding 2026-09-28
+project-owned Lot amendment. The project-created Lot behavior remains.
+
+- **User clarification:** the paper Control No identifies allocated Decoration requisition
+  requirements (PMRS-like). Its PATS resource owner and lifecycle are unconfirmed.
+- **Scope:** remove `controlNumber` from Project create payload/response, `Lot` schema and Project
+  detail response, remove `PATCH /api/v1/projects/{projectId}/lot`, and remove the field from the
+  Project UI. The field was introduced only in this pre-production slice; there is no deployed
+  consumer to migrate. New migration `20260928170000_park_unconfirmed_control_number` drops the
+  previously added placeholder column; historical migrations remain immutable.
+- **Evidence status:** Control No composition and source semantics remain `NEEDS_CONFIRMATION`; see
+  `docs/superpowers/reports/2026-09-28-paper-identifier-pattern-review.md`. The reported regional
+  multiple-Lot interpretation is `CONFLICTING` with D-037 one Lot per PATS Project and does not
+  amend D-037.
+- **Excepted section:** REST v1.2.1 §7 minimum 90-day deprecation window for removal of the newly
+  introduced v1 field/operation.
+- **Owner:** user, 2026-09-28.
+- **Review condition:** before any future PMRS/allocated-requirements resource is designed or an
+  external v1 consumer is introduced.
 
 ## User-confirmed planning noun: Project (2026-09-25)
 
