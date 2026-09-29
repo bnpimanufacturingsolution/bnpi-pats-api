@@ -566,8 +566,8 @@ export function domainReadRouter(
 					`).then(r => r[0]?.count ?? 0)
 					: database.section.count({ where: whereClause }),
 				searchText.length >= 3
-					? database.$queryRaw<{ id: string; sectionCode: string; name: string; displayOrder: number; isEnabled: boolean; parentSectionId: string | null; stageId: string | null }[]>(Prisma.sql`
-						SELECT s."id", s."sectionCode", s."name", s."displayOrder", s."isEnabled", s."parentSectionId", s."stageId"
+					? database.$queryRaw<{ id: string; sectionCode: string; name: string; displayOrder: number; isEnabled: boolean; productionLineId: string | null; stageId: string | null }[]>(Prisma.sql`
+						SELECT s."id", s."sectionCode", s."name", s."displayOrder", s."isEnabled", s."productionLineId", s."stageId"
 						FROM "Section" s
 						WHERE s."name" % ${searchText} OR s."sectionCode" % ${searchText}
 						ORDER BY s."name" <-> ${searchText}, s."displayOrder" ASC, s."id" ASC
