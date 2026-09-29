@@ -41,15 +41,14 @@ export type PrintJobStore = {
 						id: true;
 						lotCode: true;
 						partsListId: true;
-						partName: true;
 						project?: { select: { id: true; name: true; projectCode: true } };
 					};
 				};
-				parts: {
-					orderBy: { partId: "asc" };
-					take: 1;
-					select: { partId: true; quantity: true; part: { select: { partName: true; partCode: true } } };
+				part: {
+					select: { id: true; partName: true; partCode: true };
 				};
+				seriesNumber: true;
+				seriesCount: true;
 			};
 		}) => Promise<PrintJobBatch | null>;
 	};
@@ -108,7 +107,7 @@ export type PrintJobStore = {
 	};
 	routingStep: {
 		findMany: (args: {
-			where: { partsListId: string; partId?: { in: string[] } };
+			where: { partsListId: string; partId: string };
 			orderBy: Array<{ stepOrder: "asc" } | { id: "asc" }>;
 		}) => Promise<Array<{ id: string; stageId: string; subStageId: string | null; stepOrder: number }>>;
 	};
@@ -143,10 +142,11 @@ export type PrintJobBatch = {
 		id: string;
 		lotCode: string;
 		partsListId: string;
-		partName: string;
 		project?: { id: string; name: string; projectCode: string } | null;
 	};
-	parts: Array<{ partId: string; quantity: number; part: { partName: string; partCode: string } }>;
+	part: { id: string; partName: string; partCode: string };
+	seriesNumber: number | null;
+	seriesCount: number | null;
 };
 
 async function stepLabel(
@@ -167,7 +167,7 @@ function quantityOf(batch: PrintJobBatch): number {
 		const parsed = Number(typeof magnitude === "object" ? magnitude.toString() : magnitude);
 		if (Number.isFinite(parsed) && parsed > 0) return parsed;
 	}
-	return batch.parts[0]?.quantity || batch.plannedQuantity;
+	return batch.plannedQuantity;
 }
 
 export function resolvePrinterBinding(station: PrintJobStation): {
@@ -219,16 +219,18 @@ export function buildLabelIr(input: {
 	dpi: number;
 	printedAt: string;
 }): LabelIr {
-	const part = input.batch.parts[0];
+	const part = input.batch.part;
 	return {
 		barcodeValue: input.batch.barcodeValue,
 		batchCode: input.batch.batchCode,
 		lotCode: input.batch.lot.lotCode,
 		serialNumber: input.batch.barcodeValue,
-		partName: part?.part.partName ?? input.batch.lot.partName,
-		partCode: part?.part.partCode ?? "",
+		seriesNumber: input.batch.seriesNumber,
+		seriesCount: input.batch.seriesCount,
+		partName: part.partName,
+		partCode: part.partCode,
 		projectName: input.batch.lot.project?.name,
-		codename: input.batch.lot.project?.projectCode || part?.part.partCode,
+		codename: input.batch.lot.project?.projectCode || part.partCode,
 		quantity: input.quantity ?? quantityOf(input.batch),
 		fromStepLabel: input.fromStepLabel,
 		toStepLabel: input.toStepLabel,
@@ -256,15 +258,14 @@ export async function recordPrintJob(
 					id: true,
 					lotCode: true,
 					partsListId: true,
-					partName: true,
 					project: { select: { id: true, name: true, projectCode: true } },
 				},
 			},
-			parts: {
-				orderBy: { partId: "asc" },
-				take: 1,
-				select: { partId: true, quantity: true, part: { select: { partName: true, partCode: true } } },
+			part: {
+				select: { id: true, partName: true, partCode: true },
 			},
+			seriesNumber: true,
+			seriesCount: true,
 		},
 	});
 	if (!batch) throw new Error("NOT_FOUND_BATCH");
@@ -285,11 +286,10 @@ export async function recordPrintJob(
 			? plannedQuantity
 			: input.actualQuantity;
 
-	const partIds = batch.parts.map((part) => part.partId);
 	const steps = await store.routingStep.findMany({
 		where: {
 			partsListId: batch.lot.partsListId,
-			...(partIds.length > 0 ? { partId: { in: partIds } } : {}),
+			partId: batch.part.id,
 		},
 		orderBy: [{ stepOrder: "asc" }, { id: "asc" }],
 	});
@@ -358,9 +358,9 @@ export async function recordPrintJob(
 		!input.reprintOf &&
 		delivered.status !== "FAILED" &&
 		nextStep &&
-		Boolean(batch.parts[0]?.partId) &&
+		Boolean(batch.part.id) &&
 		priorSuccessfulPrints === 0;
-	if (shouldIssue && nextStep && batch.parts[0]?.partId) {
+	if (shouldIssue && nextStep) {
 		// Plan vs reality on the ledger: expected = planned pack quantity,
 		// actual = the pcs the LL counted into the tray. Equal → ACCEPTED;
 		// different → RECORDED (variance surfaces in Reports via the part's
@@ -370,7 +370,7 @@ export async function recordPrintJob(
 			data: {
 				transactionType: "ISSUANCE",
 				batchId: batch.id,
-				partId: batch.parts[0].partId,
+				partId: batch.part.id,
 				lotId: batch.lot.id,
 				fromStageId,
 				fromSubStageId,

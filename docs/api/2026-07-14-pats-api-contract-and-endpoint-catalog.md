@@ -442,7 +442,11 @@ or subject-preference/walkthrough persistence.
   approved Prisma design, preflight/recovery evidence, additive expand, compatibility/backfill
   reconciliation, enforce, and only then contract. This pass authorizes none of those changes.
 
-## Project–Lot cardinality endpoint review (2026-09-25)
+## Project–Lot cardinality endpoint review (2026-09-25; superseded 2026-09-28)
+
+Historical review only. D-041's 2026-09-28 user amendment makes project creation create its single
+Lot and removes the separate `POST /projects/{projectId}/lots` operation; the rows below record the
+prior proposed contract, not the current endpoint surface.
 
 - **Resource and scope:** `GET /api/v1/lots?project_id={projectId}` and
   `POST /api/v1/projects/{projectId}/lots` remain canonical Planning resources in the
@@ -516,3 +520,27 @@ This is a user-approved case-specific exception to REST standard v1.2.1 §7 for 
 fields. Other v1 breaking changes still require a major version or their own explicit exception.
 The decision, consumer evidence, migration impact, and review condition are recorded as D-038 in
 `docs/decisions/2026-07-14-pats-api-design-decision-register.md`.
+
+## Project requirement/series/QC lifecycle amendment (2026-09-27, D-041)
+
+Project is the production requirement; per-Model quantities in EA sum to its target; each listed
+ModelPart is one per finished Model; each Batch/Series is one ModelPart with stable `x/y`;
+final partial Batch allowed; batch size defaults to 200 via `ProductSpecification.trayQuantityStandard`.
+
+| Operation | Contract amendment | Unchanged behavior |
+|---|---|---|
+| `POST /api/v1/projects` | Creates the draft project **and its single lot** (no separate lot step); accepts optional `lotCode` suggestion (unique, default `{projectCode}-L1`); the lot name is the project name; `modelRequirements[]` may be empty and follow on the draft | `201`, `Location`, ETag, `Idempotency-Key`, auth remain; parts + route v1 materialized atomically |
+| `PATCH /api/v1/projects/{projectId}` (fields) | Draft field edits: `name` (propagates to the lot name), `productId`, `batchSize` | DRAFT-only; status transitions still exclusive |
+| `PUT /api/v1/projects/{projectId}/model-requirements` | Full-set order quantity replacement; same Model set preserves Project-scoped part removals/routes; changed Model set rebuilds Project Parts/routes; lot target re-derived; empty set clears | DRAFT-only, including after the owned lot exists |
+| `DELETE /api/v1/projects/{projectId}/parts/{partId}` | Removes a project Part and its route steps while a draft (catalog untouched; refused once released or when batches reference it; restore by re-applying requirements) | `If-Match`, idempotency, RFC 9457 errors, audit/outbox remain |
+| `POST /api/v1/projects/{projectId}/lots` | **REMOVED** — the lot is created with its project | Canonical 404 boundary; pre-production, sole consumer migrated |
+| `PATCH /api/v1/projects/{projectId}` | Adds `status` transitions `DRAFT→RELEASED` (per-part series mint + activate) and `RELEASED→COMPLETED` (terminal QC guard); field edits stay DRAFT-only | `If-Match`, idempotency, RFC 9457 errors, audit/outbox remain |
+| `POST /api/v1/projects/{projectId}/release` | **REMOVED** — use `PATCH` with `status: RELEASED` | Canonical 404 boundary; no sunset (pre-production, sole consumer migrated) |
+| `POST /api/v1/quality-inspections/{id}/decisions` | Adds optional `failureDisposition` (`REWORK`/`TRUE_NG`) on `FAILED`; drives Batch `HELD`/`SCRAPPED`/`CLOSED` | `reasonCode` stays the defect reason; `PASSED`/`HOLD` unchanged |
+| Control No | **Parked and removed from Project/Lot API/UI** (2026-09-28): user clarifies this identifies allocated Decoration requisition requirements (PMRS-like), not Project/Lot | Source/workbook semantics and resource owner remain `NEEDS_CONFIRMATION`; see `docs/superpowers/reports/2026-09-28-paper-identifier-pattern-review.md` |
+| `POST /api/v1/batches` | Batch request requires singular `partId` (must belong to the lot's project); `parts[]` removed | `201`, `Location`, ETag, idempotency, auth remain; release minting unchanged |
+| Batch/Lot reads | Batch carries singular `part`, `seriesNumber`/`seriesCount`/`projectModelRequirementId`, `qcDisposition`, `completionReady` on the Project; Lot drops `partAllocations` and single-Part fields | Lot stays the trace envelope; `LotPartAllocation` rows retained in storage but unexposed |
+
+This is a user-approved case-specific exception to REST v1.2.1 §7 for these exact operations and
+fields (D-041 extension for Batch/Lot cleanup included). Review before production deployment or any
+external consumer.

@@ -186,17 +186,35 @@ describe("canonical PATS command contract", () => {
 				},
 			},
 			product: { findUnique: async () => null },
-			auditRecord: { create: async () => undefined },
-			outboxMessage: { create: async () => undefined },
-		};
-		const app = appFor(database);
+			model: {
+				findMany: async () => [{ id: "model-1", productId: "product-1", modelParts: [{ id: "model-part-1", partCode: "PART-001", partName: "Main part", routingSteps: [], plannedCycleTimes: null }] }],
+			},
+		productSpecification: { create: async () => ({ id: "spec-1" }) },
+		projectModelRequirement: {
+			create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "requirement-1", modelId: data.modelId, requiredQuantity: data.requiredQuantity }),
+		},
+		part: { create: async () => ({ id: "part-1" }) },
+		partsList: { create: async () => ({ id: "parts-list-1" }) },
+		lot: {
+			create: async ({ data }: { data: Record<string, unknown> }) => ({
+				id: "lot-1",
+				lotCode: data.lotCode,
+			}),
+		},
+		stage: { findMany: async () => [] },
+		subStage: { findMany: async () => [] },
+		auditRecord: { create: async () => undefined },
+		outboxMessage: { create: async () => undefined },
+	};
+	const app = appFor(database);
 		const first = await request(app)
 			.post("/api/v1/projects")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "project-create-1")
-			.send({ projectCode: "PLAN-001", name: "July run", requiredProductionQuantity: 100 });
+			.send({ projectCode: "PLAN-001", name: "July run", modelRequirements: [{ modelId: "model-1", requiredQuantity: 100 }] });
 
 		expect(first.status).to.equal(201);
+		expect(first.body).to.include({ lotId: "lot-1", lotCode: "PLAN-001-L1" });
 		expect(first.headers.location).to.equal("/api/v1/projects/project-1");
 		expect(first.headers.etag).to.equal('"1"');
 		expect(createdPlans).to.equal(1);
@@ -205,7 +223,7 @@ describe("canonical PATS command contract", () => {
 			.post("/api/v1/projects")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "project-create-1")
-			.send({ projectCode: "PLAN-001", name: "July run", requiredProductionQuantity: 100 });
+			.send({ projectCode: "PLAN-001", name: "July run", modelRequirements: [{ modelId: "model-1", requiredQuantity: 100 }] });
 
 		expect(replay.status).to.equal(201);
 		expect(replay.headers.location).to.equal("/api/v1/projects/project-1");
@@ -241,10 +259,10 @@ describe("canonical PATS command contract", () => {
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:precondition-failed");
 	});
 
-	it("upserts a model allocation and materializes plan parts and the initial route snapshot", async () => {
+	it("replaces model requirements and rebuilds plan parts and the initial route snapshot", async () => {
 		const idempotencyRecord = {
 			findUnique: async () => null,
-			create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-allocation", ...data }),
+			create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-requirements", ...data }),
 			update: async () => undefined,
 			delete: async () => undefined,
 		};
@@ -255,18 +273,23 @@ describe("canonical PATS command contract", () => {
 				findUnique: async () => ({ id: "project-1", productId: "product-1", status: "DRAFT", rowVersion: 1 }),
 				update: async () => ({ id: "project-1", rowVersion: 2 }),
 			},
-			model: {
-				findUnique: async () => ({ id: "model-1", productId: "product-1", modelParts: [{ id: "model-part-1", partCode: "PART-001", partName: "Main part", routingSteps: [{ stageId: "stage-1", subStageId: null }] }] }),
+		lot: { updateMany: async () => ({ count: 1 }) },
+		model: {
+			findMany: async () => [{ id: "model-1", productId: "product-1", modelParts: [{ id: "model-part-1", partCode: "PART-001", partName: "Main part", routingSteps: [{ stageId: "stage-1", subStageId: null }] }] }],
 			},
-			projectModelAllocation: {
-				upsert: async () => ({ id: "allocation-1", modelId: "model-1", plannedQuantity: 100 }),
+			projectModelRequirement: {
+				findMany: async () => [],
+				deleteMany: async () => undefined,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "requirement-1", modelId: data.modelId, requiredQuantity: data.requiredQuantity }),
 			},
 			part: {
-				findMany: async () => [],
+				deleteMany: async () => undefined,
 				create: async () => ({ id: "part-1" }),
 			},
+			routingStep: { deleteMany: async () => undefined },
 			partsList: {
-				findFirst: async () => null,
+				findMany: async () => [],
+				deleteMany: async () => undefined,
 				create: async () => ({ id: "parts-list-1" }),
 			},
 			stage: { findMany: async () => [{ id: "stage-1" }] },
@@ -276,23 +299,24 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database);
 		const response = await request(app)
-			.post("/api/v1/projects/plan-1/model-allocations")
+			.put("/api/v1/projects/plan-1/model-requirements")
 			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "allocation-1")
+			.set("Idempotency-Key", "requirements-1")
 			.set("If-Match", '"1"')
-			.send({ modelId: "model-1", plannedQuantity: 100 });
+			.send({ modelRequirements: [{ modelId: "model-1", requiredQuantity: 100 }] });
 
 		expect(response.status).to.equal(200);
 		expect(response.headers.etag).to.equal('"2"');
-		expect(response.body).to.deep.include({ allocationId: "allocation-1", modelId: "model-1", partsListVersionId: "parts-list-1", projectRowVersion: 2 });
+		expect(response.body).to.deep.include({ partsListVersionId: "parts-list-1", projectRowVersion: 2 });
+		expect(response.body.modelRequirements).to.deep.equal([{ id: "requirement-1", modelId: "model-1", requiredQuantity: 100 }]);
 	});
 
-	it("rejects retired demand dimensions in model allocation writes", async () => {
+	it("rejects unknown fields in model requirement writes", async () => {
 		const app = appFor({});
 		const response = await request(app)
-			.post("/api/v1/projects/plan-1/model-allocations")
+			.put("/api/v1/projects/plan-1/model-requirements")
 			.set("Authorization", "Bearer command-token")
-			.send({ modelId: "model-1", plannedQuantity: 100, demandPurpose: "production" });
+			.send({ modelRequirements: [{ modelId: "model-1", requiredQuantity: 100 }], demandPurpose: "production" });
 
 		expect(response.status).to.equal(422);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:validation-error");
@@ -340,7 +364,7 @@ describe("canonical PATS command contract", () => {
 			.post("/api/v1/projects")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "project-create-2")
-			.send({ projectCode: "PLAN-002", name: "Blocked", requiredProductionQuantity: 1 });
+			.send({ projectCode: "PLAN-002", name: "Blocked", modelRequirements: [{ modelId: "model-1", requiredQuantity: 1 }] });
 
 		expect(response.status).to.equal(403);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
@@ -367,7 +391,7 @@ describe("canonical PATS command contract", () => {
 			partsList: { findMany: async () => [], deleteMany: async () => undefined },
 			routingStep: { deleteMany: async () => undefined },
 			part: { deleteMany: async () => undefined },
-			projectModelAllocation: { deleteMany: async () => undefined },
+			projectModelRequirement: { deleteMany: async () => undefined },
 			productSpecification: { deleteMany: async () => undefined },
 			workflowGroup: { deleteMany: async () => undefined },
 			processChangeLog: { deleteMany: async () => undefined },
@@ -422,7 +446,7 @@ describe("canonical PATS command contract", () => {
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
 			batch: {
-				findUnique: async () => ({ id: "batch-1", lotId: "lot-1", lot: { id: "lot-1", partsListId: "route-1" }, parts: [{ partId: "part-1" }], positionProjection: null }),
+				findUnique: async () => ({ id: "batch-1", lotId: "lot-1", partId: "part-1", lot: { id: "lot-1", partsListId: "route-1" }, positionProjection: null }),
 				update: async () => undefined,
 			},
 			partsList: {
@@ -971,7 +995,7 @@ describe("canonical PATS command contract", () => {
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
 			lot: { findUnique: async () => ({ id: "lot-1", projectId: "proj-1" }) },
-			part: { findMany: async () => [] },
+			part: { findFirst: async () => ({ id: "part-1", projectModelRequirementId: "requirement-1" }) },
 			batch: {
 				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "batch-1", rowVersion: 1, batchCode: data.batchCode, ...data }),
 			},
@@ -984,7 +1008,7 @@ describe("canonical PATS command contract", () => {
 			.post("/api/v1/batches")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "batch-create-1")
-			.send({ batchCode: "B-1001", barcodeValue: "BAR-1001", lotId: "lot-1", plannedQuantity: 100, labelPackSize: 10, currentStageId: "stage-1" });
+			.send({ batchCode: "B-1001", barcodeValue: "BAR-1001", lotId: "lot-1", partId: "part-1", plannedQuantity: 100, labelPackSize: 10, currentStageId: "stage-1" });
 
 		expect(response.status).to.equal(201);
 		expect(response.body).to.include({ batchId: "batch-1", batchCode: "B-1001" });
@@ -992,38 +1016,137 @@ describe("canonical PATS command contract", () => {
 		expect(response.headers.etag).to.equal('"1"');
 	});
 
-	it("rejects a second lot for the same production plan", async () => {
+	it("deletes the owned lot with a draft project", async () => {
+		let deletedLot: string | undefined;
 		const database = {
 			idempotencyRecord: {
 				findUnique: async () => null,
-				create: async () => ({ id: "idempotency-lot-duplicate" }),
+				create: async () => ({ id: "idemp-del-lot" }),
 				update: async () => undefined,
 				delete: async () => undefined,
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
-			project: { findUnique: async () => ({ id: "proj-1" }) },
-			lot: { findUnique: async () => ({ id: "lot-1" }) },
+			project: {
+				findUnique: async () => ({ id: "proj-1", projectCode: "PRJ-1", name: "Draft", status: "DRAFT", lot: { id: "lot-1" }, rowVersion: 1 }),
+				delete: async () => ({ id: "proj-1" }),
+			},
+			batch: { count: async () => 0 },
+			lot: {
+				delete: async ({ where }: { where: { id: string } }) => {
+					deletedLot = where.id;
+					return { id: where.id };
+				},
+			},
+			partsList: { findMany: async () => [], deleteMany: async () => undefined },
+			routingStep: { deleteMany: async () => undefined },
+			part: { deleteMany: async () => undefined },
+			projectModelRequirement: { deleteMany: async () => undefined },
+			productSpecification: { deleteMany: async () => undefined },
+			workflowGroup: { deleteMany: async () => undefined },
+			processChangeLog: { deleteMany: async () => undefined },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database);
+		const response = await request(app)
+			.delete("/api/v1/projects/proj-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "proj-delete-lot");
+
+		expect(response.status).to.equal(204);
+		expect(deletedLot).to.equal("lot-1");
+	});
+
+	it("removes a project part and its route steps while a draft", async () => {
+		let deletedPart: string | undefined;
+		let deletedSteps: unknown;
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-part-remove" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			project: {
+				findUnique: async () => ({ id: "proj-1", status: "DRAFT", rowVersion: 1 }),
+				update: async () => ({ id: "proj-1", rowVersion: 2 }),
+			},
+			part: {
+				findFirst: async () => ({ id: "part-1", partCode: "PART-001" }),
+				delete: async ({ where }: { where: { id: string } }) => {
+					deletedPart = where.id;
+					return { id: where.id };
+				},
+			},
+			batch: { count: async () => 0 },
+			routingStep: { deleteMany: async ({ where }: { where: unknown }) => { deletedSteps = where; } },
+			lotPartAllocation: { deleteMany: async () => undefined },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
 		};
 		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
 		const response = await request(app)
-			.post("/api/v1/projects/proj-1/lots")
+			.delete("/api/v1/projects/proj-1/parts/part-1")
 			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "lot-create-duplicate")
-			.send({
-				lotCode: "LOT-002",
-				lotName: "Second lot",
-				partId: "part-1",
-				partsListId: "route-1",
-				partsListVersion: 1,
-				requiredProductionQuantity: 100,
-				labelPackSize: 10,
-			});
+			.set("Idempotency-Key", "part-remove-1")
+			.set("If-Match", '"1"');
 
-		expect(response.status).to.equal(409);
-		expect(response.body.type).to.equal("urn:bandai:pats:problem:project-lot-cardinality-conflict");
+		expect(response.status).to.equal(200);
+		expect(response.body).to.deep.include({ partId: "part-1", projectRowVersion: 2 });
+		expect(response.headers.etag).to.equal('"2"');
+		expect(deletedPart).to.equal("part-1");
+		expect(deletedSteps).to.deep.equal({ partId: "part-1" });
 	});
 
-	it("activates PLANNED batches when the production plan is released", async () => {
+	it("refuses part removal once released or when batches reference it", async () => {
+		const releasedDatabase = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-part-rel" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(releasedDatabase),
+			project: {
+				findUnique: async () => ({ id: "proj-1", status: "RELEASED", rowVersion: 2 }),
+			},
+		};
+		const releasedApp = appFor(releasedDatabase);
+		const released = await request(releasedApp)
+			.delete("/api/v1/projects/proj-1/parts/part-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "part-remove-rel")
+			.set("If-Match", '"2"');
+
+		expect(released.status).to.equal(409);
+
+		const batchedDatabase = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-part-batch" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(batchedDatabase),
+			project: {
+				findUnique: async () => ({ id: "proj-1", status: "DRAFT", rowVersion: 1 }),
+			},
+			part: {
+				findFirst: async () => ({ id: "part-1", partCode: "PART-001" }),
+			},
+			batch: { count: async () => 1 },
+		};
+		const batched = await request(appFor(batchedDatabase))
+			.delete("/api/v1/projects/proj-1/parts/part-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "part-remove-batch")
+			.set("If-Match", '"1"');
+
+		expect(batched.status).to.equal(409);
+	});
+
+	it("activates PLANNED batches when the project is released via PATCH", async () => {
 		const batchUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
 		const database = {
 			idempotencyRecord: {
@@ -1036,7 +1159,7 @@ describe("canonical PATS command contract", () => {
 			project: {
 				findUnique: async () => ({
 					id: "proj-1",
-					status: "READY",
+					status: "DRAFT",
 					rowVersion: 1,
 					releasedBySubjectId: null,
 					releasedAt: null,
@@ -1052,24 +1175,36 @@ describe("canonical PATS command contract", () => {
 					...data,
 				}),
 			},
-			lot: {
-				findMany: async () => [],
+			projectModelRequirement: {
+				findMany: async () => [{ id: "requirement-1", modelId: "model-1", requiredQuantity: 100 }],
 			},
+			part: {
+				findMany: async () => [{ id: "part-1", partCode: "PART-001", projectModelRequirementId: "requirement-1" }],
+			},
+			lot: {
+				findUnique: async () => ({ id: "lot-1", lotCode: "MLT-001", batches: [{ plannedQuantity: 100 }] }),
+			},
+			productSpecification: { findUnique: async () => ({ trayQuantityStandard: 200 }) },
 			batch: {
+				count: async () => 0,
+				aggregate: async () => ({ _sum: { plannedQuantity: 100 } }),
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "batch-mint-1" }),
 				updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
 					batchUpdates.push({ where, data });
 					return { count: 2 };
 				},
 			},
+			batchPositionProjection: { create: async () => undefined },
 			auditRecord: { create: async () => undefined },
 			outboxMessage: { create: async () => undefined },
 		};
 		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
 		const response = await request(app)
-			.post("/api/v1/projects/proj-1/release")
+			.patch("/api/v1/projects/proj-1")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "project-release-1")
-			.set("If-Match", '"1"');
+			.set("If-Match", '"1"')
+			.send({ status: "RELEASED" });
 
 		expect(response.status).to.equal(200);
 		expect(response.body).to.include({ projectId: "proj-1", status: "RELEASED" });
@@ -1083,7 +1218,6 @@ describe("canonical PATS command contract", () => {
 
 	it("mints missing tray batches on release so the floor queue is non-empty", async () => {
 		const createdBatches: Array<Record<string, unknown>> = [];
-		const createdParts: Array<Record<string, unknown>> = [];
 		const createdPositions: Array<Record<string, unknown>> = [];
 		const batchUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
 		let nextBatchSeq = 0;
@@ -1098,7 +1232,7 @@ describe("canonical PATS command contract", () => {
 			project: {
 				findUnique: async () => ({
 					id: "proj-1",
-					status: "READY",
+					status: "DRAFT",
 					rowVersion: 1,
 					releasedBySubjectId: null,
 					releasedAt: null,
@@ -1114,19 +1248,23 @@ describe("canonical PATS command contract", () => {
 					...data,
 				}),
 			},
-			lot: {
-				findMany: async () => [
-					{
-						id: "lot-1",
-						lotCode: "MLT-001",
-						requiredProductionQuantity: 480,
-						labelPackSize: 240,
-						partId: "part-1",
-						batches: [],
-					},
-				],
+			projectModelRequirement: {
+				findMany: async () => [{ id: "requirement-1", modelId: "model-1", requiredQuantity: 480 }],
 			},
+			part: {
+				findMany: async () => [{ id: "part-1", partCode: "PART-001", projectModelRequirementId: "requirement-1" }],
+			},
+			lot: {
+				findUnique: async () => ({
+					id: "lot-1",
+					lotCode: "MLT-001",
+					batches: [],
+				}),
+			},
+			productSpecification: { findUnique: async () => ({ trayQuantityStandard: 240 }) },
 			batch: {
+				count: async () => 0,
+				aggregate: async () => ({ _sum: { plannedQuantity: null } }),
 				create: async ({ data }: { data: Record<string, unknown> }) => {
 					nextBatchSeq += 1;
 					const row = { id: `batch-mint-${nextBatchSeq}`, ...data };
@@ -1136,12 +1274,6 @@ describe("canonical PATS command contract", () => {
 				updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
 					batchUpdates.push({ where, data });
 					return { count: createdBatches.length };
-				},
-			},
-			batchPartLine: {
-				create: async ({ data }: { data: Record<string, unknown> }) => {
-					createdParts.push(data);
-					return data;
 				},
 			},
 			batchPositionProjection: {
@@ -1155,10 +1287,11 @@ describe("canonical PATS command contract", () => {
 		};
 		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
 		const response = await request(app)
-			.post("/api/v1/projects/proj-1/release")
+			.patch("/api/v1/projects/proj-1")
 			.set("Authorization", "Bearer command-token")
 			.set("Idempotency-Key", "project-release-mint")
-			.set("If-Match", '"1"');
+			.set("If-Match", '"1"')
+			.send({ status: "RELEASED" });
 
 		expect(response.status).to.equal(200);
 		expect(response.body).to.include({ projectId: "proj-1", status: "RELEASED" });
@@ -1169,6 +1302,9 @@ describe("canonical PATS command contract", () => {
 			lotId: "lot-1",
 			plannedQuantity: 240,
 			labelPackSize: 240,
+			partId: "part-1",
+			seriesNumber: 1,
+			seriesCount: 2,
 			currentStageId: "STG-PROJECTS",
 			status: "PLANNED",
 			lineId: null,
@@ -1177,8 +1313,7 @@ describe("canonical PATS command contract", () => {
 			batchCode: "MLT-001-B002",
 			plannedQuantity: 240,
 		});
-		expect(createdParts).to.have.lengthOf(2);
-		expect(createdParts[0]).to.deep.include({ partId: "part-1", quantity: 240 });
+		expect(createdBatches[1]).to.include({ partId: "part-1", seriesNumber: 2, seriesCount: 2 });
 		expect(createdPositions).to.have.lengthOf(2);
 		expect(createdPositions[0]).to.deep.include({
 			stageId: "STG-PROJECTS",

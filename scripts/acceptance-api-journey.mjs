@@ -119,9 +119,12 @@ async function main() {
 	const productId = product?.productId ?? product?.id;
 	rec("catalog-products", products.status === 200 ? "PASS" : "FAIL", `count=${allProducts.length} productId=${productId}`);
 
+	let firstModelId = null;
 	if (productId) {
 		const detail = await api("GET", `/catalog/products/${productId}`, { headers: plannerAuth });
 		rec("catalog-product-detail", detail.status === 200 ? "PASS" : "FAIL", `etag=${detail.etag ?? "none"}`);
+		const detailModels = detail.body?.data?.models ?? detail.body?.models ?? [];
+		firstModelId = detailModels[0]?.modelId ?? detailModels[0]?.id ?? null;
 	}
 
 	const projects = await api("GET", "/projects", { headers: plannerAuth });
@@ -151,8 +154,8 @@ async function main() {
 	const draftBody = {
 		projectCode: draftProjectCode,
 		name: "Acceptance Draft Project",
-		requiredProductionQuantity: 120,
 		productId: productId ?? null,
+		...(firstModelId ? { modelRequirements: [{ modelId: firstModelId, requiredQuantity: 120 }] } : {}),
 	};
 	const draftCreate = await api("POST", "/projects", {
 		headers: { ...plannerAuth, "Idempotency-Key": draftIdemKey },
@@ -250,8 +253,16 @@ async function main() {
 
 		const positions = await api("GET", "/batch-positions", { headers: operatorAuth });
 		const positionRows = dataOf(positions.body);
+		// Prefer a position whose batch part has an ordered route (the seed only
+		// routes a subset of parts, so an arbitrary batch may have no steps).
+		const positionHasRoute = (p) => {
+			const pid = p?.batch?.part?.partId ?? p?.batch?.part?.id ?? null;
+			return Array.isArray(p?.routeSteps) && p.routeSteps.some((s) => (s.partId ?? s.part?.id) === pid);
+		};
 		const seedPosition =
+			positionRows.find((p) => (p.batchId === batchId || String(p.batch?.batchCode ?? "").startsWith("BNI-")) && positionHasRoute(p)) ??
 			positionRows.find((p) => p.batchId === batchId || String(p.batch?.batchCode ?? "").startsWith("BNI-")) ??
+			positionRows.find(positionHasRoute) ??
 			positionRows[0];
 		rec("batch-positions", positions.status === 200 ? "PASS" : "FAIL", `count=${positionRows.length}`);
 		samples.position = seedPosition ?? null;
@@ -291,11 +302,19 @@ async function main() {
 			rec("station-history", "BLOCKED", "no station");
 		}
 
-		// Stage event: use position's current expected route if available, or first station-step
+		// Stage event: advance along the batch's own ordered route (next step after
+		// the position's current route step), falling back to the first station-step.
 		const pos = seedPosition;
 		const eventBatchId = pos?.batchId ?? batchId;
-		const eventStageId = pos?.stageId ?? seedBatch?.currentStageId ?? stepRows[0]?.stageId;
-		const eventSubStageId = pos?.subStageId ?? stepRows[0]?.subStageId ?? null;
+		const posBatchPartId = pos?.batch?.part?.partId ?? pos?.batch?.part?.id ?? null;
+		const posSteps = (Array.isArray(pos?.routeSteps) ? pos.routeSteps : [])
+			.filter((s) => !posBatchPartId || (s.partId ?? s.part?.id) === posBatchPartId)
+			.sort((a, b) => (a.stepOrder ?? 0) - (b.stepOrder ?? 0));
+		const posStepKey = pos?.routeStepId ?? null;
+		const posIndex = posSteps.findIndex((s) => (s.routeStepId ?? s.id) === posStepKey);
+		const nextStep = posIndex >= 0 ? posSteps.find((s) => (s.stepOrder ?? 0) > (posSteps[posIndex].stepOrder ?? 0)) : posSteps[0];
+		const eventStageId = nextStep?.stageId ?? pos?.stageId ?? seedBatch?.currentStageId ?? stepRows[0]?.stageId;
+		const eventSubStageId = nextStep?.subStageId ?? stepRows[0]?.subStageId ?? null;
 		if (eventBatchId && eventStageId) {
 			const eventBody = {
 				batchId: eventBatchId,
@@ -327,8 +346,8 @@ async function main() {
 		const invForSeedBatch = invRows.find((row) => row.batchId === eventBatchId);
 		const partId =
 			invForSeedBatch?.partId ??
-			batchRow?.parts?.[0]?.partId ??
-			projectDetail?.lots?.[0]?.partAllocations?.[0]?.partId ??
+			batchRow?.part?.partId ??
+			batchRow?.part?.id ??
 			projectDetail?.parts?.[0]?.id ??
 			existingInv?.partId ??
 			null;

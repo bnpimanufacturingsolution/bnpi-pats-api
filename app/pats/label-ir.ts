@@ -14,6 +14,8 @@ export type LabelIr = {
 	projectName?: string;
 	codename?: string;
 	serialNumber?: string;
+	seriesNumber?: number | null;
+	seriesCount?: number | null;
 	qrValue?: string;
 	printedAt: string;
 	sequence: number;
@@ -147,6 +149,10 @@ export function renderZpl(ir: LabelIr): string {
 			lines.push(`^FO0,${mm(currentY)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FD${snText}^FS`);
 			currentY += 5;
 		}
+		if (ir.seriesNumber != null && ir.seriesCount != null) {
+			lines.push(`^FO0,${mm(currentY)}^FB${labelWidth},1,0,C^A0N,${mm(3)},${mm(3)}^FDSERIES: ${ir.seriesNumber}/${ir.seriesCount}^FS`);
+			currentY += 5;
+		}
 
 		// 3. Project Name
 		if (projectName) {
@@ -205,6 +211,10 @@ export function renderZpl(ir: LabelIr): string {
 		smallCommands.push(`^FO${textX},${subY}^A0N,${body},${body}^FDLOT: ${lot}^FS`);
 		subY += body + 4;
 	}
+	if (ir.seriesNumber != null && ir.seriesCount != null) {
+		smallCommands.push(`^FO${textX},${subY}^A0N,${body},${body}^FDSERIES: ${ir.seriesNumber}/${ir.seriesCount}^FS`);
+		subY += body + 4;
+	}
 	if (projectName) {
 		smallCommands.push(`^FO${textX},${subY}^A0N,${body},${body}^FDPROJECT: ${projectName}^FS`);
 		subY += body + 4;
@@ -245,6 +255,9 @@ export function renderTspl(ir: LabelIr): string {
 		`TEXT 220,20,"3",0,1,1,"${batch}"`,
 		lot ? `TEXT 220,48,"2",0,1,1,"LOT: ${lot}"` : "",
 		serial && serial !== batch ? `TEXT 220,68,"2",0,1,1,"S/N: ${serial}"` : "",
+		ir.seriesNumber != null && ir.seriesCount != null
+			? `TEXT 220,68,"2",0,1,1,"SERIES: ${ir.seriesNumber}/${ir.seriesCount}"`
+			: "",
 		projectName ? `TEXT 220,88,"2",0,1,1,"PROJECT: ${projectName}"` : "",
 		codename ? `TEXT 220,108,"2",0,1,1,"CODENAME: ${codename}"` : "",
 		`TEXT 220,128,"2",0,1,1,"${part}"`,

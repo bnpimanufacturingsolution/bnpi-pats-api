@@ -127,6 +127,7 @@
     "method": "POST",
     "url": "/quality-inspections/{inspectionId}/decisions",
     "summary": "Record a quality decision and close or hold the inspection",
+    "description": "FAILED accepts failureDisposition REWORK or TRUE_NG; the batch becomes HELD (rework/hold), SCRAPPED (True-NG), or CLOSED (PASSED).",
     "tags": [
       "PATS Quality"
     ],

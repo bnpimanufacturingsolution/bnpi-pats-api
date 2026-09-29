@@ -31,6 +31,8 @@ function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, u
 				batchCode: "BNI-2606-001",
 				barcodeValue: "BC-BATCH-000001",
 				plannedQuantity: 240,
+				seriesNumber: 1,
+				seriesCount: 2,
 				currentStageId: "STG-INJECTION",
 				currentSubStageId: null,
 				positionProjection: {
@@ -39,8 +41,8 @@ function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, u
 					routeStepId: "step-1",
 					quantityMagnitude: "240",
 				},
-				lot: { id: "lot-1", lotCode: "MLT-001", partsListId: "pl-1", partName: "Body" },
-				parts: [{ partId: "part-1", quantity: 240, part: { partName: "Body", partCode: "P-BODY" } }],
+				lot: { id: "lot-1", lotCode: "MLT-001", partsListId: "pl-1" },
+				part: { id: "part-1", partName: "Body", partCode: "P-BODY" },
 			}),
 		},
 		printJob: {
@@ -101,6 +103,7 @@ describe("recordPrintJob", () => {
 		expect(job.sequence).to.equal(1);
 		expect(db.issued).to.equal(1);
 		expect(String(db.jobs[0]?.renderedPayload)).to.include("BC-BATCH-000001");
+		expect(String(db.jobs[0]?.renderedPayload)).to.include("SERIES: 1/2");
 	});
 
 	it("does not issue a second inventory move on reprint", async () => {

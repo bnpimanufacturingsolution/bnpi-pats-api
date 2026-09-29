@@ -132,7 +132,8 @@
     "id": "batchCreate",
     "method": "POST",
     "url": "/batches",
-    "summary": "Create a planned batch and initial position projection (API/tests; UI releases mint automatically)",
+    "summary": "Create a planned batch for one project part and its initial position projection (API/tests; UI releases mint automatically)",
+    "description": "The batch carries a single required partId from the lot's project; multi-part `parts[]` payloads were removed by the user-approved 2026-09-27 v1 scope extension.",
     "tags": [
       "PATS Execution"
     ],
