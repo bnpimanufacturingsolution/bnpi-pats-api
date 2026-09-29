@@ -108,6 +108,13 @@ function database() {
 				rowVersion: modelPart.rowVersion + 1,
 				updatedAt: new Date(date.getTime() + 1000),
 			}),
+			delete: async ({ where }: { where: { id: string } }) => {
+				if (where.id !== modelPart.id) throw new Error("Unexpected model part delete.");
+				return modelPart;
+			},
+		},
+		part: {
+			count: async () => 0,
 		},
 		sourceEvidence: {
 			findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
@@ -132,17 +139,24 @@ function database() {
 			},
 			count: async ({ where }: { where: { subjectId: string } }) =>
 				links.filter((link) => link.subjectId === where.subjectId).length,
+			deleteMany: async ({ where }: { where: { subjectId: string } }) => {
+				const before = links.length;
+				for (let index = links.length - 1; index >= 0; index -= 1) {
+					if (links[index].subjectId === where.subjectId) links.splice(index, 1);
+				}
+				return { count: before - links.length };
+			},
 		},
 		$transaction: async <T>(callback: (transaction: typeof db) => Promise<T>) => callback(db),
 	};
 
-	return { db, links, product };
+	return { db, links, product, modelPart };
 }
 
 function appWith(
 	assignments: Array<{ kind: "ROLE_BUNDLE" | "CAPABILITY"; key: string; status: "ACTIVE" }>,
 ) {
-	const { db, links, product } = database();
+	const { db, links, product, modelPart } = database();
 	const app = express();
 	app.use(
 		"/api/v1",
@@ -154,7 +168,7 @@ function appWith(
 			},
 		}),
 	);
-	return { app, links, product };
+	return { app, db, links, product, modelPart };
 }
 
 describe("canonical catalog foundation writes", () => {
@@ -404,5 +418,102 @@ describe("catalog model-part planned cycle time", () => {
 			.set("If-Match", '"1"')
 			.send({ routingSteps: [{ stageId: "STG-INJECTION", subStageId: "SUB-FULL-SPRAY" }] });
 		expect(ineligible.status).to.equal(422);
+	});
+});
+
+describe("catalog model-part delete", () => {
+	function partApp() {
+		return appWith([{ kind: "CAPABILITY", key: "catalog.manage", status: "ACTIVE" }]);
+	}
+
+	it("deletes a draft ModelPart with If-Match and bumps the owning model version", async () => {
+		const { app, links } = partApp();
+		links.push({
+			sourceEvidenceId: "evidence-b243-part",
+			subjectType: "MODEL_PART",
+			subjectId: "model-part-b243-01-01",
+			relation: "primary-source",
+		});
+
+		const response = await request(app)
+			.delete("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"');
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.include({
+			id: "model-part-b243-01-01",
+			modelId: "model-b243-01",
+		});
+		expect(response.body.modelRowVersion).to.equal(2);
+		expect(response.headers.etag).to.equal('"2"');
+		expect(links).to.have.length(0);
+	});
+
+	it("requires catalog.manage for model-part delete", async () => {
+		const { app } = appWith([{ kind: "CAPABILITY", key: "catalog.read", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.delete("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"');
+
+		expect(response.status).to.equal(403);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
+	});
+
+	it("returns 404 for an unknown ModelPart", async () => {
+		const { app } = partApp();
+
+		const response = await request(app)
+			.delete("/api/v1/catalog/model-parts/missing-part")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"');
+
+		expect(response.status).to.equal(404);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:not-found");
+	});
+
+	it("requires If-Match and rejects a stale version", async () => {
+		const { app } = partApp();
+
+		const missing = await request(app)
+			.delete("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token");
+
+		expect(missing.status).to.equal(412);
+
+		const stale = await request(app)
+			.delete("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"9"');
+
+		expect(stale.status).to.equal(412);
+	});
+
+	it("does not delete a published ModelPart through the draft API", async () => {
+		const { app, modelPart } = partApp();
+		modelPart.lifecycleStatus = "PUBLISHED";
+
+		const response = await request(app)
+			.delete("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"');
+
+		expect(response.status).to.equal(409);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:conflict");
+	});
+
+	it("refuses to delete a ModelPart referenced by project parts", async () => {
+		const { app, db } = partApp();
+		db.part.count = async () => 2;
+
+		const response = await request(app)
+			.delete("/api/v1/catalog/model-parts/model-part-b243-01-01")
+			.set("Authorization", "Bearer foundation-test-token")
+			.set("If-Match", '"1"');
+
+		expect(response.status).to.equal(409);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:conflict");
 	});
 });

@@ -19,7 +19,14 @@ import {
 
 type CatalogDatabase = Pick<
 	PatsPrismaClient,
-	"product" | "model" | "modelPart" | "sourceEvidence" | "canonicalEvidenceLink" | "stage" | "subStage"
+	| "product"
+	| "model"
+	| "modelPart"
+	| "part"
+	| "sourceEvidence"
+	| "canonicalEvidenceLink"
+	| "stage"
+	| "subStage"
 >;
 
 const sourceEvidenceIdsSchema = z
@@ -734,6 +741,70 @@ export function catalogFoundationRouter(
 		}
 	});
 
+	/**
+	 * @openapi
+	 * /api/v1/catalog/model-parts/{modelPartId}:
+	 *   delete:
+	 *     operationId: catalogModelPartDelete
+	 *     summary: Delete a draft catalog model part
+	 *     tags: [PATS Catalog]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: modelPartId
+	 *         required: true
+	 *         schema: { type: string }
+	 *       - $ref: '#/components/parameters/IfMatch'
+	 *     responses:
+	 *       200:
+	 *         description: Draft model part deleted; the owning model version is bumped
+	 *       404:
+	 *         description: Catalog model part not found
+	 *       409:
+	 *         description: Published part or project parts still reference it
+	 *       412:
+	 *         description: Stale or missing If-Match
+	 */
+	router.delete("/model-parts/:modelPartId", async (req, res, next) => {
+		try {
+			const expectedVersion = requireIfMatch(req);
+			const current = await database.modelPart.findUnique({
+				where: { id: req.params.modelPartId },
+			});
+			if (!current) throw notFound("The requested catalog model part was not found.");
+			if (current.lifecycleStatus !== CatalogLifecycleStatus.DRAFT) throw publishedResource();
+			if (current.rowVersion !== expectedVersion) throw staleVersion();
+			const referencing = await database.part.count({
+				where: { sourceModelPartId: current.id },
+			});
+			if (referencing > 0) {
+				throw conflict(
+					`Cannot delete: ${referencing} project part(s) reference this catalog part.`,
+				);
+			}
+
+			const model = await inTransaction(database, async (transaction) => {
+				await transaction.canonicalEvidenceLink.deleteMany({
+					where: { subjectType: "MODEL_PART", subjectId: current.id },
+				});
+				await transaction.modelPart.delete({ where: { id: current.id } });
+				return transaction.model.update({
+					where: { id: current.modelId },
+					data: { rowVersion: { increment: 1 } },
+				});
+			});
+			setVersionHeaders(res, model.rowVersion);
+			res.status(200).json({
+				id: current.id,
+				modelId: current.modelId,
+				modelRowVersion: model.rowVersion,
+			});
+		} catch (error) {
+			handleRouteError(error, req, res, next);
+		}
+	});
+
 	return router;
 }
 
@@ -757,6 +828,10 @@ function publishedResource(): CatalogProblem {
 		"Conflict",
 		"Published or retired catalog records are immutable in the draft API.",
 	);
+}
+
+function conflict(detail: string): CatalogProblem {
+	return new CatalogProblem(409, "urn:bandai:pats:problem:conflict", "Conflict", detail);
 }
 
 async function evidenceCount(
