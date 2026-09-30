@@ -92,6 +92,20 @@ function atOffset({ days = 0, hours = 0, minutes = 0 } = {}) {
 	return new Date(seedClock.getTime() + ((days * 24 + hours) * 60 + minutes) * 60_000);
 }
 
+/** Seed default manufacturing route for catalog ModelParts (PROVISIONAL seed
+ * assumption, same status as the rest of the B251 evidence): injection →
+ * decoration/full-spray → assembly/sub-assembly → warehouse/main-packing.
+ * Release snapshots this into per-project route versions; unknown stage pairs
+ * are skipped at release, so this stays honest if the catalog later diverges. */
+function standardModelRoute() {
+	return [
+		{ stageId: stableId("stage-injection"), subStageId: null, order: 1 },
+		{ stageId: stableId("stage-decoration"), subStageId: stableId("substage-full-spray"), order: 2 },
+		{ stageId: stableId("stage-assembly"), subStageId: stableId("substage-sub-assembly"), order: 3 },
+		{ stageId: stableId("stage-warehouse"), subStageId: stableId("substage-main-packing"), order: 4 },
+	];
+}
+
 /**
  * Planned cycle-time seed assumptions, keyed per route step
  * (`stageId::subStageId`, empty subStageId when stage-wide).
@@ -274,7 +288,6 @@ async function wipeSeededTables(tx) {
 		"printJob",
 		"inventoryTransaction",
 		"batchPositionProjection",
-		"batchPartLine",
 		"lotPartAllocation",
 		"batch",
 		"routingStep",
@@ -293,7 +306,7 @@ async function wipeSeededTables(tx) {
 		"modelPart",
 		"lot",
 		"part",
-		"projectModelAllocation",
+		"projectModelRequirement",
 		"productSpecification",
 		"project",
 		"model",
@@ -499,7 +512,7 @@ async function seedProfile(tx) {
 				partName,
 				lifecycleStatus: "DRAFT",
 				evidenceStatus: "PROVISIONAL",
-				routingSteps: [],
+				routingSteps: standardModelRoute(),
 				plannedCycleTimes: null,
 			},
 			create: {
@@ -509,7 +522,7 @@ async function seedProfile(tx) {
 				partName,
 				lifecycleStatus: "DRAFT",
 				evidenceStatus: "PROVISIONAL",
-				routingSteps: [],
+				routingSteps: standardModelRoute(),
 				plannedCycleTimes: null,
 			},
 		});
@@ -542,7 +555,7 @@ async function seedProfile(tx) {
 				partName,
 				lifecycleStatus: "DRAFT",
 				evidenceStatus: "PROVISIONAL",
-				routingSteps: [],
+				routingSteps: standardModelRoute(),
 				plannedCycleTimes: null,
 			},
 			create: {
@@ -552,7 +565,7 @@ async function seedProfile(tx) {
 				partName,
 				lifecycleStatus: "DRAFT",
 				evidenceStatus: "PROVISIONAL",
-				routingSteps: [],
+				routingSteps: standardModelRoute(),
 				plannedCycleTimes: null,
 			},
 		});
@@ -1385,7 +1398,8 @@ async function seedProfile(tx) {
 
 	// Plan demand: 18 trays × 240 = 4320 (client tray standard)
 	const tray = CLIENT_B251.trayQuantityStandard;
-	const projectQty = 18 * tray;
+	// Project total derives from model requirements (4+3+2+2+2+2 trays).
+	const projectQty = 15 * tray;
 
 	await tx.project.upsert({
 		where: { id: projectId },
@@ -1441,25 +1455,22 @@ async function seedProfile(tx) {
 		"05": 2 * tray,
 		"06": 2 * tray,
 	};
+	const julyRequirementIds = {};
 	for (const [modelNumber, qty] of Object.entries(modelProjectQtys)) {
-		await tx.projectModelAllocation.upsert({
+		const requirementId = stableId(`pma-b251-${modelNumber}`);
+		julyRequirementIds[modelNumber] = requirementId;
+		await tx.projectModelRequirement.upsert({
 			where: {
 				projectId_modelId: { projectId, modelId: modelIds[modelNumber] },
 			},
 			update: {
-				plannedQuantity: qty,
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				lifecycleStatus: "COMMITTED",
+				requiredQuantity: qty,
 			},
 			create: {
-				id: stableId(`pma-b251-${modelNumber}`),
+				id: requirementId,
 				projectId,
 				modelId: modelIds[modelNumber],
-				plannedQuantity: qty,
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-				lifecycleStatus: "COMMITTED",
+				requiredQuantity: qty,
 			},
 		});
 	}
@@ -1478,6 +1489,7 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 				sourceModelId: modelIds[model.modelNumber],
 				sourceModelPartId: partIds[partCode],
+				projectModelRequirementId: julyRequirementIds[model.modelNumber] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
@@ -1489,6 +1501,7 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 				sourceModelId: modelIds[model.modelNumber],
 				sourceModelPartId: partIds[partCode],
+				projectModelRequirementId: julyRequirementIds[model.modelNumber] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
@@ -1507,6 +1520,7 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
 				sourceModelId: modelIds[model.modelNumber],
 				sourceModelPartId: decoPartIds[deco.partCode],
+				projectModelRequirementId: julyRequirementIds[model.modelNumber] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
@@ -1518,6 +1532,7 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
 				sourceModelId: modelIds[model.modelNumber],
 				sourceModelPartId: decoPartIds[deco.partCode],
+				projectModelRequirementId: julyRequirementIds[model.modelNumber] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
@@ -1538,6 +1553,7 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 				sourceModelId: modelIds["01"],
 				sourceModelPartId: capsulePartIds["01"],
+				projectModelRequirementId: julyRequirementIds["01"] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
@@ -1549,6 +1565,7 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 				sourceModelId: modelIds["01"],
 				sourceModelPartId: capsulePartIds["01"],
+				projectModelRequirementId: julyRequirementIds["01"] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
@@ -1659,24 +1676,19 @@ async function seedProfile(tx) {
 		});
 		for (const model of pack.models) {
 			const demoModelId = demoModelIds[`${pack.productCode}:${model.modelNumber}`];
-			await tx.projectModelAllocation.upsert({
+			const demoRequirementId = stableId(`demo-pma-${packKey}-${model.modelNumber}`);
+			await tx.projectModelRequirement.upsert({
 				where: {
 					projectId_modelId: { projectId: demoProjectId, modelId: demoModelId },
 				},
 				update: {
-					plannedQuantity: DEMO_TRAY_STANDARD,
-					quantityMagnitude: `${DEMO_TRAY_STANDARD}.000000`,
-					quantityUom: "piece",
-					lifecycleStatus: "COMMITTED",
+					requiredQuantity: DEMO_TRAY_STANDARD,
 				},
 				create: {
-					id: stableId(`demo-pma-${packKey}-${model.modelNumber}`),
+					id: demoRequirementId,
 					projectId: demoProjectId,
 					modelId: demoModelId,
-					plannedQuantity: DEMO_TRAY_STANDARD,
-					quantityMagnitude: `${DEMO_TRAY_STANDARD}.000000`,
-					quantityUom: "piece",
-					lifecycleStatus: "COMMITTED",
+					requiredQuantity: DEMO_TRAY_STANDARD,
 				},
 			});
 			let partIndex = 1;
@@ -1692,6 +1704,7 @@ async function seedProfile(tx) {
 						plannedCycleTimes: null,
 						sourceModelId: demoModelId,
 						sourceModelPartId: demoPartIds[`${pack.productCode}:${partCode}`],
+						projectModelRequirementId: demoRequirementId,
 						lifecycleStatus: "PUBLISHED",
 						variancePercentThreshold: 0.05,
 					},
@@ -1703,6 +1716,7 @@ async function seedProfile(tx) {
 						plannedCycleTimes: null,
 						sourceModelId: demoModelId,
 						sourceModelPartId: demoPartIds[`${pack.productCode}:${partCode}`],
+						projectModelRequirementId: demoRequirementId,
 						lifecycleStatus: "PUBLISHED",
 						variancePercentThreshold: 0.05,
 					},
@@ -1721,9 +1735,7 @@ async function seedProfile(tx) {
 	const lotQty = lotModels.reduce((sum, model) => sum + lotModelTrays[model.modelNumber] * tray, 0);
 	const lotCode = "LOT-B251-01";
 	const lotName = "B251 Production Lot 01";
-	const firstPart = lotModels[0].parts[0];
 	const lotIds = Object.fromEntries(lotModels.map((model) => [model.modelNumber, lotId]));
-	const lotAllocIds = {};
 	await tx.lot.upsert({
 		where: { id: lotId },
 		update: {
@@ -1732,12 +1744,8 @@ async function seedProfile(tx) {
 			lotName,
 			partsListId,
 			partsListVersion: 1,
-			partId: projectPartIds[firstPart[0]],
-			partName: firstPart[1],
 			requiredProductionQuantity: lotQty,
 			status: "ACTIVE",
-			quantityMagnitude: `${lotQty}.000000`,
-			quantityUom: "piece",
 			labelPackSize: CLIENT_B251.trayQuantityStandard,
 			createdAtStage: "Planning",
 		},
@@ -1748,48 +1756,13 @@ async function seedProfile(tx) {
 			lotName,
 			partsListId,
 			partsListVersion: 1,
-			partId: projectPartIds[firstPart[0]],
-			partName: firstPart[1],
 			requiredProductionQuantity: lotQty,
 			status: "ACTIVE",
-			quantityMagnitude: `${lotQty}.000000`,
-			quantityUom: "piece",
 			labelPackSize: CLIENT_B251.trayQuantityStandard,
 			createdAtStage: "Planning",
 			createdAt: seedClock,
 		},
 	});
-	for (const model of lotModels) {
-		const modelQty = lotModelTrays[model.modelNumber] * tray;
-		const partCodes = [
-			...model.parts.map(([partCode]) => partCode),
-			...(CLIENT_B251.decoPartsByModel[model.modelNumber] ?? []).map((deco) => deco.partCode),
-			...(model.modelNumber === "01" ? [CLIENT_B251.sharedCapsule.partCode] : []),
-		];
-		for (const partCode of new Set(partCodes)) {
-			const allocId = stableId(`alloc-${lotCode}-${partCode}`);
-			lotAllocIds[`${model.modelNumber}:${partCode}`] = allocId;
-			await tx.lotPartAllocation.upsert({
-				where: { lotId_partId: { lotId, partId: projectPartIds[partCode] } },
-				update: {
-					quantityMagnitude: `${modelQty}.000000`,
-					quantityUom: "piece",
-					usageBasis: "1 per product",
-					status: "COMMITTED",
-				},
-				create: {
-					id: allocId,
-					lotId,
-					partId: projectPartIds[partCode],
-					quantityMagnitude: `${modelQty}.000000`,
-					quantityUom: "piece",
-					usageBasis: "1 per product",
-					status: "COMMITTED",
-					createdAt: seedClock,
-				},
-			});
-		}
-	}
 
 	// Batches — one tray per batch (qty === labelPackSize). Keys kept so reseed updates in place.
 	// [key, code, modelNumber, partCode, qty, stage, sub, status]
@@ -1821,13 +1794,16 @@ async function seedProfile(tx) {
 	};
 
 	const batchIds = {};
+	const julySeriesSeen = {};
 	for (const [key, batchCode, modelNumber, partCode, qty, stageId, subStageId, status] of batchDefs) {
 		const id = stableId(key);
 		batchIds[key] = id;
 		const lotId = lotIds[modelNumber];
-		const allocId = lotAllocIds[`${modelNumber}:${partCode}`];
 		const lineCode = stageDefaultLineCode[stageId] ?? null;
 		const lineId = lineCode ? stableId(`line-${lineCode}`) : null;
+		const seriesKey = `${modelNumber}:${partCode}`;
+		julySeriesSeen[seriesKey] = (julySeriesSeen[seriesKey] ?? 0) + 1;
+		const seriesTotal = batchDefs.filter((row) => row[2] === modelNumber && row[3] === partCode).length;
 		await tx.batch.upsert({
 			where: { id },
 			update: {
@@ -1837,6 +1813,10 @@ async function seedProfile(tx) {
 				lineId,
 				plannedQuantity: qty,
 				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				projectModelRequirementId: julyRequirementIds[modelNumber] ?? null,
+				seriesNumber: julySeriesSeen[seriesKey],
+				seriesCount: seriesTotal,
+				partId: projectPartIds[partCode],
 				currentStageId: stageId,
 				currentSubStageId: subStageId,
 				status,
@@ -1850,28 +1830,15 @@ async function seedProfile(tx) {
 				lineId,
 				plannedQuantity: qty,
 				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				projectModelRequirementId: julyRequirementIds[modelNumber] ?? null,
+				seriesNumber: julySeriesSeen[seriesKey],
+				seriesCount: seriesTotal,
+				partId: projectPartIds[partCode],
 				currentStageId: stageId,
 				currentSubStageId: subStageId,
 				status,
 				createdBySubjectId: operator.id,
 				createdAt: seedClock,
-			},
-		});
-		await tx.batchPartLine.upsert({
-			where: { batchId_partId: { batchId: id, partId: projectPartIds[partCode] } },
-			update: {
-				quantity: qty,
-				lotPartAllocationId: allocId,
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
-			},
-			create: {
-				batchId: id,
-				partId: projectPartIds[partCode],
-				quantity: qty,
-				lotPartAllocationId: allocId,
-				quantityMagnitude: `${qty}.000000`,
-				quantityUom: "piece",
 			},
 		});
 	}
@@ -1889,9 +1856,9 @@ async function seedProfile(tx) {
 		["sep", "PRJ-B251-SEP", "B251 September seasonal launch", "DRAFT", false, { "01": 4, "02": 3, "03": 2, "04": 2, "05": 2, "06": 2 }],
 		["m02", "PRJ-B251-M02", "B251 Cheese Hotdog push", "RELEASED", true, { "02": 5 }],
 		["m03", "PRJ-B251-M03", "B251 Tacos run", "RELEASED", true, { "03": 4 }],
-		["m04", "PRJ-B251-M04", "B251 Potato Wedge trial", "PAUSED", false, { "04": 2 }],
+		["m04", "PRJ-B251-M04", "B251 Potato Wedge trial", "DRAFT", false, { "04": 2 }],
 		["m05", "PRJ-B251-M05", "B251 Cola / Ice Coffee completed", "COMPLETED", true, { "05": 3 }],
-		["m06", "PRJ-B251-M06", "B251 Tray buffer", "READY", false, { "06": 3 }],
+		["m06", "PRJ-B251-M06", "B251 Tray buffer", "DRAFT", false, { "06": 3 }],
 		["jun", "PRJ-B251-JUN", "B251 June pilot (retro)", "COMPLETED", true, { "01": 2 }],
 		["oct", "PRJ-B251-OCT", "B251 October forecast", "DRAFT", false, { "01": 2, "02": 2 }],
 	];
@@ -1959,7 +1926,6 @@ async function seedProfile(tx) {
 		const storyPartsListId = stableId(`parts-list-${projKey}-v1`);
 		const storyProjectPartIds = {};
 		const storyLotIds = {};
-		const storyAllocIds = {};
 		const storyQty = Object.values(modelTrays).reduce((sum, trays) => sum + trays * tray, 0);
 
 		await tx.project.upsert({
@@ -2003,24 +1969,21 @@ async function seedProfile(tx) {
 				createdAt: seedClock,
 			},
 		});
+		const storyRequirementIds = {};
 		for (const [modelNumber, trays] of Object.entries(modelTrays)) {
 			const qty = trays * tray;
-			await tx.projectModelAllocation.upsert({
+			const requirementId = stableId(`pma-${projKey}-${modelNumber}`);
+			storyRequirementIds[modelNumber] = requirementId;
+			await tx.projectModelRequirement.upsert({
 				where: { projectId_modelId: { projectId: storyProjectId, modelId: modelIds[modelNumber] } },
 				update: {
-					plannedQuantity: qty,
-					quantityMagnitude: `${qty}.000000`,
-					quantityUom: "piece",
-					lifecycleStatus: "COMMITTED",
+					requiredQuantity: qty,
 				},
 				create: {
-					id: stableId(`pma-${projKey}-${modelNumber}`),
+					id: requirementId,
 					projectId: storyProjectId,
 					modelId: modelIds[modelNumber],
-					plannedQuantity: qty,
-					quantityMagnitude: `${qty}.000000`,
-					quantityUom: "piece",
-					lifecycleStatus: "COMMITTED",
+					requiredQuantity: qty,
 				},
 			});
 		}
@@ -2040,6 +2003,7 @@ async function seedProfile(tx) {
 						plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 						sourceModelId: modelIds[modelNumber],
 						sourceModelPartId: partIds[partCode],
+						projectModelRequirementId: storyRequirementIds[modelNumber] ?? null,
 						lifecycleStatus: "PUBLISHED",
 						variancePercentThreshold: 0.05,
 					},
@@ -2051,69 +2015,74 @@ async function seedProfile(tx) {
 						plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 						sourceModelId: modelIds[modelNumber],
 						sourceModelPartId: partIds[partCode],
+						projectModelRequirementId: storyRequirementIds[modelNumber] ?? null,
 						lifecycleStatus: "PUBLISHED",
 						variancePercentThreshold: 0.05,
 					},
 				});
 			}
-			for (const deco of CLIENT_B251.decoPartsByModel[modelNumber] ?? []) {
-				if (!decoPartIds[deco.partCode]) continue;
-				const id = stableId(`plan-part-${projKey}-deco-${deco.partCode}`);
-				storyProjectPartIds[deco.partCode] = id;
-				await tx.part.upsert({
-					where: { id },
-					update: {
-						projectId: storyProjectId,
-						partCode: deco.partCode,
-						partName: decoPartDisplayName(deco),
-						plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
-						sourceModelId: modelIds[modelNumber],
-						sourceModelPartId: decoPartIds[deco.partCode],
-						lifecycleStatus: "PUBLISHED",
-						variancePercentThreshold: 0.05,
-					},
-					create: {
-						id,
-						projectId: storyProjectId,
-						partCode: deco.partCode,
-						partName: decoPartDisplayName(deco),
-						plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
-						sourceModelId: modelIds[modelNumber],
-						sourceModelPartId: decoPartIds[deco.partCode],
-						lifecycleStatus: "PUBLISHED",
-						variancePercentThreshold: 0.05,
-					},
-				});
-			}
-		}
-		if (storyModels.includes("01")) {
-			const partCode = CLIENT_B251.sharedCapsule.partCode;
-			const id = stableId(`plan-part-${projKey}-capsule-${partCode}`);
-			storyProjectPartIds[partCode] = id;
+		for (const deco of CLIENT_B251.decoPartsByModel[modelNumber] ?? []) {
+			if (!decoPartIds[deco.partCode]) continue;
+			const id = stableId(`plan-part-${projKey}-deco-${deco.partCode}`);
+			storyProjectPartIds[deco.partCode] = id;
 			await tx.part.upsert({
 				where: { id },
 				update: {
 					projectId: storyProjectId,
-					partCode,
-					partName: CLIENT_B251.sharedCapsule.partName,
-					plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
-					sourceModelId: modelIds["01"],
-					sourceModelPartId: capsulePartIds["01"],
+					partCode: deco.partCode,
+					partName: decoPartDisplayName(deco),
+					plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
+					sourceModelId: modelIds[modelNumber],
+					sourceModelPartId: decoPartIds[deco.partCode],
+					projectModelRequirementId: storyRequirementIds[modelNumber] ?? null,
 					lifecycleStatus: "PUBLISHED",
 					variancePercentThreshold: 0.05,
 				},
 				create: {
 					id,
 					projectId: storyProjectId,
-					partCode,
-					partName: CLIENT_B251.sharedCapsule.partName,
-					plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
-					sourceModelId: modelIds["01"],
-					sourceModelPartId: capsulePartIds["01"],
+					partCode: deco.partCode,
+					partName: decoPartDisplayName(deco),
+					plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
+					sourceModelId: modelIds[modelNumber],
+					sourceModelPartId: decoPartIds[deco.partCode],
+					projectModelRequirementId: storyRequirementIds[modelNumber] ?? null,
 					lifecycleStatus: "PUBLISHED",
 					variancePercentThreshold: 0.05,
 				},
 			});
+		}
+		}
+		if (storyModels.includes("01")) {
+			const partCode = CLIENT_B251.sharedCapsule.partCode;
+		const id = stableId(`plan-part-${projKey}-capsule-${partCode}`);
+		storyProjectPartIds[partCode] = id;
+		await tx.part.upsert({
+			where: { id },
+			update: {
+				projectId: storyProjectId,
+				partCode,
+				partName: CLIENT_B251.sharedCapsule.partName,
+				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
+				sourceModelId: modelIds["01"],
+				sourceModelPartId: capsulePartIds["01"],
+				projectModelRequirementId: storyRequirementIds["01"] ?? null,
+				lifecycleStatus: "PUBLISHED",
+				variancePercentThreshold: 0.05,
+			},
+			create: {
+				id,
+				projectId: storyProjectId,
+				partCode,
+				partName: CLIENT_B251.sharedCapsule.partName,
+				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
+				sourceModelId: modelIds["01"],
+				sourceModelPartId: capsulePartIds["01"],
+				projectModelRequirementId: storyRequirementIds["01"] ?? null,
+				lifecycleStatus: "PUBLISHED",
+				variancePercentThreshold: 0.05,
+			},
+		});
 		}
 		await tx.partsList.upsert({
 			where: { id: storyPartsListId },
@@ -2166,134 +2135,96 @@ async function seedProfile(tx) {
 		}
 		const projectLotDefs = storyLots[projKey] ?? [];
 		if (projectLotDefs.length > 0) {
-			const [canonicalLotSuffix, lotCode, lotName, firstModelNumber, , lotStatus] = projectLotDefs[0];
-			const lotId = stableId(`lot-${projKey}-${canonicalLotSuffix}`);
-			const lotQty = projectLotDefs.reduce((sum, [, , , , trays]) => sum + trays * tray, 0);
-			const firstPart = CLIENT_B251.models.find((model) => model.modelNumber === firstModelNumber).parts[0];
-			for (const [lotSuffix] of projectLotDefs) storyLotIds[lotSuffix] = lotId;
-			await tx.lot.upsert({
-				where: { id: lotId },
-				update: {
-					projectId: storyProjectId,
-					lotCode: code(lotCode),
-					lotName,
-					partsListId: storyPartsListId,
-					partsListVersion: 1,
-					partId: storyProjectPartIds[firstPart[0]],
-					partName: firstPart[1],
-					requiredProductionQuantity: lotQty,
-					status: lotStatus,
-					quantityMagnitude: `${lotQty}.000000`,
-					quantityUom: "piece",
-					labelPackSize: CLIENT_B251.trayQuantityStandard,
-					createdAtStage: "Planning",
-				},
-				create: {
-					id: lotId,
-					projectId: storyProjectId,
-					lotCode: code(lotCode),
-					lotName,
-					partsListId: storyPartsListId,
-					partsListVersion: 1,
-					partId: storyProjectPartIds[firstPart[0]],
-					partName: firstPart[1],
-					requiredProductionQuantity: lotQty,
-					status: lotStatus,
-					quantityMagnitude: `${lotQty}.000000`,
-					quantityUom: "piece",
-					labelPackSize: CLIENT_B251.trayQuantityStandard,
-					createdAtStage: "Planning",
-					createdAt: seedClock,
-				},
-			});
-			for (const modelNumber of Object.keys(modelTrays)) {
-				const modelQty = modelTrays[modelNumber] * tray;
-				const model = CLIENT_B251.models.find((candidate) => candidate.modelNumber === modelNumber);
-				const partCodes = [
-					...model.parts.map(([partCode]) => partCode),
-					...(CLIENT_B251.decoPartsByModel[modelNumber] ?? []).map((deco) => deco.partCode),
-					...(modelNumber === "01" ? [CLIENT_B251.sharedCapsule.partCode] : []),
-				].filter((partCode) => storyProjectPartIds[partCode] !== undefined);
-				for (const partCode of new Set(partCodes)) {
-					const allocId = stableId(`alloc-${projKey}-${canonicalLotSuffix}-${partCode}`);
-					storyAllocIds[`${canonicalLotSuffix}:${partCode}`] = allocId;
-					await tx.lotPartAllocation.upsert({
-						where: { lotId_partId: { lotId, partId: storyProjectPartIds[partCode] } },
-						update: {
-							quantityMagnitude: `${modelQty}.000000`,
-							quantityUom: "piece",
-							usageBasis: "1 per product",
-							status: "COMMITTED",
-						},
-						create: {
-							id: allocId,
-							lotId,
-							partId: storyProjectPartIds[partCode],
-							quantityMagnitude: `${modelQty}.000000`,
-							quantityUom: "piece",
-							usageBasis: "1 per product",
-							status: "COMMITTED",
-							createdAt: seedClock,
-						},
-					});
-				}
-			}
+		const [canonicalLotSuffix, lotCode, lotName, , , lotStatus] = projectLotDefs[0];
+		const lotId = stableId(`lot-${projKey}-${canonicalLotSuffix}`);
+		const lotQty = projectLotDefs.reduce((sum, [, , , , trays]) => sum + trays * tray, 0);
+		for (const [lotSuffix] of projectLotDefs) storyLotIds[lotSuffix] = lotId;
+		await tx.lot.upsert({
+			where: { id: lotId },
+			update: {
+				projectId: storyProjectId,
+				lotCode: code(lotCode),
+				lotName,
+				partsListId: storyPartsListId,
+				partsListVersion: 1,
+				requiredProductionQuantity: lotQty,
+				status: lotStatus,
+				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				createdAtStage: "Planning",
+			},
+			create: {
+				id: lotId,
+				projectId: storyProjectId,
+				lotCode: code(lotCode),
+				lotName,
+				partsListId: storyPartsListId,
+				partsListVersion: 1,
+				requiredProductionQuantity: lotQty,
+				status: lotStatus,
+				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				createdAtStage: "Planning",
+				createdAt: seedClock,
+			},
+		});
+		}
+		const storyPartModel = {};
+		for (const storyModel of CLIENT_B251.models) {
+			for (const [storyPartCode] of storyModel.parts) storyPartModel[storyPartCode] = storyModel.modelNumber;
+			for (const deco of CLIENT_B251.decoPartsByModel[storyModel.modelNumber] ?? []) storyPartModel[deco.partCode] = storyModel.modelNumber;
+		}
+		storyPartModel[CLIENT_B251.sharedCapsule.partCode] = "01";
+		const storySeriesSeen = {};
+		const storySeriesTotals = {};
+		for (const [, , , storyPartCode] of storyBatches[projKey] ?? []) {
+			storySeriesTotals[storyPartCode] = (storySeriesTotals[storyPartCode] ?? 0) + 1;
 		}
 		for (const [batchSuffix, batchCode, lotSuffix, partCode, stageKey, subKey, batchStatus] of storyBatches[projKey] ?? []) {
 			const id = stableId(`batch-${projKey}-${batchSuffix}`);
 			const stageId = storyStage[stageKey];
 			const subStageId = subKey === "-" ? null : (storySubStage[subKey] ?? null);
 			const canonicalLotSuffix = storyLots[projKey]?.[0]?.[0] ?? lotSuffix;
-			const lotId = storyLotIds[lotSuffix] ?? storyLotIds[canonicalLotSuffix];
-			const allocId = storyAllocIds[`${canonicalLotSuffix}:${partCode}`];
-			const lineCode = stageDefaultLineCode[stageId] ?? null;
+		const lotId = storyLotIds[lotSuffix] ?? storyLotIds[canonicalLotSuffix];
+		const lineCode = stageDefaultLineCode[stageId] ?? null;
 			const lineId = lineCode ? stableId(`line-${lineCode}`) : null;
+			storySeriesSeen[partCode] = (storySeriesSeen[partCode] ?? 0) + 1;
+			const partModelNumber = storyPartModel[partCode];
 			await tx.batch.upsert({
 				where: { id },
-				update: {
-					batchCode: code(batchCode),
-					barcodeValue: code(batchCode),
-					lotId,
-					lineId,
-					plannedQuantity: tray,
-					labelPackSize: CLIENT_B251.trayQuantityStandard,
-					currentStageId: stageId,
-					currentSubStageId: subStageId,
-					status: batchStatus,
-					createdBySubjectId: operator.id,
-				},
-				create: {
-					id,
-					batchCode: code(batchCode),
-					barcodeValue: code(batchCode),
-					lotId,
-					lineId,
-					plannedQuantity: tray,
-					labelPackSize: CLIENT_B251.trayQuantityStandard,
-					currentStageId: stageId,
-					currentSubStageId: subStageId,
-					status: batchStatus,
-					createdBySubjectId: operator.id,
-					createdAt: seedClock,
-				},
-			});
-			await tx.batchPartLine.upsert({
-				where: { batchId_partId: { batchId: id, partId: storyProjectPartIds[partCode] } },
-				update: {
-					quantity: tray,
-					lotPartAllocationId: allocId,
-					quantityMagnitude: `${tray}.000000`,
-					quantityUom: "piece",
-				},
-				create: {
-					batchId: id,
-					partId: storyProjectPartIds[partCode],
-					quantity: tray,
-					lotPartAllocationId: allocId,
-					quantityMagnitude: `${tray}.000000`,
-					quantityUom: "piece",
-				},
-			});
+			update: {
+				batchCode: code(batchCode),
+				barcodeValue: code(batchCode),
+				lotId,
+				lineId,
+				plannedQuantity: tray,
+				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				projectModelRequirementId: partModelNumber ? (storyRequirementIds[partModelNumber] ?? null) : null,
+				seriesNumber: storySeriesSeen[partCode],
+				seriesCount: storySeriesTotals[partCode] ?? 1,
+				partId: storyProjectPartIds[partCode],
+				currentStageId: stageId,
+				currentSubStageId: subStageId,
+				status: batchStatus,
+				createdBySubjectId: operator.id,
+			},
+			create: {
+				id,
+				batchCode: code(batchCode),
+				barcodeValue: code(batchCode),
+				lotId,
+				lineId,
+				plannedQuantity: tray,
+				labelPackSize: CLIENT_B251.trayQuantityStandard,
+				projectModelRequirementId: partModelNumber ? (storyRequirementIds[partModelNumber] ?? null) : null,
+				seriesNumber: storySeriesSeen[partCode],
+				seriesCount: storySeriesTotals[partCode] ?? 1,
+				partId: storyProjectPartIds[partCode],
+				currentStageId: stageId,
+				currentSubStageId: subStageId,
+				status: batchStatus,
+				createdBySubjectId: operator.id,
+				createdAt: seedClock,
+			},
+		});
 		}
 	}
 	// August first-prints (desk realism for the replenishment story).

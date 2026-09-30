@@ -44,46 +44,46 @@ model Product {
 }
 
 model Model {
-  id                String                   @id @default(uuid())
+  id                String                    @id @default(uuid())
   productId         String
-  product           Product                  @relation(fields: [productId], references: [id])
+  product           Product                   @relation(fields: [productId], references: [id])
   modelNumber       String
   modelName         String?
   sourceStatus      ProductSourceStatus
   sourceReference   Json?
-  pinned            Boolean                  @default(false)
-  lifecycleStatus   CatalogLifecycleStatus   @default(DRAFT)
-  evidenceStatus    CanonicalEvidenceStatus  @default(NEEDS_CONFIRMATION)
-  rowVersion        Int                      @default(1)
-  createdAt         DateTime                 @default(now())
-  updatedAt         DateTime                 @updatedAt
+  pinned            Boolean                   @default(false)
+  lifecycleStatus   CatalogLifecycleStatus    @default(DRAFT)
+  evidenceStatus    CanonicalEvidenceStatus   @default(NEEDS_CONFIRMATION)
+  rowVersion        Int                       @default(1)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
   modelParts        ModelPart[]
-  allocations       ProjectModelAllocation[]
-  projectParts      Part[]                   @relation("ModelProjectParts")
+  modelRequirements ProjectModelRequirement[]
+  projectParts      Part[]                    @relation("ModelProjectParts")
 
   @@unique([productId, modelNumber])
   @@index([productId])
 }
 
 model ModelPart {
-  id              String                  @id @default(uuid())
-  modelId         String
-  model           Model                   @relation(fields: [modelId], references: [id])
-  partCode        String
-  partName        String
-  lifecycleStatus CatalogLifecycleStatus  @default(DRAFT)
-  evidenceStatus  CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
-  rowVersion      Int                     @default(1)
-  createdAt       DateTime                @default(now())
+  id                String                  @id @default(uuid())
+  modelId           String
+  model             Model                   @relation(fields: [modelId], references: [id])
+  partCode          String
+  partName          String
+  lifecycleStatus   CatalogLifecycleStatus  @default(DRAFT)
+  evidenceStatus    CanonicalEvidenceStatus @default(NEEDS_CONFIRMATION)
+  rowVersion        Int                     @default(1)
+  createdAt         DateTime                @default(now())
   // Ordered catalog-level StageStepRef[] template. Promotion into a versioned PartsList is
   // intentionally application-controlled until the template contract is confirmed.
-  routingSteps    Json
+  routingSteps      Json
   // Planned/required cycle time, seconds, keyed per route step
   // (`stageId::subStageId`, empty subStageId when stage-wide). Null = unset
   // (honest absence, never zero-filled). Master default consumed by projects;
   // runs snapshot it onto Part at creation.
   plannedCycleTimes Json?
-  projectParts    Part[]                  @relation("ModelPartProjectParts")
+  projectParts      Part[]                  @relation("ModelPartProjectParts")
 
   @@unique([modelId, partCode])
   @@index([modelId])
@@ -114,18 +114,18 @@ model WorkflowGroup {
 }
 
 model Stage {
-  id                 String                @id @default(uuid())
-  workflowGroupId    String
-  workflowGroup      WorkflowGroup         @relation(fields: [workflowGroupId], references: [id])
+  id                      String                   @id @default(uuid())
+  workflowGroupId         String
+  workflowGroup           WorkflowGroup            @relation(fields: [workflowGroupId], references: [id])
   // Manufacturing route stage (for example Injection or Decoration), not floor Section/Process.
-  name               String
+  name                    String
   // Optional per-locale name overrides: { ja?: string, fil?: string }
-  nameLocalized      Json?
-  displayOrder       Int
-  isSystemSeed       Boolean               @default(false)
-  subStageLinks             SubStageEligibility[]
-  stationSteps              StationStep[]
-  qualityStageAssignments   QualityStageAssignment[]
+  nameLocalized           Json?
+  displayOrder            Int
+  isSystemSeed            Boolean                  @default(false)
+  subStageLinks           SubStageEligibility[]
+  stationSteps            StationStep[]
+  qualityStageAssignments QualityStageAssignment[]
 
   @@index([workflowGroupId])
 }

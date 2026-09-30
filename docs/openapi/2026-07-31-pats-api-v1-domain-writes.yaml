@@ -166,7 +166,8 @@ paths:
   /projects:
     post:
       operationId: projectCreate
-      summary: Create a draft project
+      summary: Create a draft project and its single lot
+      description: Creating a project also creates its one lot. Optional lotCode suggestion (unique); the lot name is the project name. Model requirements, batch size, and product pack are set on the draft project view. The lot target derives from the requirements once set.
       tags: [PATS Planning]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
@@ -174,16 +175,17 @@ paths:
   /projects/{projectId}:
     patch:
       operationId: projectPatch
-      summary: Update a draft project
+      summary: Update a draft project, release it, or complete it
+      description: Field edits (name, product) apply to DRAFT only. status=RELEASED releases a draft (mints per-part series batches, activates PLANNED→ACTIVE). status=COMPLETED closes a released project once every batch is terminally dispositioned. Status transitions cannot be combined with field edits.
       tags: [PATS Planning]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
-      responses: { '200': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
-  /projects/{projectId}/model-allocations:
-    post:
-      operationId: projectModelAllocationUpsert
-      summary: Upsert a model allocation and materialize plan-part evidence
-      description: Accepts model identity, planned quantity/UOM/usage basis, and source revision. Demand dimensions marketRegion and demandPurpose are retired and rejected.
+      responses: { '200': { $ref: '#/components/responses/CommandRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+  /projects/{projectId}/model-requirements:
+    put:
+      operationId: projectModelRequirementsReplace
+      summary: Replace the project model quantity requirements
+      description: Full replacement of model order quantities. Changing the Model set rebuilds project Part snapshots and route versions from the selected Product Pack; changing quantities for the same Model set preserves Project-scoped part removals and existing routes. DRAFT only, including after the Project-owned Lot exists. Empty set clears all requirements; release remains blocked until at least one valid requirement exists.
       tags: [PATS Planning]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
@@ -196,27 +198,20 @@ paths:
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
-  /projects/{projectId}/release:
-    post:
-      operationId: projectRelease
-      summary: Release a draft or ready project (mints missing tray batches, then activates PLANNED→ACTIVE)
+  /projects/{projectId}/parts/{partId}:
+    delete:
+      operationId: projectPartRemove
+      summary: Remove a project part and its route steps while a draft
+      description: Project-scoped removal only; the catalog ModelPart is untouched. Draft only; refused once released or when batches reference the part. Restore by re-applying the model requirements.
       tags: [PATS Planning]
       x-required-capability: planning.manage
-      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
-      responses: { '200': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' } }
-  /projects/{projectId}/lots:
-    post:
-      operationId: projectLotCreate
-      summary: Create the single planned lot and its part allocation
-      description: A project can have at most one lot. A second distinct lot creation returns a 409 cardinality conflict; idempotent retries replay the original response.
-      tags: [PATS Planning]
-      x-required-capability: planning.manage
-      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
-      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { name: partId, in: path, required: true, schema: { type: string } }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '200': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' } }
   /batches:
     post:
       operationId: batchCreate
-      summary: Create a planned batch and initial position projection (API/tests; UI releases mint automatically)
+      summary: Create a planned batch for one project part and its initial position projection (API/tests; UI releases mint automatically)
+      description: The batch carries a single required partId from the lot's project; multi-part `parts[]` payloads were removed by the user-approved 2026-09-27 v1 scope extension.
       tags: [PATS Execution]
       x-required-capability: planning.manage
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
@@ -250,6 +245,7 @@ paths:
     post:
       operationId: qualityDecisionCreate
       summary: Record a quality decision and close or hold the inspection
+      description: FAILED accepts failureDisposition REWORK or TRUE_NG; the batch becomes HELD (rework/hold), SCRAPPED (True-NG), or CLOSED (PASSED).
       tags: [PATS Quality]
       x-required-capability: quality.resolve
       parameters: [{ name: inspectionId, in: path, required: true, schema: { type: string } }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]

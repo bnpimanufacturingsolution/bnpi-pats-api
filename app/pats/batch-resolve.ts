@@ -41,28 +41,21 @@ export type BatchResolveStore = {
 						id: true;
 						lotCode: true;
 						partsListId: true;
-						partName: true;
 						project: { select: { product: { select: { productName: true } } } };
 					};
 				};
-				projectModelAllocation: {
+				projectModelRequirement: {
 					select: { model: { select: { modelName: true; modelNumber: true } } };
 				};
-				parts: {
-					orderBy: { partId: "asc" };
-					take: 1;
-					select: {
-						partId: true;
-						quantity: true;
-						part: { select: { partName: true; partCode: true } };
-					};
+				part: {
+					select: { id: true; partName: true; partCode: true };
 				};
 			};
 		}) => Promise<BatchResolveBatch | null>;
 	};
 	routingStep: {
 		findMany: (args: {
-			where: { partsListId: string; partId?: { in: string[] } };
+			where: { partsListId: string; partId: string };
 			orderBy: Array<{ stepOrder: "asc" } | { id: "asc" }>;
 			select: { id: true; stageId: true; subStageId: true; stepOrder: true; partId: true };
 		}) => Promise<Array<BatchResolveRouteStep>>;
@@ -87,15 +80,10 @@ export type BatchResolveBatch = {
 		id: string;
 		lotCode: string;
 		partsListId: string;
-		partName: string;
 		project: { product: { productName: string } | null };
 	};
-	projectModelAllocation: { model: { modelName: string | null; modelNumber: string } } | null;
-	parts: Array<{
-		partId: string;
-		quantity: number;
-		part: { partName: string; partCode: string };
-	}>;
+	projectModelRequirement: { model: { modelName: string | null; modelNumber: string } } | null;
+	part: { id: string; partName: string; partCode: string };
 };
 
 export type BatchResolveRouteStep = {
@@ -139,8 +127,6 @@ function carriedQuantity(batch: BatchResolveBatch): number {
 		const parsed = Number(typeof magnitude === "object" ? magnitude.toString() : magnitude);
 		if (Number.isFinite(parsed) && parsed > 0) return parsed;
 	}
-	const partQty = batch.parts[0]?.quantity;
-	if (typeof partQty === "number" && partQty > 0) return partQty;
 	return batch.plannedQuantity;
 }
 
@@ -157,21 +143,14 @@ export async function resolveBatchByCode(
 					id: true,
 					lotCode: true,
 					partsListId: true,
-					partName: true,
 					project: { select: { product: { select: { productName: true } } } },
 				},
 			},
-			projectModelAllocation: {
+			projectModelRequirement: {
 				select: { model: { select: { modelName: true, modelNumber: true } } },
 			},
-			parts: {
-				orderBy: { partId: "asc" },
-				take: 1,
-				select: {
-					partId: true,
-					quantity: true,
-					part: { select: { partName: true, partCode: true } },
-				},
+			part: {
+				select: { id: true, partName: true, partCode: true },
 			},
 		},
 	});
@@ -180,11 +159,10 @@ export async function resolveBatchByCode(
 		throw new CommandProblem(404, BATCH_RESOLVE_NOT_FOUND, "Not Found", "No batch matches the scanned code.");
 	}
 
-	const partIds = batch.parts.map((part) => part.partId);
 	const steps = await database.routingStep.findMany({
 		where: {
 			partsListId: batch.lot.partsListId,
-			...(partIds.length > 0 ? { partId: { in: partIds } } : {}),
+			partId: batch.part.id,
 		},
 		orderBy: [{ stepOrder: "asc" }, { id: "asc" }],
 		select: { id: true, stageId: true, subStageId: true, stepOrder: true, partId: true },
@@ -193,21 +171,19 @@ export async function resolveBatchByCode(
 	const currentStageId = batch.positionProjection?.stageId ?? batch.currentStageId;
 	const currentSubStageId = batch.positionProjection?.subStageId ?? batch.currentSubStageId;
 	const nextExpectedStep = nextExpectedRouteStep(steps, batch.positionProjection?.routeStepId ?? null);
-	const primaryPart = batch.parts[0];
-
 	return {
 		batchId: batch.id,
 		batchCode: batch.batchCode,
 		barcodeValue: batch.barcodeValue,
 		lotId: batch.lot.id,
 		lotCode: batch.lot.lotCode,
-		partId: primaryPart?.partId ?? null,
-		partCode: primaryPart?.part.partCode ?? null,
-		partName: primaryPart?.part.partName ?? batch.lot.partName ?? null,
+		partId: batch.part.id,
+		partCode: batch.part.partCode,
+		partName: batch.part.partName,
 		productName: batch.lot.project.product?.productName ?? null,
 		modelName:
-			batch.projectModelAllocation?.model.modelName ??
-			batch.projectModelAllocation?.model.modelNumber ??
+			batch.projectModelRequirement?.model.modelName ??
+			batch.projectModelRequirement?.model.modelNumber ??
 			null,
 		plannedQuantity: batch.plannedQuantity,
 		carriedQuantity: carriedQuantity(batch),

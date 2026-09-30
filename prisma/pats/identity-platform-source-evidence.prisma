@@ -111,30 +111,31 @@ enum SubjectAssignmentStatus {
 }
 
 model Subject {
-  id                          String                 @id @default(uuid())
+  id                          String                   @id @default(uuid())
   provider                    String
   issuer                      String
   providerSubject             String
   displayNameSnapshot         String?
   emailSnapshot               String?
-  status                      SubjectStatus          @default(ACTIVE)
-  createdAt                   DateTime               @default(now())
-  updatedAt                   DateTime               @updatedAt
+  status                      SubjectStatus            @default(ACTIVE)
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
   assignments                 SubjectAssignment[]
   credential                  SubjectCredential?
-  stageEventActorRecords      StageEvent[]           @relation("StageEventActor")
-  inventoryTransactionRecords InventoryTransaction[] @relation("InventoryTransactionRecorder")
-  routingViolationResolutions RoutingViolation[]     @relation("RoutingViolationResolver")
-  processChangeRecords        ProcessChangeLog[]     @relation("ProcessChangeActor")
-  qualityInspections          QualityInspection[]    @relation("QualityInspectionInspector")
-  qualityDecisions            QualityDecision[]      @relation("QualityDecisionActor")
+  stageEventActorRecords      StageEvent[]             @relation("StageEventActor")
+  inventoryTransactionRecords InventoryTransaction[]   @relation("InventoryTransactionRecorder")
+  routingViolationResolutions RoutingViolation[]       @relation("RoutingViolationResolver")
+  processChangeRecords        ProcessChangeLog[]       @relation("ProcessChangeActor")
+  qualityInspections          QualityInspection[]      @relation("QualityInspectionInspector")
+  qualityDecisions            QualityDecision[]        @relation("QualityDecisionActor")
   qualityStageAssignments     QualityStageAssignment[] @relation("QualityStageAssignee")
-  releasedPlans               Project[]              @relation("PlanReleaseActor")
-  createdBatches              Batch[]                @relation("BatchCreator")
-  auditRecords                AuditRecord[]          @relation("AuditActor")
+  releasedPlans               Project[]                @relation("PlanReleaseActor")
+  completedProjects           Project[]                @relation("ProjectCompletionActor")
+  createdBatches              Batch[]                  @relation("BatchCreator")
+  auditRecords                AuditRecord[]            @relation("AuditActor")
   idempotencyRecords          IdempotencyRecord[]
-  assignedLines               Line[]                 @relation("LineAssignedLeader")
-  activeLines                 Line[]                 @relation("LineActiveLeader")
+  assignedLines               Line[]                   @relation("LineAssignedLeader")
+  activeLines                 Line[]                   @relation("LineActiveLeader")
   lineOperatorAssignments     LineOperatorAssignment[] @relation("LineOperatorAssignmentSubject")
 
   @@unique([provider, issuer, providerSubject])

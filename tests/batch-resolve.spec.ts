@@ -28,11 +28,10 @@ function batch(overrides: Partial<BatchResolveBatch> = {}): BatchResolveBatch {
 			id: "lot-1",
 			lotCode: "MLT-001",
 			partsListId: "pl-1",
-			partName: "Body",
 			project: { product: { productName: "Machibouke" } },
 		},
-		projectModelAllocation: { model: { modelName: "Model 01", modelNumber: "01" } },
-		parts: [{ partId: "part-1", quantity: 240, part: { partName: "Body", partCode: "P-BODY" } }],
+		projectModelRequirement: { model: { modelName: "Model 01", modelNumber: "01" } },
+		part: { id: "part-1", partName: "Body", partCode: "P-BODY" },
 		...overrides,
 	};
 }

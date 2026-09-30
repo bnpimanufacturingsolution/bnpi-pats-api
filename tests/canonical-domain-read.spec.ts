@@ -101,10 +101,10 @@ describe("canonical PATS domain read contract", () => {
 					releasedAt: null,
 					product: null,
 					productSpecification: null,
-					modelAllocations: [],
+					modelRequirements: [],
 					parts: [{ id: "part-1", partCode: "PART-001", partName: "Main part" }],
 					partsLists: [{ id: "route-1", version: 3, status: "PUBLISHED", publishedAt: new Date("2026-07-02T00:00:00.000Z"), steps: [{ id: "route-step-1", partId: "part-1", part: { partCode: "PART-001", partName: "Main part" }, stageId: "stage-1", subStageId: null, stepOrder: 1 }] }],
-					lot: {
+				lot: {
 						id: "lot-1",
 						lotCode: "LOT-001",
 						lotName: "July lot",
@@ -113,9 +113,6 @@ describe("canonical PATS domain read contract", () => {
 						status: "PLANNED",
 						requiredProductionQuantity: 100,
 						labelPackSize: 10,
-						quantityMagnitude: "100",
-						quantityUom: "EA",
-						partAllocations: [{ lotPartAllocationId: "allocation-1", partId: "part-1", part: { partCode: "PART-001" }, quantityMagnitude: "100", quantityUom: "EA" }],
 						batches: [],
 					},
 				}),
@@ -209,13 +206,12 @@ describe("canonical PATS domain read contract", () => {
 								batchCode: "B-1001",
 								lotId: "lot-1",
 								plannedQuantity: 30,
-								parts: [{
-									partId: "part-1",
-									quantity: 30,
-									quantityMagnitude: "30",
-									quantityUom: "PCS",
-									part: { id: "part-1", partCode: "PART-1", partName: "Casing Upper" },
-								}],
+								seriesNumber: 1,
+								seriesCount: 1,
+								part: { id: "part-1", partCode: "PART-1", partName: "Casing Upper" },
+								lot: { lotCode: "LOT-1" },
+								projectModelRequirement: null,
+								status: "ACTIVE",
 							},
 						},
 					],
@@ -230,7 +226,7 @@ describe("canonical PATS domain read contract", () => {
 
 		expect(response.status).to.equal(200);
 		expect(response.body.data[0]).to.include({ id: "inspection-1", status: "OPEN" });
-		expect(response.body.data[0].batch.parts[0].part.partName).to.equal("Casing Upper");
+		expect(response.body.data[0].batch.part).to.deep.equal({ partId: "part-1", partCode: "PART-1", partName: "Casing Upper" });
 	});
 
 	it("returns a server-owned station snapshot with batch identity and route steps", async () => {
@@ -253,6 +249,9 @@ describe("canonical PATS domain read contract", () => {
 						lotId: "lot-1",
 						plannedQuantity: 12,
 						labelPackSize: 12,
+						projectModelRequirementId: "requirement-1",
+						seriesNumber: 1,
+						seriesCount: 1,
 						status: "ACTIVE",
 						rowVersion: 2,
 						createdAt: new Date("2026-07-30T01:00:00.000Z"),
@@ -264,13 +263,7 @@ describe("canonical PATS domain read contract", () => {
 							partsListId: "parts-list-1",
 							project: { status: "RELEASED" },
 						},
-						parts: [{
-							partId: "part-1",
-							quantity: 12,
-							quantityMagnitude: "12",
-							quantityUom: "EA",
-							part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
-						}],
+						part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
 					},
 				}],
 			},
@@ -307,9 +300,12 @@ describe("canonical PATS domain read contract", () => {
 				batchCode: "BATCH-001",
 				barcodeValue: "BATCH-001-QR",
 				lotId: "lot-1",
-				plannedQuantity: 12,
-				labelPackSize: 12,
-				status: "ACTIVE",
+					plannedQuantity: 12,
+					labelPackSize: 12,
+					projectModelRequirementId: "requirement-1",
+					seriesNumber: 1,
+					seriesCount: 1,
+					status: "ACTIVE",
 				rowVersion: 2,
 				createdAt: "2026-07-30T01:00:00.000Z",
 				lot: {
@@ -320,13 +316,7 @@ describe("canonical PATS domain read contract", () => {
 					partsListId: "parts-list-1",
 					projectStatus: "RELEASED",
 				},
-				parts: [{
-					partId: "part-1",
-					quantity: 12,
-					quantityMagnitude: "12",
-					quantityUom: "EA",
-					part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
-				}],
+				part: { partId: "part-1", partCode: "PART-001", partName: "Main part" },
 			},
 			routeSteps: [{
 				routeStepId: "route-step-1",
@@ -443,13 +433,15 @@ describe("canonical PATS domain read contract", () => {
 								barcodeValue: "BNI-2607-01",
 								plannedQuantity: 200,
 								status: "IN_PROGRESS",
+								seriesNumber: 1,
+								seriesCount: 2,
 								lot: {
 									id: "lot-1",
 									lotCode: "LOT-B251-01",
 									requiredProductionQuantity: 4800,
 									labelPackSize: 240,
 								},
-								parts: [{ part: { partName: "Ice L" } }],
+								part: { id: "part-1", partCode: "PART-001", partName: "Ice L" },
 							},
 						},
 						{
@@ -462,13 +454,15 @@ describe("canonical PATS domain read contract", () => {
 								barcodeValue: "BNI-2607-02",
 								plannedQuantity: 80,
 								status: "IN_PROGRESS",
+								seriesNumber: 1,
+								seriesCount: 1,
 								lot: {
 									id: "lot-1",
 									lotCode: "LOT-B251-01",
 									requiredProductionQuantity: 4800,
 									labelPackSize: 240,
 								},
-								parts: [{ part: { partName: "Takoyaki Shell" } }],
+								part: { id: "part-2", partCode: "PART-002", partName: "Takoyaki Shell" },
 							},
 						},
 					];

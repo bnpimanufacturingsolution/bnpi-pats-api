@@ -427,13 +427,22 @@ export function domainReadRouter(
 				include: {
 					product: { select: { id: true, productCode: true, productName: true } },
 					productSpecification: true,
-					modelAllocations: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { model: { select: { id: true, modelNumber: true, modelName: true } } } },
+					modelRequirements: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { model: { select: { id: true, modelNumber: true, modelName: true } } } },
 					parts: { orderBy: [{ partCode: "asc" }, { id: "asc" }] },
 					partsLists: { orderBy: [{ version: "desc" }, { id: "asc" }], include: { steps: { orderBy: [{ stepOrder: "asc" }, { id: "asc" }], include: { part: { select: { partCode: true, partName: true } } } } } },
 					lot: {
 						include: {
-							partAllocations: { include: { part: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
-							batches: { include: { parts: true, positionProjection: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+							batches: {
+								include: {
+									part: true,
+									positionProjection: true,
+									qualityInspections: {
+										orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+										include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] } },
+									},
+								},
+								orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+							},
 						},
 					},
 				},
@@ -442,6 +451,19 @@ export function domainReadRouter(
 				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested project was not found.");
 				return;
 			}
+			const projectBatches = project.lot?.batches ?? [];
+			const completionReady =
+				project.status === "RELEASED" &&
+				projectBatches.length > 0 &&
+				projectBatches.every((batch) => {
+					const latest = batch.qualityInspections[0]?.decisions[0];
+					return (
+						(batch.status === "CLOSED" && latest?.decision === "PASSED") ||
+						(batch.status === "SCRAPPED" &&
+							latest?.decision === "FAILED" &&
+							latest.failureDisposition === "TRUE_NG")
+					);
+				});
 			// Mutable project resources expose the optimistic-concurrency token as a strong ETag.
 			// Clients must send this value (or body.rowVersion) as If-Match on project commands.
 			res.setHeader("ETag", `"${project.rowVersion}"`);
@@ -456,16 +478,13 @@ export function domainReadRouter(
 				releasedAt: date(project.releasedAt),
 				product: project.product,
 				productSpecification: project.productSpecification,
-				modelAllocations: project.modelAllocations.map((allocation) => ({
-					allocationId: allocation.id,
-					modelId: allocation.modelId,
-					model: allocation.model,
-					plannedQuantity: allocation.plannedQuantity,
-					quantityMagnitude: decimal(allocation.quantityMagnitude),
-					quantityUom: allocation.quantityUom,
-					usageBasis: allocation.usageBasis,
-					lifecycleStatus: allocation.lifecycleStatus,
-					rowVersion: allocation.rowVersion,
+				completedAt: date((project as { completedAt?: Date | null }).completedAt ?? null),
+				completionReady,
+				modelRequirements: project.modelRequirements.map((requirement) => ({
+					modelRequirementId: requirement.id,
+					modelId: requirement.modelId,
+					model: requirement.model,
+					requiredQuantity: requirement.requiredQuantity,
 				})),
 				parts: project.parts,
 				partsListVersions: project.partsLists.map((partsList) => ({
@@ -484,22 +503,23 @@ export function domainReadRouter(
 					status: project.lot.status,
 					requiredProductionQuantity: project.lot.requiredProductionQuantity,
 					labelPackSize: project.lot.labelPackSize,
-					quantityMagnitude: decimal(project.lot.quantityMagnitude),
-					quantityUom: project.lot.quantityUom,
-					partAllocations: project.lot.partAllocations.map((allocation) => ({
-						lotPartAllocationId: allocation.id,
-						partId: allocation.partId,
-						partCode: allocation.part.partCode,
-						quantityMagnitude: decimal(allocation.quantityMagnitude),
-						quantityUom: allocation.quantityUom,
-					})),
 					batches: project.lot.batches.map((batch) => ({
 						batchId: batch.id,
 						batchCode: batch.batchCode,
 						barcodeValue: batch.barcodeValue,
 						status: batch.status,
 						plannedQuantity: batch.plannedQuantity,
-						parts: batch.parts,
+						seriesNumber: (batch as { seriesNumber?: number | null }).seriesNumber ?? null,
+						seriesCount: (batch as { seriesCount?: number | null }).seriesCount ?? null,
+						projectModelRequirementId: (batch as { projectModelRequirementId?: string | null }).projectModelRequirementId ?? null,
+						part: { partId: batch.part.id, partCode: batch.part.partCode, partName: batch.part.partName },
+						qcDisposition: (() => {
+							const latest = batch.qualityInspections[0]?.decisions[0];
+							if (latest?.decision === "PASSED") return "PASSED";
+							if (latest?.decision === "HOLD") return "HOLD";
+							if (latest?.decision === "FAILED") return latest.failureDisposition ?? "FAILED";
+							return null;
+						})(),
 						position: batch.positionProjection,
 					})),
 				}] : [],
@@ -809,9 +829,11 @@ export function domainReadRouter(
 								id: true,
 								batchCode: true,
 								barcodeValue: true,
-								plannedQuantity: true,
-								status: true,
-								lot: {
+												plannedQuantity: true,
+												status: true,
+												seriesNumber: true,
+												seriesCount: true,
+												lot: {
 									select: {
 										id: true,
 										lotCode: true,
@@ -819,11 +841,7 @@ export function domainReadRouter(
 										labelPackSize: true,
 									},
 								},
-								parts: {
-									orderBy: { partId: "asc" },
-									take: 1,
-									select: { part: { select: { partName: true } } },
-								},
+												part: { select: { id: true, partCode: true, partName: true } },
 							},
 						},
 					},
@@ -845,7 +863,11 @@ export function domainReadRouter(
 					batchId: position.batch.id,
 					batchCode: position.batch.batchCode,
 					barcodeValue: position.batch.barcodeValue,
-					partName: position.batch.parts[0]?.part.partName ?? position.batch.batchCode,
+					partName: position.batch.part.partName,
+					partId: position.batch.part.id,
+					partCode: position.batch.part.partCode,
+					seriesNumber: position.batch.seriesNumber,
+					seriesCount: position.batch.seriesCount,
 					lotId: position.batch.lot.id,
 					lotCode: position.batch.lot.lotCode,
 					lotRequiredQuantity: Number(position.batch.lot.requiredProductionQuantity) || 0,
@@ -1325,7 +1347,7 @@ export function domainReadRouter(
 			const where = typeof batchId === "string" && batchId.trim() ? { id: batchId } : {};
 			const [totalItems, batches] = await Promise.all([
 				database.batch.count({ where }),
-				database.batch.findMany({ where, skip: (page.page - 1) * page.limit, take: page.limit, orderBy: [{ createdAt: "desc" }, { id: "asc" }], include: { lot: { select: { id: true, lotCode: true, projectId: true } }, positionProjection: true, parts: true } }),
+				database.batch.findMany({ where, skip: (page.page - 1) * page.limit, take: page.limit, orderBy: [{ createdAt: "desc" }, { id: "asc" }], include: { lot: { select: { id: true, lotCode: true, projectId: true } }, part: { select: { id: true, partCode: true, partName: true } }, positionProjection: true } }),
 			]);
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(batches, page, totalItems));
 		} catch {
@@ -1380,13 +1402,16 @@ export function domainReadRouter(
 					batch: {
 						select: {
 							id: true,
-							batchCode: true,
-							barcodeValue: true,
-							lotId: true,
-							lineId: true,
-							plannedQuantity: true,
-							labelPackSize: true,
-							status: true,
+										batchCode: true,
+											barcodeValue: true,
+											lotId: true,
+											lineId: true,
+											plannedQuantity: true,
+											labelPackSize: true,
+											projectModelRequirementId: true,
+											seriesNumber: true,
+											seriesCount: true,
+											status: true,
 							rowVersion: true,
 							createdAt: true,
 							lot: {
@@ -1395,24 +1420,16 @@ export function domainReadRouter(
 									lotCode: true,
 									lotName: true,
 									projectId: true,
-									partsListId: true,
-									requiredProductionQuantity: true,
+											partsListId: true,
+																					requiredProductionQuantity: true,
 									labelPackSize: true,
 									// Floor release gate: operators lack planning.read, so the
 									// position row carries project status for the arrival queue.
 									project: { select: { status: true } },
 								},
 							},
-							parts: {
-								select: {
-									partId: true,
-									quantity: true,
-									quantityMagnitude: true,
-									quantityUom: true,
-									part: { select: { id: true, partCode: true, partName: true } },
-								},
-							},
-						},
+											part: { select: { id: true, partCode: true, partName: true } },
+										},
 					},
 				},
 			});
@@ -1447,11 +1464,11 @@ export function domainReadRouter(
 								projectStatus: projectRef?.status ?? null,
 							};
 						})(),
-						parts: position.batch.parts.map((part) => ({
-							...part,
-							quantityMagnitude: decimal(part.quantityMagnitude),
-							part: part.part,
-						})),
+						part: {
+							partId: position.batch.part.id,
+							partCode: position.batch.part.partCode,
+							partName: position.batch.part.partName,
+						},
 					},
 					routeSteps: (routeStepsByPartsListId.get(position.batch.lot.partsListId) ?? []).map((step) => ({
 						routeStepId: step.id,
@@ -1538,9 +1555,40 @@ export function domainReadRouter(
 			const inspections = await database.qualityInspection.findMany({
 				where: { stageId: { in: allowedStageIds } },
 				orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-				include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] }, batch: { select: { id: true, batchCode: true, lotId: true, plannedQuantity: true, parts: { orderBy: [{ partId: "asc" }], take: 1, select: { partId: true, quantity: true, quantityMagnitude: true, quantityUom: true, part: { select: { id: true, partCode: true, partName: true } } } } } } },
+				include: {
+					decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] },
+					batch: {
+						select: {
+							id: true,
+						batchCode: true,
+						lotId: true,
+						plannedQuantity: true,
+						seriesNumber: true,
+						seriesCount: true,
+						part: { select: { id: true, partCode: true, partName: true } },
+						lot: { select: { lotCode: true } },
+						projectModelRequirement: { select: { model: { select: { modelNumber: true, modelName: true } } } },
+						status: true,
+					},
+					},
+				},
 			});
-			res.setHeader("Cache-Control", "no-store").json({ data: inspections.map((inspection) => ({ ...inspection, inspectedQuantity: decimal(inspection.inspectedQuantity), startedAt: inspection.startedAt.toISOString(), completedAt: date(inspection.completedAt) })) });
+			res.setHeader("Cache-Control", "no-store").json({
+				data: inspections.map((inspection) => ({
+					...inspection,
+					inspectedQuantity: decimal(inspection.inspectedQuantity),
+					startedAt: inspection.startedAt.toISOString(),
+					completedAt: date(inspection.completedAt),
+					batch: {
+						...inspection.batch,
+						part: {
+							partId: inspection.batch.part.id,
+							partCode: inspection.batch.part.partCode,
+							partName: inspection.batch.part.partName,
+						},
+					},
+				})),
+			});
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS quality inspection data is unavailable.");
 		}

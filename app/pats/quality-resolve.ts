@@ -29,6 +29,7 @@ export type QcResolveBody = {
 	blockReason: QcResolveBlockReason | null;
 	latestDecision: {
 		decision: string;
+		failureDisposition: string | null;
 		reasonCode: string | null;
 		reasonNote: string | null;
 	} | null;
@@ -44,21 +45,14 @@ export type QcResolveStore = QualityStageScopeStore & {
 					select: {
 						id: true;
 						lotCode: true;
-						partName: true;
 						project: { select: { product: { select: { productName: true } } } };
 					};
 				};
-				projectModelAllocation: {
+				projectModelRequirement: {
 					select: { model: { select: { modelName: true; modelNumber: true } } };
 				};
-				parts: {
-					orderBy: { partId: "asc" };
-					take: 1;
-					select: {
-						partId: true;
-						quantity: true;
-						part: { select: { partName: true; partCode: true } };
-					};
+				part: {
+					select: { id: true; partName: true; partCode: true };
 				};
 				qualityInspections: {
 					orderBy: Array<{ createdAt: "desc" } | { id: "desc" }>;
@@ -93,15 +87,10 @@ export type QcResolveBatch = {
 	lot: {
 		id: string;
 		lotCode: string;
-		partName: string;
 		project: { product: { productName: string } | null };
 	};
-	projectModelAllocation: { model: { modelName: string | null; modelNumber: string } } | null;
-	parts: Array<{
-		partId: string;
-		quantity: number;
-		part: { partName: string; partCode: string };
-	}>;
+	projectModelRequirement: { model: { modelName: string | null; modelNumber: string } } | null;
+	part: { id: string; partName: string; partCode: string };
 	qualityInspections: Array<{
 		id: string;
 		stageId: string;
@@ -109,6 +98,7 @@ export type QcResolveBatch = {
 		rowVersion: number;
 		decisions: Array<{
 			decision: string;
+			failureDisposition: string | null;
 			reasonCode: string | null;
 			reasonNote: string | null;
 		}>;
@@ -120,26 +110,26 @@ function latestDecision(inspection: QcResolveBatch["qualityInspections"][number]
 	if (!decision) return null;
 	return {
 		decision: decision.decision,
+		failureDisposition: decision.failureDisposition,
 		reasonCode: decision.reasonCode,
 		reasonNote: decision.reasonNote,
 	};
 }
 
 function identityFromBatch(batch: QcResolveBatch) {
-	const primaryPart = batch.parts[0];
 	return {
 		batchId: batch.id,
 		batchCode: batch.batchCode,
 		barcodeValue: batch.barcodeValue,
 		lotId: batch.lot.id,
 		lotCode: batch.lot.lotCode,
-		partId: primaryPart?.partId ?? null,
-		partName: primaryPart?.part.partName ?? batch.lot.partName ?? null,
-		quantity: primaryPart?.quantity ?? batch.plannedQuantity,
+		partId: batch.part.id,
+		partName: batch.part.partName,
+		quantity: batch.plannedQuantity,
 		productName: batch.lot.project.product?.productName ?? null,
 		modelName:
-			batch.projectModelAllocation?.model.modelName ??
-			batch.projectModelAllocation?.model.modelNumber ??
+			batch.projectModelRequirement?.model.modelName ??
+			batch.projectModelRequirement?.model.modelNumber ??
 			null,
 	};
 }
@@ -165,21 +155,14 @@ export async function resolveQualityInspectionByCode(
 				select: {
 					id: true,
 					lotCode: true,
-					partName: true,
 					project: { select: { product: { select: { productName: true } } } },
 				},
 			},
-			projectModelAllocation: {
+			projectModelRequirement: {
 				select: { model: { select: { modelName: true, modelNumber: true } } },
 			},
-			parts: {
-				orderBy: { partId: "asc" },
-				take: 1,
-				select: {
-					partId: true,
-					quantity: true,
-					part: { select: { partName: true, partCode: true } },
-				},
+			part: {
+				select: { id: true, partName: true, partCode: true },
 			},
 			qualityInspections: {
 				orderBy: [{ createdAt: "desc" }, { id: "desc" }],

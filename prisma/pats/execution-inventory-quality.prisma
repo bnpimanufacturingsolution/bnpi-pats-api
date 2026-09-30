@@ -50,49 +50,39 @@ enum BatchStatus {
 }
 
 model Batch {
-  id                       String                   @id @default(uuid())
-  batchCode                String                   @unique
-  barcodeValue             String                   @unique
-  lotId                    String
-  lot                      Lot                      @relation(fields: [lotId], references: [id])
-  /** Physical line this batch is published to; null = not yet assigned to a line. */
-  lineId                   String?
-  line                     Line?                    @relation(fields: [lineId], references: [id])
-  plannedQuantity          Int
-  labelPackSize            Int
-  projectModelAllocationId String?
-  projectModelAllocation   ProjectModelAllocation?  @relation(fields: [projectModelAllocationId], references: [id])
-  currentStageId           String
-  currentSubStageId        String?
-  status                   BatchStatus              @default(PLANNED)
-  rowVersion               Int                      @default(1)
-  createdBySubjectId       String?
-  createdBySubject         Subject?                 @relation("BatchCreator", fields: [createdBySubjectId], references: [id])
-  createdAt                DateTime                 @default(now())
-  parts                    BatchPartLine[]
-  positionProjection       BatchPositionProjection?
-  qualityInspections       QualityInspection[]
+  id                        String                   @id @default(uuid())
+  batchCode                 String                   @unique
+  barcodeValue              String                   @unique
+  lotId                     String
+  lot                       Lot                      @relation(fields: [lotId], references: [id])
+  /**
+   * Physical line this batch is published to; null = not yet assigned to a line.
+   */
+  lineId                    String?
+  line                      Line?                    @relation(fields: [lineId], references: [id])
+  plannedQuantity           Int
+  labelPackSize             Int
+  projectModelRequirementId String?
+  projectModelRequirement   ProjectModelRequirement? @relation(fields: [projectModelRequirementId], references: [id])
+  seriesNumber              Int?
+  seriesCount               Int?
+  partId                    String
+  part                      Part                     @relation(fields: [partId], references: [id])
+  currentStageId            String
+  currentSubStageId         String?
+  status                    BatchStatus              @default(PLANNED)
+  rowVersion                Int                      @default(1)
+  createdBySubjectId        String?
+  createdBySubject          Subject?                 @relation("BatchCreator", fields: [createdBySubjectId], references: [id])
+  createdAt                 DateTime                 @default(now())
+  positionProjection        BatchPositionProjection?
+  qualityInspections        QualityInspection[]
 
   @@index([lotId])
-  @@index([projectModelAllocationId])
+  @@index([partId])
+  @@index([projectModelRequirementId])
   @@index([currentStageId])
   @@index([lineId])
-}
-
-// Batch <-> Part cardinality is unconfirmed (domain foundation, Section 8) — modeled
-// many-per-batch as the more general reading, same as the frontend.
-model BatchPartLine {
-  batchId             String
-  batch               Batch              @relation(fields: [batchId], references: [id])
-  partId              String
-  part                Part               @relation(fields: [partId], references: [id])
-  quantity            Int
-  lotPartAllocationId String?
-  lotPartAllocation   LotPartAllocation? @relation(fields: [lotPartAllocationId], references: [id])
-  quantityMagnitude   Decimal?           @db.Decimal(18, 6)
-  quantityUom         String?
-
-  @@id([batchId, partId])
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +153,7 @@ model InventoryTransaction {
   sourceRepresentation      String?
   recordedBySubjectId       String?
   recordedBySubject         Subject?                   @relation("InventoryTransactionRecorder", fields: [recordedBySubjectId], references: [id])
+
   @@index([batchId, recordedAt])
   @@index([lotId])
 }
@@ -225,7 +216,6 @@ model LotPartAllocation {
   rowVersion        Int                     @default(1)
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
-  batchPartLines    BatchPartLine[]
 
   @@unique([lotId, partId])
   @@index([partId])
@@ -271,16 +261,22 @@ model QualityInspection {
   @@index([status, createdAt])
 }
 
+enum QualityFailureDisposition {
+  REWORK
+  TRUE_NG
+}
+
 model QualityDecision {
-  id                 String              @id @default(uuid())
+  id                 String                     @id @default(uuid())
   inspectionId       String
-  inspection         QualityInspection   @relation(fields: [inspectionId], references: [id])
+  inspection         QualityInspection          @relation(fields: [inspectionId], references: [id])
   decision           QualityDecisionType
+  failureDisposition QualityFailureDisposition?
   reasonCode         String?
   reasonNote         String?
   decidedBySubjectId String?
-  decidedBySubject   Subject?            @relation("QualityDecisionActor", fields: [decidedBySubjectId], references: [id])
-  decidedAt          DateTime            @default(now())
+  decidedBySubject   Subject?                   @relation("QualityDecisionActor", fields: [decidedBySubjectId], references: [id])
+  decidedAt          DateTime                   @default(now())
 
   @@index([inspectionId, decidedAt])
 }
