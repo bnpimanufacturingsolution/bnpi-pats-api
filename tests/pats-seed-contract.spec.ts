@@ -44,6 +44,11 @@ describe("PATS seed contract", () => {
       "stage-warehouse",
       "BNI-2607-001",
       "Machibouke Hamburger Shop 3",
+      // COMPLETED story projects carry completedAt/completedBy + PASSED QC
+      // history so they satisfy the terminal completion guard.
+      "completedBySubjectId",
+      "storyLifecycleOffsets",
+      "qi-m05-pass-1",
       // B251 capsule/deco/paint ModelParts — not the (dropped) B308 family.
       // (BOM-line PACKAGING_COMPONENT/DECORATION_INPUT writes were removed
       // 2026-09-25 with BomLine; the catalog parts themselves stay.)
@@ -115,6 +120,23 @@ describe("PATS seed contract", () => {
     expect(script).to.contain("if (SEED_PAINT_PARTS)");
   });
 
+  it("leaves deco part-no ModelParts detached (they mirrored inj parts)", () => {
+    const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+    const clientFragment = fs.readFileSync(
+      path.join(repositoryRoot, "scripts", "pats-seed-client-b251.mjs"),
+      "utf8",
+    );
+
+    // Evidence stays (fragment still declares the Deco-tab part nos and the
+    // display helper) but no reseed may attach the near-duplicate rows.
+    expect(clientFragment).to.contain("decoPartsByModel");
+    expect(script).to.contain("const SEED_DECO_PARTS = false");
+    expect(script).to.contain("if (SEED_DECO_PARTS)");
+    // The one execution row that used a deco part no now runs on the inj base.
+    expect(script).to.contain('["augb2", "BNI-2608-002", "aug1", "B251-01-01", "dec", "fs", "ACTIVE"]');
+    expect(script).not.to.contain("B251-01-01ST\", \"dec\"");
+  });
+
   it("seeds labeled demo packs mirroring the app fixtures (never client publication)", () => {
     const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
 
@@ -128,9 +150,15 @@ describe("PATS seed contract", () => {
       expect(script, `seed is missing demo pack ${code}`).to.contain(`productCode: "${code}"`);
       expect(script, `seed is missing demo pack ${name}`).to.contain(`productName: "${name}"`);
       expect(script, `seed is missing pilot projects`).to.contain(
-        "PRJ-${pack.productCode}-PILOT",
+        "projectTag(pack.productCode, 1)",
       );
+      expect(script, `seed is missing demo owned lots`).to.contain("LOT-${pack.productCode}-01");
     }
+    // Pilot project codes mirror the app's PRJ-{PRODUCT}-{YYMM}-{SEQ} shape and
+    // float with seedClock; every pilot owns its PLANNED lot (project-owned lot parity).
+    expect(script).to.contain("PRJ-${productCode}-${seedYYMM}-");
+    expect(script).to.contain("demo-parts-list-");
+    expect(script).to.contain("seedMonthLabel");
     // Demo labeling: manual source, needs-confirmation evidence, draft lifecycle,
     // demo-fixture origin — distinct from the B251 client-parts-list contour.
     expect(script).to.contain('sourceStatus: "MANUAL"');

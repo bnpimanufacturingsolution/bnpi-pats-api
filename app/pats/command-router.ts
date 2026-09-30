@@ -130,6 +130,10 @@ const printJobCreateSchema = z.object({
 	// Actual pcs in the completed pack (label truth). Optional — defaults to the
 	// planned pack quantity; must be a positive integer when provided.
 	actualQuantity: z.number().int().positive().nullable().optional(),
+	// Operator + machine snapshot for the Injection label face. Optional —
+	// omit/blank renders no row instead of an invented name.
+	operatorName: z.string().trim().max(120).nullable().optional(),
+	machineName: z.string().trim().max(160).nullable().optional(),
 }).strict().refine((body) => Boolean(body.sectionId), "sectionId is required.");
 
 const deskPrintSchema = z.object({
@@ -310,6 +314,23 @@ const linePatchSchema = z.object({
 	isEnabled: z.boolean().optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
 
+// Optional equipment identity owned by a ProductionLine. machineCode is
+// globally unique (same uppercase dash pattern as lineCode); a line with no
+// machines simply has no rows. Prints snapshot the name as free text.
+const machineCreateSchema = z.object({
+	machineCode: z.string().trim().regex(lineCodePattern, "Must be uppercase alphanumeric with dashes (1-50 chars).").max(50),
+	name: z.string().trim().min(1).max(160),
+	displayOrder: z.number().int().nonnegative().optional(),
+	isEnabled: z.boolean().optional(),
+}).strict();
+
+const machinePatchSchema = z.object({
+	name: z.string().trim().min(1).max(160).optional(),
+	machineCode: z.string().trim().regex(lineCodePattern, "Must be uppercase alphanumeric with dashes (1-50 chars).").max(50).optional(),
+	displayOrder: z.number().int().nonnegative().optional(),
+	isEnabled: z.boolean().optional(),
+}).strict().refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
+
 const operatorAssignmentCreateSchema = z.object({
 	subjectId: z.string().trim().min(1).max(100),
 	lineId: z.string().trim().min(1).max(100),
@@ -342,13 +363,12 @@ function batchHeaders(id: string, rowVersion: number): Record<string, string> {
 	return { Location: `/api/v1/batches/${id}`, ETag: `"${rowVersion}"` };
 }
 
-function projectResponse(project: { id: string; projectCode: string; name: string; status: string; requiredProductionQuantity: number; productId: string | null; rowVersion: number; completedAt?: Date | null; batchSize?: number }) {
+function projectResponse(project: { id: string; projectCode: string; name: string; status: string; productId: string | null; rowVersion: number; completedAt?: Date | null; batchSize?: number }) {
 	return {
 		projectId: project.id,
 		projectCode: project.projectCode,
 		name: project.name,
 		status: project.status,
-		requiredProductionQuantity: project.requiredProductionQuantity,
 		batchSize: project.batchSize ?? 200,
 		productId: project.productId,
 		rowVersion: project.rowVersion,
@@ -462,7 +482,6 @@ export function commandRouter(
 						workspaceId: process.env.PATS_OPERATIONAL_CONTEXT_KEY ?? "PATS",
 						projectCode: body.projectCode,
 						name: body.name,
-						requiredProductionQuantity: totalQuantity,
 						status: ProjectLifecycleStatus.DRAFT,
 						productId: body.productId ?? null,
 					},
@@ -533,7 +552,7 @@ export function commandRouter(
 				select: { id: true, lotCode: true },
 			});
 			await recordCommandSuccess(transaction, req, "PROJECT_CREATED", "Project", project.id, { projectCode: project.projectCode });
-			return { status: 201, body: { ...projectResponse({ ...project, requiredProductionQuantity: totalQuantity, batchSize: body.batchSize ?? 200 }), modelRequirements: createdRequirements, partsListVersionId: partsList.id, lotId: lot.id, lotCode: lot.lotCode }, headers: resourceHeaders(project.id, project.rowVersion) };
+			return { status: 201, body: { ...projectResponse({ ...project, batchSize: body.batchSize ?? 200 }), modelRequirements: createdRequirements, partsListVersionId: partsList.id, lotId: lot.id, lotCode: lot.lotCode }, headers: resourceHeaders(project.id, project.rowVersion) };
 			});
 			respondCommand(res, response);
 		} catch (error) {
@@ -771,7 +790,7 @@ export function commandRouter(
 					});
 					const updatedProject = await transaction.project.update({
 						where: { id: project.id },
-						data: { requiredProductionQuantity: totalQuantity, rowVersion: { increment: 1 } },
+						data: { rowVersion: { increment: 1 } },
 						select: { id: true, rowVersion: true },
 					});
 					await recordCommandSuccess(transaction, req, "PROJECT_MODEL_REQUIREMENTS_REPLACED", "Project", project.id, { modelCount: priorRequirements.length, partsListVersionId: latestPartsList.id });
@@ -827,7 +846,7 @@ export function commandRouter(
 				}
 			const partsList = await transaction.partsList.create({ data: { projectId: project.id, version: 1, status: "DRAFT", steps: { create: allSteps } }, select: { id: true } });
 			await transaction.lot.updateMany({ where: { projectId: project.id }, data: { partsListId: partsList.id, partsListVersion: 1, requiredProductionQuantity: totalQuantity } });
-			const updatedProject = await transaction.project.update({ where: { id: project.id }, data: { requiredProductionQuantity: totalQuantity, rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
+			const updatedProject = await transaction.project.update({ where: { id: project.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
 				await recordCommandSuccess(transaction, req, "PROJECT_MODEL_REQUIREMENTS_REPLACED", "Project", project.id, { modelCount: createdRequirements.length, partsListVersionId: partsList.id });
 				return { status: 200, body: { modelRequirements: createdRequirements, partsListVersionId: partsList.id, projectRowVersion: updatedProject.rowVersion }, headers: resourceHeaders(project.id, updatedProject.rowVersion) };
 			});
@@ -1160,17 +1179,20 @@ export function commandRouter(
 			const sectionId = body.sectionId;
 			const response = await executeCommand(database, req, "printJobCreate", body, async (transaction) => {
 				try {
-					const job = await recordPrintJob(transaction as unknown as Parameters<typeof recordPrintJob>[0], {
-						batchId: body.batchId,
-					sectionId: sectionId!,
-					reprintOf: body.reprintOf ?? null,
-					actualQuantity: body.actualQuantity ?? null,
-					actor: actorDisplay(req),
-					actorSubjectId: actorId(req),
-					});
+				const job = await recordPrintJob(transaction as unknown as Parameters<typeof recordPrintJob>[0], {
+					batchId: body.batchId,
+				sectionId: sectionId!,
+				reprintOf: body.reprintOf ?? null,
+				actualQuantity: body.actualQuantity ?? null,
+				operatorName: body.operatorName ?? null,
+				machineName: body.machineName ?? null,
+				actor: actorDisplay(req),
+				actorSubjectId: actorId(req),
+				});
 					await recordCommandSuccess(transaction, req, "PRINT_JOB_RECORDED", "PrintJob", job.id, {
 						batchId: job.batchId,
 						status: job.status,
+						originStageEventId: job.originStageEventId,
 					});
 					return {
 						status: job.status === "FAILED" ? 201 : 201,
@@ -1181,6 +1203,7 @@ export function commandRouter(
 							quantity: job.quantity,
 							sequence: job.sequence,
 							failureReason: job.failureReason,
+							originStageEventId: job.originStageEventId,
 						},
 						headers: { Location: `/api/v1/print-jobs/${job.id}` },
 					};
@@ -1838,7 +1861,91 @@ export function commandRouter(
 				const displayOrder = body.displayOrder ?? await transaction.productionLine.count();
 				const line = await transaction.productionLine.create({ data: { lineCode: body.lineCode, name: body.name, displayOrder } });
 				await recordCommandSuccess(transaction, req, "PRODUCTION_LINE_CREATED", "ProductionLine", line.id, { lineCode: line.lineCode });
-				return { status: 201, body: { productionLineId: line.id, lineCode: line.lineCode, name: line.name }, headers: { Location: `/api/v1/production-lines/${line.id}` } };
+			return { status: 201, body: { productionLineId: line.id, lineCode: line.lineCode, name: line.name }, headers: { Location: `/api/v1/production-lines/${line.id}` } };
+		});
+		respondCommand(res, response);
+	} catch (error) { commandError(error, req, res, next); }
+	});
+
+	/**
+	 * @openapi
+	 * /api/v1/production-lines/{productionLineId}/machines:
+	 *   post:
+	 *     operationId: productionLineMachineCreate
+	 *     summary: Register a machine on a production line
+	 *     description: Optional equipment identity for issuance labels. A line with no machines has no rows; labels omit the MACHINE row.
+	 *     tags: [PATS Floor]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - $ref: '#/components/parameters/IdempotencyKey'
+	 *     responses:
+	 *       201: { description: Machine created }
+	 *       404: { description: Production line not found }
+	 *       409: { description: Duplicate machine code or idempotency conflict }
+	 *       422: { description: Invalid machine payload }
+	 */
+	router.post("/production-lines/:productionLineId/machines", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, machineCreateSchema);
+			const productionLineId = req.params.productionLineId;
+			const response = await executeCommand(database, req, "machineCreate", { productionLineId, ...body }, async (transaction) => {
+				const line = await transaction.productionLine.findUnique({ where: { id: productionLineId }, select: { id: true } });
+				if (!line) notFound("The requested production line was not found.");
+				const clash = await transaction.machine.findUnique({ where: { machineCode: body.machineCode }, select: { id: true } });
+				if (clash) conflict("The machine code is already in use.");
+				const displayOrder = body.displayOrder ?? await transaction.machine.count({ where: { productionLineId } });
+				const machine = await transaction.machine.create({
+					data: { productionLineId, machineCode: body.machineCode, name: body.name, displayOrder, isEnabled: body.isEnabled ?? true },
+				});
+				await recordCommandSuccess(transaction, req, "MACHINE_CREATED", "Machine", machine.id, { productionLineId, machineCode: machine.machineCode });
+				return { status: 201, body: { machineId: machine.id, productionLineId, machineCode: machine.machineCode, name: machine.name, displayOrder: machine.displayOrder, isEnabled: machine.isEnabled, rowVersion: machine.rowVersion }, headers: { Location: `/api/v1/production-lines/${productionLineId}/machines/${machine.id}` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.patch("/production-lines/:productionLineId/machines/:machineId", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, machinePatchSchema);
+			const productionLineId = req.params.productionLineId;
+			const machineId = req.params.machineId;
+			const response = await executeCommand(database, req, "machineUpdate", { productionLineId, machineId, ...body }, async (transaction) => {
+				const machine = await transaction.machine.findUnique({ where: { id: machineId } });
+				if (!machine || machine.productionLineId !== productionLineId) notFound("The requested machine was not found.");
+				const ifMatch = requireIfMatch(req, "Machine");
+				if (ifMatch !== machine.rowVersion) staleVersion();
+				if (body.machineCode !== undefined && body.machineCode !== machine.machineCode) {
+					const clash = await transaction.machine.findUnique({ where: { machineCode: body.machineCode }, select: { id: true } });
+					if (clash) conflict("The machine code is already in use.");
+				}
+				const data: Record<string, unknown> = { rowVersion: { increment: 1 } };
+				if (body.name !== undefined) data.name = body.name;
+				if (body.machineCode !== undefined) data.machineCode = body.machineCode;
+				if (body.displayOrder !== undefined) data.displayOrder = body.displayOrder;
+				if (body.isEnabled !== undefined) data.isEnabled = body.isEnabled;
+				const updated = await transaction.machine.update({ where: { id: machineId }, data });
+				await recordCommandSuccess(transaction, req, "MACHINE_UPDATED", "Machine", machineId, { productionLineId, ...body });
+				return { status: 200, body: { machineId: updated.id, productionLineId, machineCode: updated.machineCode, name: updated.name, displayOrder: updated.displayOrder, isEnabled: updated.isEnabled, rowVersion: updated.rowVersion }, headers: { ETag: `"${updated.rowVersion}"` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.delete("/production-lines/:productionLineId/machines/:machineId", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const productionLineId = req.params.productionLineId;
+			const machineId = req.params.machineId;
+			const response = await executeCommand(database, req, "machineDelete", { productionLineId, machineId }, async (transaction) => {
+				const machine = await transaction.machine.findUnique({ where: { id: machineId }, select: { id: true, productionLineId: true, machineCode: true, rowVersion: true } });
+				if (!machine || machine.productionLineId !== productionLineId) notFound("The requested machine was not found.");
+				const ifMatch = requireIfMatch(req, "Machine");
+				if (ifMatch !== machine.rowVersion) staleVersion();
+				// No dependents: prints snapshot the machine name as free text,
+				// never an FK, so history survives the row.
+				await transaction.machine.delete({ where: { id: machineId } });
+				await recordCommandSuccess(transaction, req, "MACHINE_DELETED", "Machine", machineId, { productionLineId, machineCode: machine.machineCode });
+				return { status: 200, body: { machineId, machineCode: machine.machineCode }, headers: {} };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }

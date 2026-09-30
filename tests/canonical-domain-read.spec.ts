@@ -50,13 +50,12 @@ describe("canonical PATS domain read contract", () => {
 						projectCode: "PLAN-001",
 						name: "July production",
 						status: "RELEASED",
-						requiredProductionQuantity: 100,
 						productId: "product-1",
 						rowVersion: 4,
 						createdAt: new Date("2026-07-01T00:00:00.000Z"),
 						releasedAt: new Date("2026-07-02T00:00:00.000Z"),
 						product: { productName: "Sample product" },
-						lot: { id: "lot-1" },
+						lot: { id: "lot-1", requiredProductionQuantity: 100 },
 					}];
 				},
 			},
@@ -95,7 +94,6 @@ describe("canonical PATS domain read contract", () => {
 					projectCode: "PLAN-001",
 					name: "July production",
 					status: "DRAFT",
-					requiredProductionQuantity: 100,
 					rowVersion: 2,
 					createdAt: new Date("2026-07-01T00:00:00.000Z"),
 					releasedAt: null,
@@ -129,6 +127,7 @@ describe("canonical PATS domain read contract", () => {
 		expect(response.body).not.to.have.property("allocations");
 		expect(response.body).not.to.have.property("materialRequirements");
 		expect(response.body).not.to.have.property("pmrsReference");
+		expect(response.body).not.to.have.property("requiredProductionQuantity");
 		expect(response.body.lots[0]).to.include({
 			lotId: "lot-1",
 			partsListId: "route-1",
@@ -261,7 +260,7 @@ describe("canonical PATS domain read contract", () => {
 							lotName: "July lot",
 							projectId: "project-1",
 							partsListId: "parts-list-1",
-							project: { status: "RELEASED" },
+							project: { id: "project-1", name: "July project", projectCode: "PRJ-JUL", status: "RELEASED" },
 						},
 						part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
 					},
@@ -315,6 +314,8 @@ describe("canonical PATS domain read contract", () => {
 					projectId: "project-1",
 					partsListId: "parts-list-1",
 					projectStatus: "RELEASED",
+					projectName: "July project",
+					projectCode: "PRJ-JUL",
 				},
 				part: { partId: "part-1", partCode: "PART-001", partName: "Main part" },
 			},
@@ -658,8 +659,8 @@ describe("canonical PATS domain read contract", () => {
 			project: {
 				count: async () => 2,
 				findMany: async () => [
-					{ requiredProductionQuantity: 700 },
-					{ requiredProductionQuantity: 700 },
+					{ lot: { requiredProductionQuantity: 700 } },
+					{ lot: { requiredProductionQuantity: 700 } },
 				],
 			},
 			batch: {
@@ -842,11 +843,128 @@ describe("canonical PATS domain read contract", () => {
 
 		const response = await request(app)
 			.get("/api/v1/projects")
-			.query({ status: "RELEASED" })
+			.query({ bogus: "1" })
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(400);
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:malformed-request");
+		expect(called).to.equal(false);
+	});
+
+	it("filters projects by status and shares the predicate for count and page", async () => {
+		let countWhere: unknown;
+		let findWhere: unknown;
+		const app = appFor({
+			project: {
+				count: async (args: Record<string, unknown>) => { countWhere = args.where; return 2; },
+				findMany: async (args: Record<string, unknown>) => {
+					findWhere = args.where;
+					return [];
+				},
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/projects")
+			.query({ status: "released", limit: 1 })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(response.body.pagination.totalItems).to.equal(2);
+		expect(countWhere).to.deep.equal({ AND: [{ status: "RELEASED" }] });
+		expect(findWhere).to.deep.equal({ AND: [{ status: "RELEASED" }] });
+	});
+
+	it("maps ongoing to released and all to no status filter", async () => {
+		let receivedWhere: unknown;
+		const app = appFor({
+			project: {
+				count: async (args: Record<string, unknown>) => { receivedWhere = args.where; return 0; },
+				findMany: async () => [],
+			},
+		});
+
+		const ongoing = await request(app)
+			.get("/api/v1/projects")
+			.query({ status: "ongoing" })
+			.set("Authorization", "Bearer read-contract-token");
+		expect(ongoing.status).to.equal(200);
+		expect(receivedWhere).to.deep.equal({ AND: [{ status: "RELEASED" }] });
+
+		const all = await request(app)
+			.get("/api/v1/projects")
+			.query({ status: "all" })
+			.set("Authorization", "Bearer read-contract-token");
+		expect(all.status).to.equal(200);
+		expect(receivedWhere).to.deep.equal({});
+	});
+
+	it("filters projects by partial search across code, name, and product", async () => {
+		let receivedWhere: unknown;
+		const app = appFor({
+			project: {
+				count: async (args: Record<string, unknown>) => { receivedWhere = args.where; return 1; },
+				findMany: async () => [],
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/projects")
+			.query({ search: "E2E" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedWhere).to.deep.equal({
+			AND: [{
+				OR: [
+					{ projectCode: { contains: "E2E", mode: "insensitive" } },
+					{ name: { contains: "E2E", mode: "insensitive" } },
+					{ product: { productName: { contains: "E2E", mode: "insensitive" } } },
+					{ product: { productCode: { contains: "E2E", mode: "insensitive" } } },
+				],
+			}],
+		});
+	});
+
+	it("filters projects by exact lot selector on projectCode or name", async () => {
+		let receivedWhere: unknown;
+		const app = appFor({
+			project: {
+				count: async (args: Record<string, unknown>) => { receivedWhere = args.where; return 1; },
+				findMany: async () => [],
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/projects")
+			.query({ lot: "E2E DBG 60353491" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedWhere).to.deep.equal({
+			AND: [{ OR: [{ projectCode: "E2E DBG 60353491" }, { name: "E2E DBG 60353491" }] }],
+		});
+	});
+
+	it("rejects invalid project filter values with field errors", async () => {
+		let called = false;
+		const app = appFor({
+			project: {
+				count: async () => { called = true; return 0; },
+				findMany: async () => [],
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/projects")
+			.query({ status: "archived" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(400);
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:malformed-request");
+		expect(response.body.errors).to.deep.equal([
+			{ field: "status", message: "Must be one of all, draft, released, completed." },
+		]);
 		expect(called).to.equal(false);
 	});
 

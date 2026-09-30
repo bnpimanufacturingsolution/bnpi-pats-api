@@ -2,13 +2,25 @@ import { expect } from "chai";
 import { recordPrintJob, type PrintJobStore } from "../app/pats/print-job";
 import type { PrintPort } from "../app/pats/print-ports";
 
-function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>>; transactions: Array<Record<string, unknown>> } {
+function store(options?: { preRoute?: boolean; sectionStageId?: string }) {
 	const jobs: Array<Record<string, unknown>> = [];
 	const transactions: Array<Record<string, unknown>> = [];
+	const events: Array<Record<string, unknown>> = [];
+	const findArgs: Array<Record<string, unknown>> = [];
 	let issued = 0;
-	const api: PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>>; transactions: Array<Record<string, unknown>> } = {
+	const preRoute = options?.preRoute ?? false;
+	const sectionStageId = options?.sectionStageId ?? "STG-INJECTION";
+	const projection = {
+		stageId: preRoute ? "STG-PROJECTS" : "STG-INJECTION",
+		subStageId: null,
+		routeStepId: preRoute ? null : "step-1",
+		quantityMagnitude: "240",
+	};
+	const api: PrintJobStore & { issued: number; jobs: Array<Record<string, unknown>>; transactions: Array<Record<string, unknown>>; events: Array<Record<string, unknown>>; findArgs: Array<Record<string, unknown>> } = {
 		jobs,
 		transactions,
+		events,
+		findArgs,
 		get issued() {
 			return issued;
 		},
@@ -16,7 +28,7 @@ function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, u
 			findUnique: async () => ({
 				id: "station-1",
 				name: "Injection",
-				stageId: "STG-INJECTION",
+				stageId: sectionStageId,
 				printerConnection: "NONE",
 				printerAddress: null,
 				printerLanguage: "ZPL",
@@ -26,24 +38,42 @@ function store(): PrintJobStore & { issued: number; jobs: Array<Record<string, u
 			}),
 		},
 		batch: {
-			findUnique: async () => ({
+			findUnique: async (args) => {
+				findArgs.push(args as unknown as Record<string, unknown>);
+				return {
 				id: "batch-1",
 				batchCode: "BNI-2606-001",
 				barcodeValue: "BC-BATCH-000001",
 				plannedQuantity: 240,
 				seriesNumber: 1,
 				seriesCount: 2,
-				currentStageId: "STG-INJECTION",
+				currentStageId: preRoute ? "STG-PROJECTS" : "STG-INJECTION",
 				currentSubStageId: null,
-				positionProjection: {
-					stageId: "STG-INJECTION",
-					subStageId: null,
-					routeStepId: "step-1",
-					quantityMagnitude: "240",
-				},
+				positionProjection: { ...projection },
 				lot: { id: "lot-1", lotCode: "MLT-001", partsListId: "pl-1" },
 				part: { id: "part-1", partName: "Body", partCode: "P-BODY" },
-			}),
+			};
+		},
+			update: async ({ data }) => {
+				if (data.currentStageId) projection.stageId = data.currentStageId;
+				if (data.currentSubStageId !== undefined) projection.subStageId = data.currentSubStageId;
+				return { id: "batch-1" };
+			},
+		},
+		batchPositionProjection: {
+			update: async ({ data }) => {
+				projection.stageId = data.stageId;
+				projection.subStageId = data.subStageId;
+				projection.routeStepId = data.routeStepId;
+				return { batchId: "batch-1" };
+			},
+		},
+		stageEvent: {
+			create: async ({ data }) => {
+				const created = { id: `se-${events.length + 1}`, ...data };
+				events.push(created);
+				return { id: created.id };
+			},
 		},
 		printJob: {
 			count: async ({ where }: { where?: { status?: { not?: string } } }) =>
@@ -221,5 +251,98 @@ describe("recordPrintJob", () => {
 			actualQuantity: 240,
 			status: "ACCEPTED",
 		});
+	});
+
+	it("records no origin hop for a mid-route batch (labels only)", async () => {
+		const db = store();
+		const job = await recordPrintJob(
+			db,
+			{ batchId: "batch-1", sectionId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			simulated,
+		);
+		expect(job.originStageEventId).to.equal(null);
+		expect(db.events).to.have.length(0);
+		expect(db.issued).to.equal(1);
+	});
+
+	it("queries batch relations only (Prisma rejects scalars in include)", async () => {
+		const db = store();
+		await recordPrintJob(
+			db,
+			{ batchId: "batch-1", sectionId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			simulated,
+		);
+		const include = (db.findArgs[0] as { include: Record<string, unknown> }).include;
+		expect(include).to.not.have.property("seriesNumber");
+		expect(include).to.not.have.property("seriesCount");
+	});
+
+	it("stamps issuance with recordedAt (required ledger field)", async () => {
+		const db = store();
+		await recordPrintJob(
+			db,
+			{ batchId: "batch-1", sectionId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			simulated,
+		);
+		expect(db.transactions).to.have.length(1);
+		expect(db.transactions[0]?.recordedAt).to.be.instanceOf(Date);
+	});
+
+	it("advances a pre-route batch through its origin hop on first aligned print", async () => {
+		const db = store({ preRoute: true });
+		const job = await recordPrintJob(
+			db,
+			{ batchId: "batch-1", sectionId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			simulated,
+		);
+		// Print + issuance + origin hop, atomically.
+		expect(db.issued).to.equal(1);
+		expect(job.originStageEventId).to.equal("se-1");
+		expect(db.events).to.have.length(1);
+		expect(db.events[0]).to.include({
+			stageId: "STG-INJECTION",
+			batchId: "batch-1",
+			eventType: "STAGE_SCAN_RECORDED",
+			isRoutingViolation: false,
+			status: "ACCEPTED",
+			routeStepId: "step-1",
+		});
+	});
+
+	it("prints without advancing when the section is not the batch's next step", async () => {
+		const db = store({ preRoute: true, sectionStageId: "STG-DECORATION" });
+		const job = await recordPrintJob(
+			db,
+			{ batchId: "batch-1", sectionId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			simulated,
+		);
+		expect(job.status).to.equal("SIMULATED");
+		expect(db.issued).to.equal(1);
+		expect(job.originStageEventId).to.equal(null);
+		expect(db.events).to.have.length(0);
+	});
+
+	it("does not advance twice: reprint after the origin hop is labels-only", async () => {
+		const db = store({ preRoute: true });
+		await recordPrintJob(
+			db,
+			{ batchId: "batch-1", sectionId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
+			simulated,
+		);
+		expect(db.events).to.have.length(1);
+		const reprint = await recordPrintJob(
+			db,
+			{
+				batchId: "batch-1",
+				sectionId: "station-1",
+				reprintOf: "pj-1",
+				actor: "Station",
+				actorSubjectId: "sub-1",
+			},
+			simulated,
+		);
+		expect(reprint.originStageEventId).to.equal(null);
+		expect(db.events).to.have.length(1);
+		expect(db.issued).to.equal(1);
 	});
 });

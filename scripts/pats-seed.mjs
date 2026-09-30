@@ -67,11 +67,49 @@ const profile = mode;
 // the paint attach loop is skipped and the dependent m01 paint BOM lines
 // self-skip on the empty lookup — no reseed can reintroduce the rows.
 const SEED_PAINT_PARTS = false;
+// Deco part-no ModelParts (`*S`/`*ST`) stay detached: they mirrored inj parts
+// with only a " (deco S/ST)" display suffix (21 near-duplicate catalog rows).
+// Evidence remains in pats-seed-client-b251.mjs (`decoPartsByModel`,
+// `decoPartDisplayName`); while this is false the deco attach loops (catalog +
+// plan snapshots) are skipped — no reseed can reintroduce the rows.
+const SEED_DECO_PARTS = false;
 // Relative-to-now anchor so every fresh seed is "recent" and plans/batches/QC
 // line up with the monitoring sheets (which snap to today) instead of a stale
 // frozen date. All offsets below spread from this single instant per run.
 const seedClock = new Date(Date.now());
 const prisma = new PrismaClient();
+
+// Month labels and YYMM tags derive from seedClock so project names/codes stay
+// current on every fresh seed (the old frozen July/August narrative went stale
+// within weeks). Batch (`BNI-*`) and lot (`LOT-B251-*`) codes stay frozen: they
+// are shared fixture identity pinned by the sibling app's headed e2e.
+const MONTH_NAMES = [
+	"January",
+	"February",
+	"March",
+	"April",
+	"May",
+	"June",
+	"July",
+	"August",
+	"September",
+	"October",
+	"November",
+	"December",
+];
+function seedMonthLabel(offsetMonths = 0) {
+	const d = new Date(seedClock.getFullYear(), seedClock.getMonth() + offsetMonths, 1);
+	return {
+		name: MONTH_NAMES[d.getMonth()],
+		yymm: `${String(d.getFullYear()).slice(-2)}${String(d.getMonth() + 1).padStart(2, "0")}`,
+	};
+}
+const seedYYMM = seedMonthLabel(0).yymm;
+const seedMonthName = seedMonthLabel(0).name;
+/** Project codes mirror the app's generateProjectCode shape: PRJ-{PRODUCT}-{YYMM}-{SEQ}. */
+function projectTag(productCode, seq) {
+	return `PRJ-${productCode}-${seedYYMM}-${String(seq).padStart(2, "0")}`;
+}
 
 function stableId(key) {
 	const hex = createHash("sha256").update(`pats-seed:${profile}:${key}`).digest("hex").slice(0, 32).split("");
@@ -112,6 +150,8 @@ function standardModelRoute() {
  * SEED ASSUMPTION (user to correct with floor quotations): tampo is quick,
  * spray is slow, molding/capsule sit between; paint consumables carry no CT.
  * Paints (PN-*) stay null — honest absence, not zero.
+ * The *S/*ST branches below are dormant while SEED_DECO_PARTS is false (no
+ * deco-suffixed parts exist to hit them); they are the re-attach mapping.
  * Stage ids resolve mid-seed, so catalog rows seed null and the CT pass below
  * (once stages exist) fills the maps; run parts snapshot inline (stages in
  * scope there).
@@ -589,24 +629,32 @@ async function seedProfile(tx) {
 		capsuleAttachmentCount += 1;
 	}
 
-	// Deco part nos — skip when code already exists as inj part on the same model
-	for (const [modelNumber, decoList] of Object.entries(CLIENT_B251.decoPartsByModel)) {
-		const injCodes = new Set(
-			(CLIENT_B251.models.find((m) => m.modelNumber === modelNumber)?.parts ?? []).map(([c]) => c),
-		);
-		for (const deco of decoList) {
-			if (injCodes.has(deco.partCode)) {
-				// Drink rows reuse bare inj codes as deco part nos — do not duplicate ModelPart.
-				continue;
+	// Deco part nos — DETACHED (same treatment as paints 2026-09-24): the
+	// `*S`/`*ST` rows mirrored inj parts with only a " (deco S/ST)" display
+	// suffix and cluttered the catalog (21 near-duplicate rows). Evidence stays
+	// in pats-seed-client-b251.mjs (`decoPartsByModel`, `decoPartDisplayName`);
+	// while this is false no reseed can reintroduce the rows. The aug spray
+	// batch runs on the inj base part instead; the *S/*ST cycle-time branches
+	// below stay as the dormant mapping for a future re-attach.
+	if (SEED_DECO_PARTS) {
+		for (const [modelNumber, decoList] of Object.entries(CLIENT_B251.decoPartsByModel)) {
+			const injCodes = new Set(
+				(CLIENT_B251.models.find((m) => m.modelNumber === modelNumber)?.parts ?? []).map(([c]) => c),
+			);
+			for (const deco of decoList) {
+				if (injCodes.has(deco.partCode)) {
+					// Drink rows reuse bare inj codes as deco part nos — do not duplicate ModelPart.
+					continue;
+				}
+				const id = await upsertModelPartRow(tx, {
+					modelNumber,
+					partCode: deco.partCode,
+					partName: decoPartDisplayName(deco),
+					seedKey: `model-part-deco-${deco.partCode}`,
+				});
+				decoPartIds[deco.partCode] = id;
+				decoPartCount += 1;
 			}
-			const id = await upsertModelPartRow(tx, {
-				modelNumber,
-				partCode: deco.partCode,
-				partName: decoPartDisplayName(deco),
-				seedKey: `model-part-deco-${deco.partCode}`,
-			});
-			decoPartIds[deco.partCode] = id;
-			decoPartCount += 1;
 		}
 	}
 
@@ -1130,7 +1178,8 @@ async function seedProfile(tx) {
 	// Row shape: [id, subStageId, name, displayOrder, legacyUnused, parentProcessId?].
 	// The 5th slot is legacy dead data (ignored, kept for row-shape stability);
 	// tree parents go in the optional 6th slot. Full Spray is the parent process
-	// of Drum Spray and Line Spray (Mask); displayOrder 0 sorts it first.
+	// of Manual Spray and Drum Spray; Line Spray (Mask) is a separate root
+	// process under its own sub-stage (floor-org management surface design).
 	for (const [id, subStageId, name, displayOrder, , parentProcessId = null] of [
 		[processInjMachineOpId, subInjectionMoldingId, "Machine Operator", 1, 14],
 		[processInjGateCutId, subInjectionMoldingId, "Gate Cutting", 2, null],
@@ -1138,9 +1187,9 @@ async function seedProfile(tx) {
 		[processInjIQCId, subInjectionMoldingId, "IQC", 4, null],
 		[processInjMHId, subInjectionMoldingId, "MH", 5, null],
 		[processFsFullId, subFullSprayId, "Full Spray", 0, null],
-		[processFsManualId, subFullSprayId, "Manual Spray", 1, 12],
+		[processFsManualId, subFullSprayId, "Manual Spray", 1, 12, processFsFullId],
 		[processFsDrumId, subFullSprayId, "Drum Spray", 2, null, processFsFullId],
-		[processLsMaskId, subLineSprayId, "Line Spray (Mask)", 1, 10, processFsFullId],
+		[processLsMaskId, subLineSprayId, "Line Spray (Mask)", 1, 10],
 		[processTampoId, subTampoId, "Tampo Printing", 1, 6],
 		[processMimakiId, subMimakiId, "Machine Printing", 1, null],
 		[processAsmStagingId, subAssemblyStagingId, "Staging", 1, null],
@@ -1396,18 +1445,19 @@ async function seedProfile(tx) {
 	const partsListId = stableId("parts-list-b251-v1");
 	const projectPartIds = {};
 
-	// Plan demand: 18 trays × 240 = 4320 (client tray standard)
+	// Anchor total derives from model requirements
+	// (4+3+2+2+2+2 trays = 15 trays × 240 = 3600, client tray standard).
+	// The total itself is derived live from requirements (D-041); the trays
+	// below are the per-model source of truth.
 	const tray = CLIENT_B251.trayQuantityStandard;
-	// Project total derives from model requirements (4+3+2+2+2+2 trays).
-	const projectQty = 15 * tray;
 
+	const anchorProjectCode = projectTag(CLIENT_B251.productCode, 1);
 	await tx.project.upsert({
 		where: { id: projectId },
 		update: {
 			workspaceId: "PATS",
-			projectCode: code("PRJ-B251-JUL"),
-			name: `${CLIENT_B251.productName} — July production`,
-			requiredProductionQuantity: projectQty,
+			projectCode: code(anchorProjectCode),
+			name: `${CLIENT_B251.productName} — ${seedMonthName} production`,
 			status: "RELEASED",
 			releasedAt: seedClock,
 			releasedBySubjectId: admin.id,
@@ -1416,9 +1466,8 @@ async function seedProfile(tx) {
 		create: {
 			id: projectId,
 			workspaceId: "PATS",
-			projectCode: code("PRJ-B251-JUL"),
-			name: `${CLIENT_B251.productName} — July production`,
-			requiredProductionQuantity: projectQty,
+			projectCode: code(anchorProjectCode),
+			name: `${CLIENT_B251.productName} — ${seedMonthName} production`,
 			productId: productB251Id,
 			status: "RELEASED",
 			releasedAt: seedClock,
@@ -1446,7 +1495,8 @@ async function seedProfile(tx) {
 		},
 	});
 
-	// Model allocations for models 01–04 (confirmed); 05 deferred in name only still allocated
+	// Model requirements for models 01–06 (05 stays allocated in name only
+	// until a Document Control ECO names the Cola/Ice Coffee winner).
 	const modelProjectQtys = {
 		"01": 4 * tray,
 		"02": 3 * tray,
@@ -1455,10 +1505,10 @@ async function seedProfile(tx) {
 		"05": 2 * tray,
 		"06": 2 * tray,
 	};
-	const julyRequirementIds = {};
+	const anchorRequirementIds = {};
 	for (const [modelNumber, qty] of Object.entries(modelProjectQtys)) {
 		const requirementId = stableId(`pma-b251-${modelNumber}`);
-		julyRequirementIds[modelNumber] = requirementId;
+		anchorRequirementIds[modelNumber] = requirementId;
 		await tx.projectModelRequirement.upsert({
 			where: {
 				projectId_modelId: { projectId, modelId: modelIds[modelNumber] },
@@ -1489,7 +1539,7 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 				sourceModelId: modelIds[model.modelNumber],
 				sourceModelPartId: partIds[partCode],
-				projectModelRequirementId: julyRequirementIds[model.modelNumber] ?? null,
+				projectModelRequirementId: anchorRequirementIds[model.modelNumber] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
@@ -1501,12 +1551,14 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 				sourceModelId: modelIds[model.modelNumber],
 				sourceModelPartId: partIds[partCode],
-				projectModelRequirementId: julyRequirementIds[model.modelNumber] ?? null,
+				projectModelRequirementId: anchorRequirementIds[model.modelNumber] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
 		});
 	}
+	// Plan-level deco snapshots stay behind SEED_DECO_PARTS with the catalog rows.
+	if (SEED_DECO_PARTS) {
 	for (const deco of CLIENT_B251.decoPartsByModel[model.modelNumber] ?? []) {
 		if (!decoPartIds[deco.partCode]) continue;
 		const id = stableId(`plan-part-deco-${deco.partCode}`);
@@ -1520,7 +1572,7 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
 				sourceModelId: modelIds[model.modelNumber],
 				sourceModelPartId: decoPartIds[deco.partCode],
-				projectModelRequirementId: julyRequirementIds[model.modelNumber] ?? null,
+				projectModelRequirementId: anchorRequirementIds[model.modelNumber] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
@@ -1532,11 +1584,12 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(deco.partCode, ctStepIds),
 				sourceModelId: modelIds[model.modelNumber],
 				sourceModelPartId: decoPartIds[deco.partCode],
-				projectModelRequirementId: julyRequirementIds[model.modelNumber] ?? null,
+				projectModelRequirementId: anchorRequirementIds[model.modelNumber] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
 		});
+	}
 	}
 	}
 	// One plan-level capsule part (packaging), sourced from model 01 attachment
@@ -1553,7 +1606,7 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 				sourceModelId: modelIds["01"],
 				sourceModelPartId: capsulePartIds["01"],
-				projectModelRequirementId: julyRequirementIds["01"] ?? null,
+				projectModelRequirementId: anchorRequirementIds["01"] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
@@ -1565,7 +1618,7 @@ async function seedProfile(tx) {
 				plannedCycleTimes: plannedCtMapForPartCode(partCode, ctStepIds),
 				sourceModelId: modelIds["01"],
 				sourceModelPartId: capsulePartIds["01"],
-				projectModelRequirementId: julyRequirementIds["01"] ?? null,
+				projectModelRequirementId: anchorRequirementIds["01"] ?? null,
 				lifecycleStatus: "PUBLISHED",
 				variancePercentThreshold: 0.05,
 			},
@@ -1631,26 +1684,26 @@ async function seedProfile(tx) {
 	const DEMO_TRAY_STANDARD = 240; // demo assumption, mirrors the B251 tray standard
 	let demoProjectCount = 0;
 	let demoProjectPartCount = 0;
+	let demoLotCount = 0;
 	for (const pack of DEMO_PACKS) {
 		const packKey = pack.productCode.toLowerCase();
 		const demoProjectId = stableId(`demo-project-${packKey}`);
 		const demoProductId = stableId(`product-${packKey}`);
+		const demoProjectCode = projectTag(pack.productCode, 1);
 		await tx.project.upsert({
 			where: { id: demoProjectId },
 			update: {
 				workspaceId: "PATS",
-				projectCode: code(`PRJ-${pack.productCode}-PILOT`),
+				projectCode: code(demoProjectCode),
 				name: `${pack.productName} — pilot`,
-				requiredProductionQuantity: pack.models.length * DEMO_TRAY_STANDARD,
 				productId: demoProductId,
 				status: "DRAFT",
 			},
 			create: {
 				id: demoProjectId,
 				workspaceId: "PATS",
-				projectCode: code(`PRJ-${pack.productCode}-PILOT`),
+				projectCode: code(demoProjectCode),
 				name: `${pack.productName} — pilot`,
-				requiredProductionQuantity: pack.models.length * DEMO_TRAY_STANDARD,
 				productId: demoProductId,
 				status: "DRAFT",
 				createdAt: seedClock,
@@ -1725,10 +1778,61 @@ async function seedProfile(tx) {
 				partIndex += 1;
 			}
 		}
+		// Project-owned lot parity (POST /projects creates the draft and its
+		// single lot): every pilot owns one PLANNED lot + parts-list row, same
+		// as a live-created draft. Execution realism stays B251 — no batches.
+		const demoPartsListId = stableId(`demo-parts-list-${packKey}-v1`);
+		await tx.partsList.upsert({
+			where: { id: demoPartsListId },
+			update: {
+				projectId: demoProjectId,
+				version: 1,
+				status: "PUBLISHED",
+				sourceRevisionRef: "demo-fixture-1.0",
+				publishedAt: seedClock,
+			},
+			create: {
+				id: demoPartsListId,
+				projectId: demoProjectId,
+				version: 1,
+				status: "PUBLISHED",
+				sourceRevisionRef: "demo-fixture-1.0",
+				publishedAt: seedClock,
+				createdAt: seedClock,
+			},
+		});
+		await tx.lot.upsert({
+			where: { id: stableId(`demo-lot-${packKey}`) },
+			update: {
+				projectId: demoProjectId,
+				lotCode: code(`LOT-${pack.productCode}-01`),
+				lotName: `${pack.productName} — pilot Lot 01`,
+				partsListId: demoPartsListId,
+				partsListVersion: 1,
+				requiredProductionQuantity: pack.models.length * DEMO_TRAY_STANDARD,
+				status: "PLANNED",
+				labelPackSize: DEMO_TRAY_STANDARD,
+				createdAtStage: "Planning",
+			},
+			create: {
+				id: stableId(`demo-lot-${packKey}`),
+				projectId: demoProjectId,
+				lotCode: code(`LOT-${pack.productCode}-01`),
+				lotName: `${pack.productName} — pilot Lot 01`,
+				partsListId: demoPartsListId,
+				partsListVersion: 1,
+				requiredProductionQuantity: pack.models.length * DEMO_TRAY_STANDARD,
+				status: "PLANNED",
+				labelPackSize: DEMO_TRAY_STANDARD,
+				createdAtStage: "Planning",
+				createdAt: seedClock,
+			},
+		});
+		demoLotCount += 1;
 		demoProjectCount += 1;
 	}
 
-	// Lots: one Project/ProductionPlan has one Lot.
+	// Lots: one Project has one Lot (project-owned, created with the draft).
 	const lotModelTrays = { "01": 4, "02": 3, "03": 2, "04": 2, "05": 2, "06": 2 };
 	const lotModels = CLIENT_B251.models.filter((model) => lotModelTrays[model.modelNumber] !== undefined);
 	const lotId = stableId("lot-b251");
@@ -1794,7 +1898,7 @@ async function seedProfile(tx) {
 	};
 
 	const batchIds = {};
-	const julySeriesSeen = {};
+	const anchorSeriesSeen = {};
 	for (const [key, batchCode, modelNumber, partCode, qty, stageId, subStageId, status] of batchDefs) {
 		const id = stableId(key);
 		batchIds[key] = id;
@@ -1802,7 +1906,7 @@ async function seedProfile(tx) {
 		const lineCode = stageDefaultLineCode[stageId] ?? null;
 		const lineId = lineCode ? stableId(`line-${lineCode}`) : null;
 		const seriesKey = `${modelNumber}:${partCode}`;
-		julySeriesSeen[seriesKey] = (julySeriesSeen[seriesKey] ?? 0) + 1;
+		anchorSeriesSeen[seriesKey] = (anchorSeriesSeen[seriesKey] ?? 0) + 1;
 		const seriesTotal = batchDefs.filter((row) => row[2] === modelNumber && row[3] === partCode).length;
 		await tx.batch.upsert({
 			where: { id },
@@ -1813,8 +1917,8 @@ async function seedProfile(tx) {
 				lineId,
 				plannedQuantity: qty,
 				labelPackSize: CLIENT_B251.trayQuantityStandard,
-				projectModelRequirementId: julyRequirementIds[modelNumber] ?? null,
-				seriesNumber: julySeriesSeen[seriesKey],
+				projectModelRequirementId: anchorRequirementIds[modelNumber] ?? null,
+				seriesNumber: anchorSeriesSeen[seriesKey],
 				seriesCount: seriesTotal,
 				partId: projectPartIds[partCode],
 				currentStageId: stageId,
@@ -1830,8 +1934,8 @@ async function seedProfile(tx) {
 				lineId,
 				plannedQuantity: qty,
 				labelPackSize: CLIENT_B251.trayQuantityStandard,
-				projectModelRequirementId: julyRequirementIds[modelNumber] ?? null,
-				seriesNumber: julySeriesSeen[seriesKey],
+				projectModelRequirementId: anchorRequirementIds[modelNumber] ?? null,
+				seriesNumber: anchorSeriesSeen[seriesKey],
 				seriesCount: seriesTotal,
 				partId: projectPartIds[partCode],
 				currentStageId: stageId,
@@ -1844,45 +1948,58 @@ async function seedProfile(tx) {
 	}
 
 	// ── Story projects: the B251 line arc (10 projects deep) ────────────────
-	// July (above) is the full-depth anchor. These nine tell the rest of the
-	// story across statuses: replenishment → seasonal planning → model pushes →
-	// trial pause → completions → retro + forecast. Depth is graduated on purpose:
-	// August carries lots/batches/prints (desk realism); drafts carry plans only;
-	// completions carry closed lots/batches (history). QC/print history stays
-	// exclusive to July (below) to bound seed complexity.
+	// The anchor (above) is the full-depth current-month project. These nine
+	// tell the rest of the story across statuses: replenishment → seasonal
+	// planning → model pushes → trial pause → completions → retro + forecast.
+	// Month labels float with seedClock (see seedMonthLabel) so a fresh seed in
+	// any month reads current. Depth is graduated on purpose:
+	// replenishment carries lots/batches/prints (desk realism); drafts carry
+	// plans only; completions carry closed lots/batches with PASSED QC history
+	// (the terminal completion guard requires CLOSED+PASSED per batch).
+	// Project codes mirror the app's PRJ-{PRODUCT}-{YYMM}-{SEQ} shape.
 	// [key, projectCode, name, status, released?, {model: trays}]
 	const storyProjects = [
-		["aug", "PRJ-B251-AUG", "B251 August replenishment", "RELEASED", true, { "01": 3, "02": 2, "03": 2 }],
-		["sep", "PRJ-B251-SEP", "B251 September seasonal launch", "DRAFT", false, { "01": 4, "02": 3, "03": 2, "04": 2, "05": 2, "06": 2 }],
-		["m02", "PRJ-B251-M02", "B251 Cheese Hotdog push", "RELEASED", true, { "02": 5 }],
-		["m03", "PRJ-B251-M03", "B251 Tacos run", "RELEASED", true, { "03": 4 }],
-		["m04", "PRJ-B251-M04", "B251 Potato Wedge trial", "DRAFT", false, { "04": 2 }],
-		["m05", "PRJ-B251-M05", "B251 Cola / Ice Coffee completed", "COMPLETED", true, { "05": 3 }],
-		["m06", "PRJ-B251-M06", "B251 Tray buffer", "DRAFT", false, { "06": 3 }],
-		["jun", "PRJ-B251-JUN", "B251 June pilot (retro)", "COMPLETED", true, { "01": 2 }],
-		["oct", "PRJ-B251-OCT", "B251 October forecast", "DRAFT", false, { "01": 2, "02": 2 }],
+		["aug", projectTag("B251", 2), `B251 ${seedMonthLabel(-1).name} replenishment`, "RELEASED", true, { "01": 3, "02": 2, "03": 2 }],
+		["sep", projectTag("B251", 3), `B251 ${seedMonthName} seasonal launch`, "DRAFT", false, { "01": 4, "02": 3, "03": 2, "04": 2, "05": 2, "06": 2 }],
+		["m02", projectTag("B251", 4), "B251 Cheese Hotdog push", "RELEASED", true, { "02": 5 }],
+		["m03", projectTag("B251", 5), "B251 Tacos run", "RELEASED", true, { "03": 4 }],
+		["m04", projectTag("B251", 6), "B251 Potato Wedge trial", "DRAFT", false, { "04": 2 }],
+		["m05", projectTag("B251", 7), "B251 Cola / Ice Coffee completed", "COMPLETED", true, { "05": 3 }],
+		["m06", projectTag("B251", 8), "B251 Tray buffer", "DRAFT", false, { "06": 3 }],
+		["jun", projectTag("B251", 9), `B251 ${seedMonthLabel(-3).name} pilot (retro)`, "COMPLETED", true, { "01": 2 }],
+		["oct", projectTag("B251", 10), `B251 ${seedMonthLabel(1).name} forecast`, "DRAFT", false, { "01": 2, "02": 2 }],
 	];
+	// COMPLETED projects close in the past so seeded QC history (decided before
+	// close) orders like live traffic: released → QC PASSED → completed.
+	const storyLifecycleOffsets = {
+		m05: { releasedDays: -14, completedDays: -12 },
+		jun: { releasedDays: -40, completedDays: -38 },
+	};
 	// One Lot per story project; suffixes alias the same Lot when multiple model batches share it.
+	// Every project owns exactly one lot (project-owned lot parity); drafts hold
+	// a PLANNED lot with no batches yet.
 	const storyLots = {
 		aug: [
-			["aug1", "LOT-B251-11", "B251 August replenishment — Lot 01", "01", 3, "ACTIVE"],
-			["aug2", "LOT-B251-12", "B251 August replenishment — Lot 02", "02", 2, "ACTIVE"],
+			["aug1", "LOT-B251-11", `B251 ${seedMonthLabel(-1).name} replenishment — Lot 01`, "01", 3, "ACTIVE"],
+			["aug2", "LOT-B251-12", `B251 ${seedMonthLabel(-1).name} replenishment — Lot 02`, "02", 2, "ACTIVE"],
 		],
-		sep: [["sep1", "LOT-B251-13", "B251 September seasonal — Lot 01", "01", 4, "PLANNED"]],
+		sep: [["sep1", "LOT-B251-13", `B251 ${seedMonthName} seasonal — Lot 01`, "01", 4, "PLANNED"]],
 		m02: [["m02a", "LOT-B251-14", "B251 Cheese Hotdog — Lot 01", "02", 5, "ACTIVE"]],
 		m03: [["m03a", "LOT-B251-15", "B251 Tacos — Lot 01", "03", 4, "ACTIVE"]],
 		m04: [["m04a", "LOT-B251-16", "B251 Potato Wedge — Lot 01", "04", 2, "PLANNED"]],
 		m05: [["m05a", "LOT-B251-17", "B251 Cola / Ice Coffee — Lot 01", "05", 3, "COMPLETED"]],
 		m06: [["m06a", "LOT-B251-18", "B251 Tray — Lot 01", "06", 3, "PLANNED"]],
-		jun: [["jun1", "LOT-B251-19", "B251 June pilot — Lot 01", "01", 2, "COMPLETED"]],
-		oct: [],
+		jun: [["jun1", "LOT-B251-19", `B251 ${seedMonthLabel(-3).name} pilot — Lot 01`, "01", 2, "COMPLETED"]],
+		oct: [["oct1", "LOT-B251-20", `B251 ${seedMonthLabel(1).name} forecast — Lot 01`, "01", 2, "PLANNED"]],
 	};
 	// Batches per story project: [batchSuffix, batchCode, lotSuffix, partCode, stage, sub, status]
 	// ("-" subStage = null.)
 	const storyBatches = {
 		aug: [
 			["augb1", "BNI-2608-001", "aug1", "B251-01-01", "inj", "-", "ACTIVE"],
-			["augb2", "BNI-2608-002", "aug1", "B251-01-01ST", "dec", "fs", "ACTIVE"],
+			// Deco part nos are detached (SEED_DECO_PARTS=false): the spray
+			// batch runs on the inj base part, same as every other batch.
+			["augb2", "BNI-2608-002", "aug1", "B251-01-01", "dec", "fs", "ACTIVE"],
 			["augb3", "BNI-2608-003", "aug2", "B251-01-08", "inj", "-", "ACTIVE"],
 			["augb4", "BNI-2608-004", "aug2", "B251-01-10", "dec", "ls", "ACTIVE"],
 		],
@@ -1926,7 +2043,9 @@ async function seedProfile(tx) {
 		const storyPartsListId = stableId(`parts-list-${projKey}-v1`);
 		const storyProjectPartIds = {};
 		const storyLotIds = {};
-		const storyQty = Object.values(modelTrays).reduce((sum, trays) => sum + trays * tray, 0);
+		const lifecycle = storyLifecycleOffsets[projKey] ?? {};
+		const storyReleasedAt = atOffset({ days: lifecycle.releasedDays ?? 0 });
+		const storyCompletedAt = status === "COMPLETED" ? atOffset({ days: lifecycle.completedDays ?? 0 }) : null;
 
 		await tx.project.upsert({
 			where: { id: storyProjectId },
@@ -1934,9 +2053,9 @@ async function seedProfile(tx) {
 				workspaceId: "PATS",
 				projectCode: code(projectCode),
 				name,
-				requiredProductionQuantity: storyQty,
 				status,
-				...(released ? { releasedAt: seedClock, releasedBySubjectId: admin.id } : {}),
+				...(released ? { releasedAt: storyReleasedAt, releasedBySubjectId: admin.id } : {}),
+				...(storyCompletedAt ? { completedAt: storyCompletedAt, completedBySubjectId: admin.id } : {}),
 				productId: productB251Id,
 			},
 			create: {
@@ -1944,10 +2063,10 @@ async function seedProfile(tx) {
 				workspaceId: "PATS",
 				projectCode: code(projectCode),
 				name,
-				requiredProductionQuantity: storyQty,
 				productId: productB251Id,
 				status,
-				...(released ? { releasedAt: seedClock, releasedBySubjectId: admin.id } : {}),
+				...(released ? { releasedAt: storyReleasedAt, releasedBySubjectId: admin.id } : {}),
+				...(storyCompletedAt ? { completedAt: storyCompletedAt, completedBySubjectId: admin.id } : {}),
 				createdAt: seedClock,
 			},
 		});
@@ -2021,6 +2140,7 @@ async function seedProfile(tx) {
 					},
 				});
 			}
+		if (SEED_DECO_PARTS) {
 		for (const deco of CLIENT_B251.decoPartsByModel[modelNumber] ?? []) {
 			if (!decoPartIds[deco.partCode]) continue;
 			const id = stableId(`plan-part-${projKey}-deco-${deco.partCode}`);
@@ -2051,6 +2171,7 @@ async function seedProfile(tx) {
 					variancePercentThreshold: 0.05,
 				},
 			});
+		}
 		}
 		}
 		if (storyModels.includes("01")) {
@@ -2225,9 +2346,36 @@ async function seedProfile(tx) {
 				createdAt: seedClock,
 			},
 		});
+		// Floor visibility (2026-09-30): ACTIVE story batches get the same
+		// position projection as anchor batches so released story lots reach
+		// station arrival/issuance queues. CLOSED story lots stay terminal.
+		if (batchStatus !== "CLOSED") {
+			await tx.batchPositionProjection.upsert({
+				where: { batchId: id },
+				update: {
+					stageId,
+					subStageId,
+					lastEventId: null,
+					positionStatus: "ACCEPTED",
+					quantityMagnitude: `${tray}.000000`,
+					quantityUom: "piece",
+					projectionVersion: 1,
+				},
+				create: {
+					batchId: id,
+					stageId,
+					subStageId,
+					lastEventId: null,
+					positionStatus: "ACCEPTED",
+					quantityMagnitude: `${tray}.000000`,
+					quantityUom: "piece",
+					projectionVersion: 1,
+				},
+			});
+		}
 		}
 	}
-	// August first-prints (desk realism for the replenishment story).
+	// Replenishment first-prints (desk realism for the replenishment story).
 	{
 		const augBatchId = stableId("batch-aug-augb1");
 		for (const [seq, qty, dueOffset, idSuffix] of [[1, 240, -90, "a1"], [2, 240, -30, "a2"]]) {
@@ -2648,6 +2796,84 @@ async function seedProfile(tx) {
 		});
 	}
 
+	// Completion evidence for the COMPLETED story projects: every CLOSED batch
+	// carries a PASSED disposition decided before the project's completedAt, so
+	// seeded completions satisfy the same terminal completion guard the API
+	// enforces live (CLOSED+PASSED per batch, else projectComplete 409s).
+	// [key, projKey, batchSuffix, partCode, partName, stageId, subStageId, decidedDayOffset, decidedHour]
+	const qcHistoryDefs = [
+		["qi-m05-pass-1", "m05", "m05b1", "B251-01-22", "Cup", injectionStageId, null, -13, 2],
+		["qi-m05-pass-2", "m05", "m05b2", "B251-01-20", "Ice L", decorationStageId, subFullSprayId, -13, 3],
+		["qi-jun-pass-1", "jun", "junb1", "B251-01-01", "Avocado Burger Upper Bun", injectionStageId, null, -39, 2],
+		["qi-jun-pass-2", "jun", "junb2", "B251-01-02", "Slice Avocado", injectionStageId, null, -39, 3],
+	];
+	for (const [key, projKey, batchSuffix, partCode, partName, stageId, subStageId, decidedDay, decidedHour] of qcHistoryDefs) {
+		const inspectionId = stableId(key);
+		const decidedAt = atOffset({ days: decidedDay, hours: decidedHour });
+		const startedAt = atOffset({ days: decidedDay, hours: decidedHour, minutes: -15 });
+		const sectionId = stageId === decorationStageId ? decorationSectionId : injectionSectionId;
+		await tx.qualityInspection.upsert({
+			where: { id: inspectionId },
+			update: {
+				batchId: stableId(`batch-${projKey}-${batchSuffix}`),
+				stageId,
+				subStageId,
+				sectionId,
+				inspectedQuantity: `${tray}.000000`,
+				quantityUom: "piece",
+				status: "COMPLETED",
+				inspectedBySubjectId: quality.id,
+				evidence: {
+					partCode,
+					partName,
+					origin: "client-parts-list",
+					evidenceStatus: "PROVISIONAL",
+				},
+				startedAt,
+				completedAt: decidedAt,
+			},
+			create: {
+				id: inspectionId,
+				batchId: stableId(`batch-${projKey}-${batchSuffix}`),
+				stageId,
+				subStageId,
+				sectionId,
+				inspectedQuantity: `${tray}.000000`,
+				quantityUom: "piece",
+				status: "COMPLETED",
+				inspectedBySubjectId: quality.id,
+				evidence: {
+					partCode,
+					partName,
+					origin: "client-parts-list",
+					evidenceStatus: "PROVISIONAL",
+				},
+				startedAt,
+				completedAt: decidedAt,
+			},
+		});
+		await tx.qualityDecision.upsert({
+			where: { id: stableId(`qd-${key}`) },
+			update: {
+				inspectionId,
+				decision: "PASSED",
+				reasonCode: "VISUAL_OK",
+				reasonNote: "Seed history: closed lots carry PASSED dispositions.",
+				decidedBySubjectId: quality.id,
+				decidedAt,
+			},
+			create: {
+				id: stableId(`qd-${key}`),
+				inspectionId,
+				decision: "PASSED",
+				reasonCode: "VISUAL_OK",
+				reasonNote: "Seed history: closed lots carry PASSED dispositions.",
+				decidedBySubjectId: quality.id,
+				decidedAt,
+			},
+		});
+	}
+
 
 	await tx.auditRecord.upsert({
 		where: { id: stableId("audit-seed-b251-release") },
@@ -2967,9 +3193,10 @@ async function seedProfile(tx) {
 		demoParts: demoPartCount,
 		demoProjects: demoProjectCount,
 		demoProjectParts: demoProjectPartCount,
+		demoLots: demoLotCount,
 		projectParts: Object.keys(projectPartIds).length,
 		projects: 1 + storyProjects.length + demoProjectCount,
-		lots: 1 + Object.values(storyLots).filter((lots) => lots.length > 0).length,
+		lots: 1 + Object.values(storyLots).filter((lots) => lots.length > 0).length + demoLotCount,
 		batches:
 			batchDefs.length +
 			Object.values(storyBatches).reduce((sum, batches) => sum + batches.length, 0),
@@ -2985,7 +3212,7 @@ async function seedProfile(tx) {
 		adminUsername: "admin",
 		adminEmail: "admin@bnpipats.tech",
 		evidenceNote:
-			"B251 client-parts-list (PROVISIONAL) + B252–B256 demo packs (MANUAL/NEEDS_CONFIRMATION/DRAFT, mirror app fixtures) + monitoring encode seed — fabricated B308 family dropped; not Drive-approved",
+			"B251 client-parts-list (PROVISIONAL) + B252–B256 demo packs (MANUAL/NEEDS_CONFIRMATION/DRAFT, mirror app fixtures) + monitoring encode seed — fabricated B308 family dropped; paint + deco part-no rows detached (evidence retained); not Drive-approved",
 	};
 }
 
