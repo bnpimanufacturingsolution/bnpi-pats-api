@@ -12,6 +12,14 @@ export type PrintJobCreateInput = {
 	 * rounding to plan.
 	 */
 	actualQuantity?: number | null;
+	/**
+	 * Operator + machine snapshot for the Injection label face. Optional —
+	 * when omitted the label omits the row instead of inventing a name.
+	 * The preview resolves these from the session user + the line's
+	 * admin-configured machines; the print call carries the resolved values.
+	 */
+	operatorName?: string | null;
+	machineName?: string | null;
 };
 
 export type PrintJobRecord = {
@@ -25,11 +33,43 @@ export type PrintJobRecord = {
 	language: string;
 	status: "SENT" | "SIMULATED" | "FAILED";
 	failureReason: string | null;
+	/**
+	 * Origin-hop stage event recorded by this print, if any. Set only when a
+	 * pre-route batch's first successful, route-aligned print advances it
+	 * through its origin hop (print is handoff); null otherwise.
+	 */
+	originStageEventId: string | null;
 };
+
+/** Pre-floor marker for freshly minted Series batches (no Stage row). */
+const PRE_ROUTE_STAGE_ID = "STG-PROJECTS";
 
 export type PrintJobStore = {
 	section: {
 		findUnique: (args: { where: { id: string } }) => Promise<PrintJobStation | null>;
+	};
+	stageEvent: {
+		create: (args: {
+			data: {
+				stageId: string;
+				subStageId: string | null;
+				eventType: "STAGE_SCAN_RECORDED";
+				batchId: string;
+				lotId: string;
+				partId: string;
+				quantity: number;
+				occurredAt: Date;
+				actor: string;
+				isRoutingViolation: boolean;
+				status: "ACCEPTED";
+				routeStepId: string;
+				actorSubjectId: string;
+				quantityMagnitude: string;
+				quantityUom: string;
+				usageBasis: null;
+				sourceRepresentation: string;
+			};
+		}) => Promise<{ id: string }>;
 	};
 	batch: {
 		findUnique: (args: {
@@ -47,10 +87,26 @@ export type PrintJobStore = {
 				part: {
 					select: { id: true; partName: true; partCode: true };
 				};
-				seriesNumber: true;
-				seriesCount: true;
 			};
 		}) => Promise<PrintJobBatch | null>;
+		update: (args: {
+			where: { id: string };
+			data: { currentStageId: string; currentSubStageId: string | null; rowVersion: { increment: number } };
+		}) => Promise<unknown>;
+	};
+	batchPositionProjection: {
+		update: (args: {
+			where: { batchId: string };
+			data: {
+				stageId: string;
+				subStageId: string | null;
+				routeStepId: string;
+				lastEventId: string;
+				positionStatus: "ACCEPTED";
+				quantityMagnitude: string;
+				quantityUom: string;
+			};
+		}) => Promise<unknown>;
 	};
 	printJob: {
 		count: (args: {
@@ -99,6 +155,7 @@ export type PrintJobStore = {
 				toSubStageId: string | null;
 				expectedQuantity: number;
 				actualQuantity: number;
+				recordedAt: Date;
 				recordedBy: string;
 				recordedBySubjectId: string;
 				status: string;
@@ -213,6 +270,10 @@ export function buildLabelIr(input: {
 	quantity?: number;
 	fromStepLabel: string;
 	toStepLabel: string;
+	/** Operator snapshot; omit/blank = the row is omitted, never invented. */
+	operatorName?: string | null;
+	/** Admin-configured machine name; omit/blank = the row is omitted. */
+	machineName?: string | null;
 	sequence: number;
 	widthMm: number;
 	heightMm: number;
@@ -220,6 +281,8 @@ export function buildLabelIr(input: {
 	printedAt: string;
 }): LabelIr {
 	const part = input.batch.part;
+	const operatorName = input.operatorName?.trim() ? input.operatorName.trim() : undefined;
+	const machineName = input.machineName?.trim() ? input.machineName.trim() : undefined;
 	return {
 		barcodeValue: input.batch.barcodeValue,
 		batchCode: input.batch.batchCode,
@@ -234,6 +297,8 @@ export function buildLabelIr(input: {
 		quantity: input.quantity ?? quantityOf(input.batch),
 		fromStepLabel: input.fromStepLabel,
 		toStepLabel: input.toStepLabel,
+		operatorName,
+		machineName,
 		printedAt: input.printedAt,
 		sequence: input.sequence,
 		widthMm: input.widthMm,
@@ -264,8 +329,6 @@ export async function recordPrintJob(
 			part: {
 				select: { id: true, partName: true, partCode: true },
 			},
-			seriesNumber: true,
-			seriesCount: true,
 		},
 	});
 	if (!batch) throw new Error("NOT_FOUND_BATCH");
@@ -319,6 +382,8 @@ export async function recordPrintJob(
 		quantity: labelQuantity,
 		fromStepLabel: await stepLabel(store, fromStageId, fromSubStageId),
 		toStepLabel: await stepLabel(store, nextStep?.stageId ?? null, nextStep?.subStageId ?? null),
+		operatorName: input.operatorName ?? undefined,
+		machineName: input.machineName ?? undefined,
 		sequence,
 		widthMm: binding.widthMm,
 		heightMm: binding.heightMm,
@@ -378,9 +443,65 @@ export async function recordPrintJob(
 				toSubStageId: nextStep.subStageId,
 				expectedQuantity: plannedQuantity,
 				actualQuantity: labelQuantity,
+				recordedAt: new Date(),
 				recordedBy: input.actor,
 				recordedBySubjectId: input.actorSubjectId,
 				status: hasVariance ? "RECORDED" : "ACCEPTED",
+			},
+		});
+	}
+
+	// Origin handoff: a pre-route batch's first successful, route-aligned print
+	// also records its origin route hop. Freshly minted Series batches sit at
+	// the STG-PROJECTS pre-floor marker with next = step 1, and the origin desk
+	// has no scan loop (Injection has no Receiving), so no other writer can
+	// advance them — without this, downstream arrival queues would never see
+	// the work. The hop is always the expected next step, so it is ACCEPTED,
+	// never a violation; misaligned sections and mid-route batches print
+	// labels only. Atomic with the print job and issuance above.
+	let originStageEventId: string | null = null;
+	const preRouteStageId = batch.positionProjection?.stageId ?? batch.currentStageId;
+	if (shouldIssue && nextStep && preRouteStageId === PRE_ROUTE_STAGE_ID && station.stageId === nextStep.stageId) {
+		const originEvent = await store.stageEvent.create({
+			data: {
+				stageId: nextStep.stageId,
+				subStageId: nextStep.subStageId,
+				eventType: "STAGE_SCAN_RECORDED",
+				batchId: batch.id,
+				lotId: batch.lot.id,
+				partId: batch.part.id,
+				quantity: labelQuantity,
+				occurredAt: new Date(),
+				actor: input.actor,
+				isRoutingViolation: false,
+				status: "ACCEPTED",
+				routeStepId: nextStep.id,
+				actorSubjectId: input.actorSubjectId,
+				quantityMagnitude: String(labelQuantity),
+				quantityUom: "EA",
+				usageBasis: null,
+				sourceRepresentation: batch.barcodeValue,
+			},
+		});
+		originStageEventId = originEvent.id;
+		await store.batch.update({
+			where: { id: batch.id },
+			data: {
+				currentStageId: nextStep.stageId,
+				currentSubStageId: nextStep.subStageId,
+				rowVersion: { increment: 1 },
+			},
+		});
+		await store.batchPositionProjection.update({
+			where: { batchId: batch.id },
+			data: {
+				stageId: nextStep.stageId,
+				subStageId: nextStep.subStageId,
+				routeStepId: nextStep.id,
+				lastEventId: originEvent.id,
+				positionStatus: "ACCEPTED",
+				quantityMagnitude: String(labelQuantity),
+				quantityUom: "EA",
 			},
 		});
 	}
@@ -396,5 +517,6 @@ export async function recordPrintJob(
 		language,
 		status: delivered.status,
 		failureReason: delivered.failureReason,
+		originStageEventId,
 	};
 }

@@ -182,7 +182,7 @@ describe("canonical PATS command contract", () => {
 			project: {
 				create: async () => {
 					createdPlans += 1;
-					return { id: "project-1", projectCode: "PLAN-001", name: "July run", status: "DRAFT", requiredProductionQuantity: 100, productId: null, rowVersion: 1 };
+					return { id: "project-1", projectCode: "PLAN-001", name: "July run", status: "DRAFT", productId: null, rowVersion: 1 };
 				},
 			},
 			product: { findUnique: async () => null },
@@ -240,8 +240,8 @@ describe("canonical PATS command contract", () => {
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
 			project: {
-				findUnique: async () => ({ id: "project-1", projectCode: "PLAN-001", name: "Old", status: "DRAFT", requiredProductionQuantity: 100, productId: null, rowVersion: 3 }),
-				update: async () => ({ id: "project-1", projectCode: "PLAN-001", name: "New", status: "DRAFT", requiredProductionQuantity: 100, productId: null, rowVersion: 4 }),
+				findUnique: async () => ({ id: "project-1", projectCode: "PLAN-001", name: "Old", status: "DRAFT", productId: null, rowVersion: 3 }),
+				update: async () => ({ id: "project-1", projectCode: "PLAN-001", name: "New", status: "DRAFT", productId: null, rowVersion: 4 }),
 			},
 			auditRecord: { create: async () => undefined },
 			outboxMessage: { create: async () => undefined },

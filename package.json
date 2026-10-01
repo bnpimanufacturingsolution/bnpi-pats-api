@@ -43,7 +43,8 @@
 		"zod-generate": "node scripts/zod-generate.js",
 		"print:glory-l:usb": "tsx scripts/glory-l-usb-test-print.ts",
 		"print:glory-l:net": "tsx scripts/glory-l-test-print.ts",
-		"print:glory-l:calibrate": "tsx scripts/glory-l-calibrate-print.ts"
+		"print:glory-l:calibrate": "tsx scripts/glory-l-calibrate-print.ts",
+		"snap": "node scripts/pats-snap.mjs"
 	},
 	"author": "1BIS",
 	"license": "MIT",

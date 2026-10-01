@@ -611,6 +611,34 @@ project-owned Lot amendment. The project-created Lot behavior remains.
 - **Review condition:** before any future PMRS/allocated-requirements resource is designed or an
   external v1 consumer is introduced.
 
+## User correction: Lot quantity is the single execution target (2026-09-29)
+
+`Project.requiredProductionQuantity` always duplicated `Lot.requiredProductionQuantity`
+(both were written from the same model-requirements total on create and on every
+requirement replacement). The Project column is dropped with no backfill
+(migration `20260929120000_drop_project_required_quantity`); the Lot value remains the
+source of truth and continues to feed release minting, dashboards, and reports.
+
+- **Scope:** remove the `Project.requiredProductionQuantity` column; remove
+  `requiredProductionQuantity` from project list/detail command responses (Lot
+  reads keep it); project list summaries source the display quantity from the
+  owned Lot; app drops the duplicate "Project required quantity" field and
+  keeps "Lot quantity".
+- **Excepted section:** REST v1.2.1 §7 minimum 90-day deprecation window for removal of the
+  project-level v1 response field.
+- **Owner:** user, 2026-09-29.
+- **Review condition:** before production deployment or introduction of any external v1 consumer.
+
+## Correction: shared catalog parts repeat per model requirement (2026-09-29)
+
+A shared catalog part (verified: capsule `C002-01-42` belongs to all six B251
+models) made multi-model requirement saves fail with a uniqueness conflict,
+because Project Part identity was `(project, partCode)`. Each model mints its
+own Series per ModelPart, so the identity is now
+`(project, requirement, partCode)` (migration
+`20260929130000_part_unique_per_requirement`). No wire change; release, QC, and
+labeling behavior are unchanged.
+
 ## User-confirmed planning noun: Project (2026-09-25)
 
 D-024 is resolved. The canonical planning aggregate noun is **Project**.
@@ -666,3 +694,89 @@ sunset, as a scoped v1.2.1 §7 exception (same mechanism as D-038).
 - **Supersedes:** the "Exception: None" lines in `docs/decisions/2026-09-25-bom-api-retirement-decision.md`
   and `docs/decisions/2026-09-25-process-route-api-retirement-decision.md`, and the D-040
   `/stations`-until-2027-06-30 hold, only for the route-path scope above.
+
+## D-042 Floor origin handoff on first print (2026-09-29)
+
+- **Decision:** the first successful, route-aligned `POST /api/v1/print-jobs`
+  for a pre-route (`STG-PROJECTS`) batch records its origin route hop
+  (`ACCEPTED` `STAGE_SCAN_RECORDED` at the next step), advances batch and
+  projection position, and returns additive `originStageEventId` — atomically
+  with the label and first-print ISSUANCE. Status: `PROPOSED` (implemented
+  behind the frozen Gate 0 target; needs owner acceptance per the
+  implementation-approval rule for write-contract changes).
+- **Rationale:** minted Series batches sit pre-route with next = step 1 and
+  the origin desk has no scan loop, so no other writer can advance them;
+  project truth already states print is the handoff. The hop is always the
+  expected next step, so it is never a violation.
+- **Same slice, regression fixes:** the Series merge put scalar
+  `seriesNumber`/`seriesCount` inside a Prisma `include` (every print 500'd)
+  and the issuance create omitted required `recordedAt`. Both are fixed with
+  mock-shape regression tests. No contract break in either fix.
+- **Affected surfaces:** `POST /api/v1/print-jobs` contract (catalog entry
+  above), `recordPrintJob` store, print-job focused tests, headed
+  `e2e/floor-slice-series.spec.ts` (sibling repo).
+- **Implementation impact:** additive response field; idempotent replay
+  includes the handoff; misaligned/mid-route/reprint prints unchanged.
+- **Migration impact:** none (no schema change). In-flight pre-route batches
+  advance on their next origin print.
+- **Review condition:** reopen before production deployment or any external
+  v1 consumer; confirm the origin-hop event vocabulary with the floor owner
+  (`NEEDS_CONFIRMATION` on pre-route floor wording only — "Projects" desk
+  label in the sibling app).
+- **Endpoint standard review:** no §7 exception (additive, non-breaking);
+  checklist recorded in the endpoint catalog entry above.
+
+## D-043 Issuance label truth: project on positions + ProductionLine machines (2026-09-29)
+
+- **Decision:** (1) `GET /api/v1/batch-positions` lot rows additionally carry
+  `projectName`/`projectCode` (same select expansion as the `projectStatus`
+  floor-release precedent; `null` = unknown, never a hardcoded fallback).
+  (2) New optional equipment identity: `Machine` owned by `ProductionLine`
+  (zero-or-more; no rows = no machines), with `GET|POST
+  /api/v1/production-lines/:productionLineId/machines` plus
+  `PATCH|DELETE .../machines/:machineId` (`operations.manage`, `machineCode`
+  globally unique uppercase-dash, `If-Match`/`rowVersion` on mutation,
+  `201`+`Location` on create). (3) `POST /api/v1/print-jobs` accepts optional
+  `operatorName`/`machineName`; `buildLabelIr` renders them, and blank/omitted
+  omits the row instead of inventing a name. Prints snapshot the names as free
+  text, never an FK, so machine rows delete cleanly. Status: `PROPOSED`
+  (user-approved direction 2026-09-29; needs owner acceptance per the
+  implementation-approval rule; dev server restart + migration apply pending).
+- **Rationale:** the issuance preview resolved PROJECT from demo fixtures with
+  a hardcoded fallback (wrong project in canonical mode) and invented machine
+  names from fixture strings with no API owner. The printed label was already
+  server-rendered from `lot.project`; the preview now resolves from the same
+  source. Machines are admin-configured per line because some lines have none.
+- **Affected surfaces:** `domain-read.ts` (positions select + machines
+  collection), `command-router.ts` (machine CRUD, print schema passthrough),
+  `print-job.ts` (`PrintJobCreateInput` + `buildLabelIr`), migration
+  `20260929120000_add_machine_to_production_line`, sibling app preview
+  (PROJECT from position, machine resolve/omit). No seeder change: lines ship
+  with zero machines until an admin configures them (honest empty).
+- **Migration impact:** additive `Machine` table, `RESTRICT` on the line FK
+  (disable/delete-line policy unchanged; machines delete independently).
+  Historical migrations untouched.
+- **Review condition:** reopen before production deployment or any external v1
+  consumer; confirm multi-machine issuance selection UX with the floor owner
+  (working default: single machine auto-fills, several = operator picks).
+- **Endpoint standard review (v1.2.1, no §7 exception — all additive):**
+  CANONICAL; `/api/v1` + plural kebab nouns, no verbs; nesting one level
+  (`/production-lines/:id/machines`); `snake_case` collection params
+  (`page`/`limit` only); `data`+`pagination` envelope; POST→`201`+`Location`,
+  PATCH field-replacement + `ETag`, DELETE→`200`; RFC 9457 errors
+  (400/404/409/412/422 mapped); auth `execution.read` (reads) /
+  `operations.manage` (mutations) with object-level line scoping
+  (cross-line machine access → `404`); `Idempotency-Key` on all commands with
+  replay/conflict; `camelCase` fields, ISO-8601 UTC; audit actor/context/time/
+  action on mutations (`MACHINE_CREATED/UPDATED/DELETED`); OpenAPI annotations
+  inline (generated-docs export is a release-pass residual per precedent);
+  focused tests `tests/machine.spec.ts` (10 cases: empty/404/201+Location/
+  404+409/422/403/If-Match bump+412/cross-line 404/delete) + positions
+  `projectName`/`projectCode` expectation + `buildLabelIr` snapshot/omit
+  cases. Full suite 472 pass, lint clean, `tsc` clean.
+
+## Order visibility at issuance � app-only, no API decision (2026-09-29)
+
+- **Decision:** none required on the API. The Injection issuance order context (Lot ? Part groups, issued x/N, series x/y) composes GET /batch-positions + GET /print-jobs first-prints with no shape change. Release mint already emits per-part series (seriesCount = ceil(requiredQuantity / batchSize), covered by canonical-command.spec.ts). Status: NOTED (review-checklist evidence only).
+- **Rationale:** user direction 2026-09-29 � per-part requirement (model 10,000 ? each part 10,000 pcs), progress = issued batches / required batches, series = progress identity. NEEDS_CONFIRMATION on the denominator is closed.
+

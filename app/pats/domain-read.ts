@@ -26,6 +26,7 @@ type DomainReadDatabase = Pick<
 	| "booth"
 	| "line"
 	| "lineOperatorAssignment"
+	| "machine"
 	| "subject"
 	| "monitoringDailySheet"
 	| "monitoringStationBoard"
@@ -280,12 +281,71 @@ export function domainReadRouter(
 	const router = Router();
 
 	router.get("/projects", requireCapability("planning.read"), async (req, res) => {
-		const page = pagination(req, res);
+		const page = pagination(req, res, ["status", "search", "lot"]);
 		if (!page) return;
 		try {
+			const requestQuery = query(req);
+			const single = (key: string) => {
+				const raw = requestQuery[key];
+				return Array.isArray(raw) ? raw[0] : raw;
+			};
+			const validationErrors: Array<{ field: string; message: string }> = [];
+			const statusRaw = single("status")?.trim() ?? "";
+			const statusKey = statusRaw.toLowerCase();
+			const statusMap: Record<string, "DRAFT" | "RELEASED" | "COMPLETED"> = {
+				draft: "DRAFT",
+				released: "RELEASED",
+				ongoing: "RELEASED",
+				completed: "COMPLETED",
+			};
+			let statusValue: "DRAFT" | "RELEASED" | "COMPLETED" | undefined;
+			if (statusRaw && statusKey !== "all" && statusKey !== "general") {
+				const mapped = statusMap[statusKey];
+				if (!mapped) {
+					validationErrors.push({ field: "status", message: "Must be one of all, draft, released, completed." });
+				} else {
+					statusValue = mapped;
+				}
+			}
+			const searchText = single("search")?.trim() ?? "";
+			if (searchText.length > 100) {
+				validationErrors.push({ field: "search", message: "Must be at most 100 characters." });
+			}
+			const lotText = single("lot")?.trim() ?? "";
+			if (lotText.length > 200) {
+				validationErrors.push({ field: "lot", message: "Must be at most 200 characters." });
+			}
+			if (validationErrors.length > 0) {
+				res.type("application/problem+json").status(400).json({
+					type: PROBLEM_TYPE.malformed,
+					title: "Bad Request",
+					status: 400,
+					detail: "The project collection query is invalid.",
+					instance: instance(req),
+					errors: validationErrors,
+				});
+				return;
+			}
+			const andClauses: Prisma.ProjectWhereInput[] = [];
+			if (statusValue) andClauses.push({ status: statusValue });
+			if (searchText) {
+				andClauses.push({
+					OR: [
+						{ projectCode: { contains: searchText, mode: "insensitive" } },
+						{ name: { contains: searchText, mode: "insensitive" } },
+						{ product: { productName: { contains: searchText, mode: "insensitive" } } },
+						{ product: { productCode: { contains: searchText, mode: "insensitive" } } },
+					],
+				});
+			}
+			if (lotText) {
+				andClauses.push({ OR: [{ projectCode: lotText }, { name: lotText }] });
+			}
+			const where: Prisma.ProjectWhereInput = andClauses.length > 0 ? { AND: andClauses } : {};
 			const [totalItems, projects] = await Promise.all([
-				database.project.count(),
+				database.project.count({ where }),
 				database.project.findMany({
+					where,
 					skip: (page.page - 1) * page.limit,
 					take: page.limit,
 					orderBy: [{ createdAt: "desc" }, { id: "asc" }],
@@ -294,13 +354,12 @@ export function domainReadRouter(
 						projectCode: true,
 						name: true,
 						status: true,
-						requiredProductionQuantity: true,
 						productId: true,
 						rowVersion: true,
 						createdAt: true,
 						releasedAt: true,
 						product: { select: { productName: true } },
-						lot: { select: { id: true } },
+						lot: { select: { id: true, requiredProductionQuantity: true } },
 					},
 				}),
 			]);
@@ -309,7 +368,7 @@ export function domainReadRouter(
 			projectCode: project.projectCode,
 			name: project.name,
 			status: project.status,
-			requiredProductionQuantity: project.requiredProductionQuantity,
+			requiredProductionQuantity: project.lot?.requiredProductionQuantity ?? 0,
 			productId: project.productId,
 			productName: project.product?.productName ?? null,
 			lotCount: project.lot ? 1 : 0,
@@ -376,7 +435,6 @@ export function domainReadRouter(
 				projectCode: project.projectCode,
 				name: project.name,
 				status: project.status,
-				requiredProductionQuantity: project.requiredProductionQuantity,
 				rowVersion: project.rowVersion,
 				createdAt: project.createdAt.toISOString(),
 				releasedAt: date(project.releasedAt),
@@ -565,15 +623,78 @@ export function domainReadRouter(
 					select: { id: true, lineCode: true, name: true, displayOrder: true, isEnabled: true },
 				}),
 			]);
-			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(lines.map((line) => ({
-				productionLineId: line.id,
-				lineCode: line.lineCode,
-				name: line.name,
-				displayOrder: line.displayOrder,
-				isEnabled: line.isEnabled,
-			})), page, totalItems));
+		res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(lines.map((line) => ({
+			productionLineId: line.id,
+			lineCode: line.lineCode,
+			name: line.name,
+			displayOrder: line.displayOrder,
+			isEnabled: line.isEnabled,
+		})), page, totalItems));
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS production-line data is unavailable.");
+		}
+	});
+
+	/**
+	 * @openapi
+	 * /api/v1/production-lines/{productionLineId}/machines:
+	 *   get:
+	 *     operationId: productionLineMachineCollectionGet
+	 *     summary: List admin-configured machines for a production line
+	 *     description: Optional equipment identity owned by a ProductionLine. Zero-or-more — a line with no machines returns an empty collection and issuance labels omit the MACHINE row.
+	 *     tags: [PATS Floor]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: productionLineId
+	 *         required: true
+	 *         schema: { type: string }
+	 *       - in: query
+	 *         name: page
+	 *         schema: { type: integer, minimum: 1, default: 1 }
+	 *       - in: query
+	 *         name: limit
+	 *         schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+	 *     responses:
+	 *       200: { description: Paginated machine summaries }
+	 *       400: { description: Malformed or incomplete collection query }
+	 *       401: { description: Authentication required }
+	 *       403: { description: execution.read capability required }
+	 *       404: { description: Production line not found }
+	 *       503: { description: Machine data unavailable }
+	 */
+	router.get("/production-lines/:productionLineId/machines", requireCapability("execution.read"), async (req, res) => {
+		const page = pagination(req, res);
+		if (!page) return;
+		try {
+			const line = await database.productionLine.findUnique({ where: { id: req.params.productionLineId }, select: { id: true } });
+			if (!line) {
+				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested production line was not found.");
+				return;
+			}
+			const whereClause = { productionLineId: line.id };
+			const [totalItems, machines] = await Promise.all([
+				database.machine.count({ where: whereClause }),
+				database.machine.findMany({
+					where: whereClause,
+					orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+					skip: (page.page - 1) * page.limit,
+					take: page.limit,
+					select: { id: true, machineCode: true, name: true, displayOrder: true, isEnabled: true, rowVersion: true },
+				}),
+			]);
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(machines.map((machine) => ({
+				machineId: machine.id,
+				productionLineId: line.id,
+				machineCode: machine.machineCode,
+				name: machine.name,
+				displayOrder: machine.displayOrder,
+				isEnabled: machine.isEnabled,
+				rowVersion: machine.rowVersion,
+			})), page, totalItems));
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS machine data is unavailable.");
 		}
 	});
 
@@ -1327,9 +1448,11 @@ export function domainReadRouter(
 											partsListId: true,
 																					requiredProductionQuantity: true,
 									labelPackSize: true,
-									// Floor release gate: operators lack planning.read, so the
-									// position row carries project status for the arrival queue.
-									project: { select: { status: true } },
+								// Floor release gate: operators lack planning.read, so the
+								// position row carries project status for the arrival queue.
+								// projectName/projectCode ride along for the issuance label
+								// preview (PROJECT line must match the server-rendered label).
+								project: { select: { id: true, name: true, projectCode: true, status: true } },
 								},
 							},
 											part: { select: { id: true, partCode: true, partName: true } },
@@ -1366,6 +1489,12 @@ export function domainReadRouter(
 								// Floor release gate: operators lack planning.read, so the
 								// position row carries project status for the arrival queue.
 								projectStatus: projectRef?.status ?? null,
+								// Issuance label preview: PROJECT line + codename must match
+								// the server-rendered label (buildLabelIr uses
+								// lot.project.name / projectCode). Null = unknown, never a
+								// hardcoded fallback.
+								projectName: projectRef?.name ?? null,
+								projectCode: projectRef?.projectCode ?? null,
 							};
 						})(),
 						part: {
@@ -1596,11 +1725,11 @@ export function domainReadRouter(
 			try {
 				const releasedProjects = await database.project.findMany({
 					where: { status: "RELEASED" },
-					select: { requiredProductionQuantity: true },
+					select: { lot: { select: { requiredProductionQuantity: true } } },
 				});
 				const projectPaceTotal = releasedProjects.reduce(
-					(sum: number, project: { requiredProductionQuantity: number }) =>
-						sum + (Number(project.requiredProductionQuantity) || 0),
+					(sum: number, project: { lot: { requiredProductionQuantity: number } | null }) =>
+						sum + (Number(project.lot?.requiredProductionQuantity) || 0),
 					0,
 				);
 				if (projectPaceTotal > 0) dailyExpected = Math.max(1, Math.round(projectPaceTotal / 7));

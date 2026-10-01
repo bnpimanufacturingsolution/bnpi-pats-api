@@ -140,11 +140,22 @@ paths:
     get:
       operationId: projectCollectionGet
       summary: List project summaries
+      description: >
+        Optional filters combine with AND and share the same predicate for count and page
+        so tab counters reuse pagination.totalItems (e.g. status=draft with limit=1).
+        status accepts all, general, draft, released, ongoing (alias of released), completed
+        case-insensitively; all/general means no status filter. search is a trimmed
+        case-insensitive partial match (max 100 chars) across projectCode, name,
+        product.productName, and product.productCode. lot is a trimmed exact match
+        (max 200 chars) against projectCode or name only.
       tags: [PATS Planning]
       x-required-capability: planning.read
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - { name: status, in: query, schema: { type: string, enum: [all, general, draft, released, ongoing, completed] } }
+        - { name: search, in: query, schema: { type: string, minLength: 1, maxLength: 100 } }
+        - { name: lot, in: query, schema: { type: string, minLength: 1, maxLength: 200 } }
       responses: { '200': { $ref: '#/components/responses/PaginatedRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
   /projects/{projectId}:
     get:
