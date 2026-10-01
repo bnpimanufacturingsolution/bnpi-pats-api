@@ -1239,13 +1239,3 @@ model Lot {
 // ---------------------------------------------------------------------------
 // Canonical planning, projections, quality, and platform records
 // ---------------------------------------------------------------------------
-
-generator client {
-  provider = "prisma-client-js"
-  output   = "../../generated/pats-client"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("PATS_DATABASE_URL")
-}
