@@ -16,6 +16,27 @@ model ProductionLine {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sections     Section[]
+  machines     Machine[]
+}
+
+/// Optional equipment identity owned by a ProductionLine (admin-configured
+/// on the line configuration). Zero-or-more: lines with no machines simply
+/// have no rows — issuance labels omit the MACHINE row instead of inventing
+/// a name. Prints snapshot the machine name as free text, never an FK, so
+/// machine rows are safe to disable/delete without orphaning history.
+model Machine {
+  id               String         @id @default(uuid())
+  productionLineId String
+  productionLine   ProductionLine @relation(fields: [productionLineId], references: [id])
+  machineCode      String         @unique
+  name             String
+  displayOrder     Int            @default(0)
+  isEnabled        Boolean        @default(true)
+  rowVersion       Int            @default(1)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([productionLineId])
 }
 
 model Section {

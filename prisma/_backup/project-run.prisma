@@ -27,10 +27,9 @@ enum LotStatus {
 model Project {
   id                         String                    @id @default(uuid())
   workspaceId                String
-  projectCode                String                    @unique
+  projectCode                String                   @unique
   name                       String
-  requiredProductionQuantity Int                       @default(0)
-  status                     ProjectLifecycleStatus    @default(DRAFT)
+  status                     ProjectLifecycleStatus      @default(DRAFT)
   rowVersion                 Int                       @default(1)
   releasedAt                 DateTime?
   releasedBySubjectId        String?
@@ -143,7 +142,9 @@ model Part {
   inventoryTransactions     InventoryTransaction[]
   batches                   Batch[]
 
-  @@unique([projectId, partCode])
+  // A shared catalog part (e.g. a common capsule) repeats once per model
+  // requirement so each model mints its own Series; identity is per row.
+  @@unique([projectId, projectModelRequirementId, partCode])
   @@index([sourceModelId])
   @@index([sourceModelPartId])
   @@index([projectModelRequirementId])

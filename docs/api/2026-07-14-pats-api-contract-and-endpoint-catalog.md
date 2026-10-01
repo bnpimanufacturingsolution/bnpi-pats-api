@@ -544,3 +544,73 @@ final partial Batch allowed; batch size defaults to 200 via `ProductSpecificatio
 This is a user-approved case-specific exception to REST v1.2.1 §7 for these exact operations and
 fields (D-041 extension for Batch/Lot cleanup included). Review before production deployment or any
 external consumer.
+
+## Floor origin handoff on first print (2026-09-29, D-042)
+
+Freshly minted Series batches sit pre-route at the `STG-PROJECTS` marker with
+next = step 1. The origin desk has no scan loop (Injection has no Receiving),
+so no other writer can advance them and downstream arrival queues would never
+see the work. The first successful, route-aligned print is the handoff
+(project truth: print is handoff): it records the origin route hop as well as
+the label and issuance, atomically.
+
+| Operation | Contract amendment | Unchanged behavior |
+|---|---|---|
+| `POST /api/v1/print-jobs` | First successful print for a pre-route batch at the section owning its next step additionally creates an `ACCEPTED` `STAGE_SCAN_RECORDED` event at that step, advances `Batch.currentStage` and the position projection, and returns additive `originStageEventId` (null otherwise); audit/outbox carry the handoff link | `201`, `Location`, ETag, `Idempotency-Key` replay, `execution.write`, RFC 9457 errors, label/series rendering, and first-print-wins issuance remain |
+| `POST /api/v1/print-jobs` regressions fixed | Batch lookup no longer passes scalar `seriesNumber`/`seriesCount` inside `include` (Prisma rejects scalars there — every print 500'd since the Series merge); issuance rows now stamp required `recordedAt` | Intended label/issuance contract unchanged; previously unobservable |
+
+Misaligned sections and mid-route batches print labels only (no hop, no error).
+Reprints never re-advance. Same-key replay returns the original body including
+`originStageEventId`.
+
+### Endpoint checklist result (`POST /api/v1/print-jobs` amendment)
+
+| Checklist area | Result | Evidence |
+|---|---|---|
+| Contract identity | `PASS` | `CANONICAL`; `/api/v1` prefix, plural kebab-case path, opaque UUIDs, no verb path — all unchanged. |
+| Relationships and collections | `N/A` | Command POST; no nesting or collection surface changes. |
+| HTTP semantics | `PASS` | POST create, `201` + `Location`, no error wrapped in `2xx` — unchanged. |
+| Errors | `PASS` | `401/403/404/409/412/422` cases unchanged; the hop adds no new failure mode (unaligned prints succeed as labels-only). |
+| Security and operational scope | `PASS` | `execution.write`, server-resolved deployment context, object checks unchanged; hop actor/subject are server-resolved, never client-selected. |
+| Concurrency and retries | `PASS` | `Idempotency-Key` replay/conflict unchanged and covers the handoff (replay returns the stored `originStageEventId`); the hop fires exactly once — reprints and mid-route prints are labels-only. |
+| Data and observability | `PASS` | camelCase `originStageEventId`; ISO 8601 UTC `occurredAt`/`recordedAt`; audit `PRINT_JOB_RECORDED` carries the handoff link; outbox unchanged. |
+| OpenAPI/tests/generated documentation | `PASS` with noted scope | No per-endpoint OpenAPI artifact exists for command routes in this repo (precedent); this contract entry is the review evidence. Focused tests: 8 new `print-job.spec.ts` cases (origin advance, misalignment, reprint-once, mid-route labels-only, include-shape, `recordedAt`). |
+
+No §7 exception required: the response addition is additive and non-breaking;
+the regression fixes restore the documented contract. Standards checked:
+v1.2.1 §2, §3, §4.1, §5 (N/A — command), §6, §7, §8, §9, §10, §11, §12.
+
+## D-043 amendment — issuance label truth (2026-09-29)
+
+| Operation | Contract amendment | Unchanged behavior |
+|---|---|---|
+| `GET /api/v1/batch-positions` | Lot rows additionally carry `projectName`/`projectCode` (`null` = unknown); nested `project` stays stripped | `projectStatus` floor-release gate, pagination, `execution.read`, route steps unchanged |
+| `GET /api/v1/production-lines/:productionLineId/machines` | New CANONICAL collection: admin-configured machines for a line, `data`+`pagination`, `execution.read`, `404` on missing line; empty = line has no machines | Production-line collection unchanged |
+| `POST /api/v1/production-lines/:productionLineId/machines` | New CANONICAL command: `operations.manage`, `machineCode` globally unique uppercase-dash, `201`+`Location`, `Idempotency-Key` replay/conflict, `404`/`409`/`422` | — |
+| `PATCH /api/v1/production-lines/:productionLineId/machines/:machineId` | Field-replacement, `If-Match`/`rowVersion` (`412` on stale), `ETag` on success, cross-line access → `404` | — |
+| `DELETE /api/v1/production-lines/:productionLineId/machines/:machineId` | Hard delete with `If-Match`; no dependents (prints snapshot names as free text) | — |
+| `POST /api/v1/print-jobs` | Accepts optional `operatorName`/`machineName`; the rendered label carries them, blank/omitted omits the row | `201`, `Location`, first-print issuance, origin hop (D-042), idempotency, RFC 9457 errors unchanged |
+
+### Endpoint checklist result (D-043)
+
+| Checklist area | Result | Evidence |
+|---|---|---|
+| Contract identity | `PASS` | `CANONICAL`; `/api/v1`, plural kebab-case, opaque UUIDs, no verbs. |
+| Relationships and collections | `PASS` | One-level nesting (`/production-lines/:id/machines`); `snake_case` `page`/`limit`; `data`+`pagination`; max 100 enforced by `parseOffsetPagination`. |
+| HTTP semantics | `PASS` | GET read; POST create `201`+`Location`; PATCH field-replacement + `ETag`; DELETE `200`; no error in `2xx`. |
+| Errors | `PASS` | `400` (idempotency/body), `401/403`, `404` (line, machine, cross-line), `409` (code clash, key conflict), `412` (stale), `422` (code pattern), `503` (reads); `application/problem+json` throughout. |
+| Security and operational scope | `PASS` | `execution.read` reads / `operations.manage` mutations via the canonical identity gates (nested paths inherit the `/production-lines` prefixes — no router change); no tenancy fabrication; audit actor/context/time/action on mutations. |
+| Concurrency and retries | `PASS` | `If-Match`+`rowVersion` bump on PATCH/DELETE (`412` tested incl. missing/stale); `Idempotency-Key` on all commands (tested). |
+| Data and observability | `PASS` | `camelCase` fields; ISO-8601 UTC; `MACHINE_CREATED/UPDATED/DELETED` audit; prints carry names as snapshots. |
+| OpenAPI/tests/generated documentation | `PASS` with noted scope | Inline `@openapi` annotations on the new GET/POST; decision register D-043 is the review evidence; focused tests `tests/machine.spec.ts` (10) + positions project fields + `buildLabelIr` snapshot/omit; full suite 472 pass / lint / `tsc` clean. Generated-docs export remains a release-pass residual per precedent. |
+
+No §7 exception required: all changes are additive and non-breaking. Standards checked: v1.2.1 §2, §3, §4, §5, §6, §7, §8, §9, §10, §11, §12.
+
+## Order visibility at issuance — no contract change (2026-09-29)
+
+The app's Injection issuance Lot → Part grouping (per-part required pcs, issued x/N from series, series x/y per row) is a read-only composition of existing reads: GET /batch-positions (lot/part/series/project fields, D-043) + GET /print-jobs first-prints. No new endpoint, field, or semantic; checklist result: no review items. User-locked denominator: requirement is per part per model (1:1), batches required = ceil(partQty / batchSize), series x/y is the progress identity.
+
+## Station-wide lot focus — no contract change (2026-09-30)
+
+The app's desk lot title switcher + per-tab lot focus (FIFO by lot code, completed sunk, remembered per station) is a read-only composition of the same existing reads: GET /batch-positions (lot/project/series/`projectStatus` fields) + GET /print-jobs first-prints. No new endpoint, field, or semantic; checklist result: no review items. FIFO ordering is a lotCode proxy; carrying true `releasedAt` on positions remains `NEEDS_CONFIRMATION` and is not part of this slice. Seeder change in the same slice: story ACTIVE batches now get position projections (anchor pattern), so all released story lots reach floor queues; no schema or migration change.
+

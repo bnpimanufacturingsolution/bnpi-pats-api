@@ -130,8 +130,8 @@ async function main() {
 	const projects = await api("GET", "/projects", { headers: plannerAuth });
 	const projectRows = dataOf(projects.body);
 	const seedPlan =
-		projectRows.find((p) => String(p.projectCode ?? "") === "PLAN-B251-JUL") ??
-		projectRows.find((p) => String(p.projectCode ?? "").startsWith("PLAN-") && p.status === "RELEASED") ??
+		projectRows.find((p) => String(p.projectCode ?? "").startsWith("PRJ-B251-") && p.status === "RELEASED") ??
+		projectRows.find((p) => p.status === "RELEASED") ??
 		projectRows[0];
 	const projectId = seedPlan?.projectId ?? seedPlan?.id;
 	rec("projects", projects.status === 200 ? "PASS" : "FAIL", `count=${projectRows.length} first=${projectId} status=${seedPlan?.status}`);
@@ -198,7 +198,7 @@ async function main() {
 	if (qualityAuth) {
 		const forb = await api("POST", "/projects", {
 			headers: { ...qualityAuth, "Idempotency-Key": crypto.randomUUID() },
-			body: { projectCode: "X", name: "Nope", requiredProductionQuantity: 1 },
+			body: { projectCode: "X", name: "Nope" },
 		});
 		rec("forbidden-planning-write", forb.status === 403 ? "PASS" : "FAIL", String(forb.status));
 	}

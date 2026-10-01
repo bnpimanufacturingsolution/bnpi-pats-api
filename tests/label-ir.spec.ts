@@ -7,6 +7,7 @@ import {
 	renderZpl,
 	type LabelIr,
 } from "../app/pats/label-ir";
+import { buildLabelIr } from "../app/pats/print-job";
 import { parseWindowsPrinterName, selectPrintPort } from "../app/pats/print-ports";
 
 const ir: LabelIr = {
@@ -118,5 +119,41 @@ describe("label IR renderers", () => {
 		expect(tspl).to.include('QRCODE 20,20,L,6,A,0,"BC-BATCH-000001"');
 		expect(tspl).to.include("240 PCS");
 		expect(tspl).to.include("SIZE 100 mm, 50 mm");
+	});
+
+	it("carries the resolved operator/machine snapshot into the label IR", () => {
+		const batch = {
+			id: "batch-1",
+			batchCode: "BNI-2606-001",
+			barcodeValue: "BC-BATCH-000001",
+			plannedQuantity: 240,
+			currentStageId: "STG-INJECTION",
+			currentSubStageId: null,
+			positionProjection: null,
+			lot: { id: "lot-1", lotCode: "MLT-001", partsListId: "pl-1", project: { id: "project-1", name: "July project", projectCode: "PRJ-JUL" } },
+			part: { id: "part-1", partName: "Body", partCode: "P-BODY" },
+			seriesNumber: null,
+			seriesCount: null,
+		};
+		const base = {
+			batch,
+			fromStepLabel: "External",
+			toStepLabel: "Injection (Molding)",
+			sequence: 1,
+			widthMm: 100,
+			heightMm: 150,
+			dpi: 300,
+			printedAt: "2026-09-29T00:00:00.000Z",
+		};
+		const withMachine = buildLabelIr({ ...base, operatorName: "Joshua R.", machineName: "Injection Press (INJP-20441-JCX)" });
+		expect(withMachine.operatorName).to.equal("Joshua R.");
+		expect(withMachine.machineName).to.equal("Injection Press (INJP-20441-JCX)");
+		expect(renderZpl({ ...ir, ...withMachine, heightMm: 150, atLabel: "Injection (Molding)" })).to.include("MACHINE");
+
+		// Blank/omitted = no row, never an invented name.
+		const withoutMachine = buildLabelIr({ ...base, machineName: "   " });
+		expect(withoutMachine.machineName).to.equal(undefined);
+		expect(withoutMachine.operatorName).to.equal(undefined);
+		expect(renderZpl({ ...ir, ...withoutMachine, heightMm: 150, atLabel: "Injection (Molding)" })).not.to.include("MACHINE");
 	});
 });

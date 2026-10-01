@@ -68,6 +68,8 @@ describe("PATS Prisma boundary", () => {
     expect(schema).to.match(/model Batch \{[\s\S]*?part\s+Part/);
     expect(schema).not.to.contain("model BatchPartLine {");
     expect(schema).not.to.match(/model Lot \{[\s\S]*?partId\s+String/);
+    expect(schema).not.to.match(/model Project \{[^}]*requiredProductionQuantity/);
+    expect(schema).to.match(/model Lot \{[\s\S]*?requiredProductionQuantity\s+Int/);
     expect(schema).to.match(/enum SourceRunStatus[\s\S]*?\bPARTIAL\b/);
     expect(schema).to.match(/enum SourceArtifactType[\s\S]*?\bPDF\b/);
     expect(schema).to.match(/enum SourceExtractionStatus[\s\S]*?\bFAILED\b/);
