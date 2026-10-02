@@ -70,49 +70,49 @@ export const generateEndpointsFromAppInstance = async (app: ExpressApp): Promise
 		// Helper function to extract module names from the main app file
 		const extractModuleNamesFromApp = (): string[] => {
 			try {
-				// Try to read the index.ts file to get actual module names
 				const fs = require("fs");
 				const path = require("path");
+
+				// Read create-app.ts where routes are actually registered
+				const createAppPath = path.join(process.cwd(), "app", "create-app.ts");
 				const indexPath = path.join(process.cwd(), "index.ts");
 
-				if (fs.existsSync(indexPath)) {
-					const indexContent = fs.readFileSync(indexPath, "utf8");
+				let sourceContent = "";
+				if (fs.existsSync(createAppPath)) {
+					sourceContent = fs.readFileSync(createAppPath, "utf8");
+				} else if (fs.existsSync(indexPath)) {
+					sourceContent = fs.readFileSync(indexPath, "utf8");
+				}
 
-					// Extract require/import statements for modules
-					const modulePatterns = [
-						/const\s+(\w+)\s*=\s*require\(['"`]\.\/app\/(\w+)['"`]\)/g, // const template = require('./app/template')
-						/import\s+(\w+)\s+from\s+['"`]\.\/app\/(\w+)['"`]/g, // import template from './app/template'
-						/app\.use\([^,]+,\s*(\w+)\)/g, // app.use(config.baseApiPath, template)
-					];
+				if (!sourceContent) return [];
 
-					const detectedModules: string[] = [];
+				const detectedModules: string[] = [];
 
-					for (const pattern of modulePatterns) {
-						let match;
-						while ((match = pattern.exec(indexContent)) !== null) {
-							if (match[1] && match[1] !== "docs") {
-								// Skip docs module
-								detectedModules.push(match[1]);
-							}
+				// Match: import { moduleName } from "./pats/xxx"  or  import { moduleName } from "./xxx"
+				const namedImportPattern = /import\s*\{[^}]*\}\s*from\s+['"`]\.\/(?:app\/)?(\w[\w-]*)['"`]/g;
+				// Match: import moduleName from "./xxx"
+				const defaultImportPattern = /import\s+(\w+)\s+from\s+['"`]\.\/(?:app\/)?(\w[\w-]*)['"`]/g;
+				// Match: const moduleName = require("./xxx")
+				const requirePattern = /const\s+(\w+)\s*=\s*require\(['"`]\.\/(?:app\/)?(\w[\w-]*)['"`]\)/g;
+
+				for (const pattern of [namedImportPattern, defaultImportPattern, requirePattern]) {
+					let match;
+					while ((match = pattern.exec(sourceContent)) !== null) {
+						const name = match[1];
+						if (name && name !== "docs" && name !== "app" && name !== "config" && name !== "prisma") {
+							detectedModules.push(name);
 						}
 					}
-
-					// Remove duplicates and filter out system modules
-					const uniqueModules = [...new Set(detectedModules)].filter(
-						(name) =>
-							name !== "app" &&
-							name !== "server" &&
-							name !== "config" &&
-							name !== "prisma" &&
-							name !== "docs" &&
-							name.length > 2,
-					);
-
-					console.log(`Detected modules from index.ts: ${uniqueModules.join(", ")}`);
-					return uniqueModules;
 				}
+
+				const uniqueModules = [...new Set(detectedModules)].filter(
+					(name) => name.length > 2,
+				);
+
+				console.log(`Detected modules from create-app.ts: ${uniqueModules.join(", ")}`);
+				return uniqueModules;
 			} catch (error) {
-				console.log(`Could not read index.ts: ${error}`);
+				console.log(`Could not read app source: ${error}`);
 			}
 
 			return []; // Return empty if detection fails

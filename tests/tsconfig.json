@@ -1,0 +1,48 @@
+{
+	// Dedicated project for the mocha suite.
+	//
+	// The root tsconfig.json does not include `tests/**`, so `npm run type-check`
+	// never type-checks the specs - and VS Code, opening a file outside every
+	// `include`, falls back to an inferred project with no `@types`, which is why
+	// every `describe` / `it` in a spec showed as
+	// TS2593 "Cannot find name 'describe'" in the editor. ~60 phantom errors that
+	// `npm test` never sees, because the suite runs through
+	// `ts-node/register` with `transpileOnly: true`.
+	//
+	// This file exists so the editor and the CLI agree. It is scoped to `tests/`
+	// on purpose: adding the specs to the ROOT include would drag them into the
+	// app build and into `npm run type-check`, changing what that gate covers.
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		// Both are installed; naming them explicitly stops TS pulling in every
+		// unrelated @types package as well.
+		"types": ["node", "mocha"],
+		// `nodenext` rather than the root's `node16`, and both parts are load-bearing.
+		//
+		// Under `node16` TS raised TS1479 on 35 `import ... = require(...)` lines:
+		// the specs import app code that the resolver classified as ESM. Switching
+		// this project to `nodenext` resolves those as CommonJS - `package.json`
+		// declares no `"type"`, so every `.ts` here is CJS, which is how the suite
+		// actually runs under `ts-node/register`.
+		//
+		// The obvious alternative, `"module": "commonjs"` + `"moduleResolution":
+		// "node"`, silences TS1479 too but resolves via node10, which TypeScript
+		// 7.0 removes - the editor flags it as deprecated today. `nodenext` is the
+		// successor that keeps the resolution honest, so it is used instead of
+		// pinning a removed mode behind `"ignoreDeprecations": "6.0"`.
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		// Strictness is inherited from the root, unchanged. Turning it OFF here was
+		// tried and measured WORSE (38 errors vs 30): without `strictNullChecks`
+		// TS trades one set of errors for another rather than removing any.
+		//
+		// Honest caveat: this project now type-checks the specs for the first time,
+		// which surfaces ~30 pre-existing type errors that nothing had ever reported
+		// (the root `include` skips `tests/`, and `npm test` runs transpileOnly).
+		// They are pre-existing debt, not introduced here - but they are now VISIBLE,
+		// and cleaning them up is its own change rather than part of an editor fix.
+		"noEmit": true,
+		"rootDir": ".."
+	},
+	"include": ["**/*.ts"]
+}

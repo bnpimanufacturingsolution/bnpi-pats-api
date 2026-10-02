@@ -54,7 +54,10 @@ describe("canonical PATS domain read contract", () => {
 						rowVersion: 4,
 						createdAt: new Date("2026-07-01T00:00:00.000Z"),
 						releasedAt: new Date("2026-07-02T00:00:00.000Z"),
-						product: { productName: "Sample product" },
+						completedAt: new Date("2026-07-31T00:00:00.000Z"),
+						plannedStartDate: new Date("2026-07-05T00:00:00.000Z"),
+						plannedEndDate: new Date("2026-07-25T00:00:00.000Z"),
+												product: { productName: "Sample product" },
 						lot: { id: "lot-1", requiredProductionQuantity: 100 },
 					}];
 				},
@@ -80,10 +83,115 @@ describe("canonical PATS domain read contract", () => {
 				rowVersion: 4,
 				createdAt: "2026-07-01T00:00:00.000Z",
 				releasedAt: "2026-07-02T00:00:00.000Z",
+				completedAt: "2026-07-31T00:00:00.000Z",
+				plannedStartDate: "2026-07-05T00:00:00.000Z",
+				plannedEndDate: "2026-07-25T00:00:00.000Z",
 			}],
 			pagination: { page: 2, pageSize: 1, totalItems: 3, totalPages: 3 },
 		});
 		expect(receivedArgs).to.deep.include({ skip: 1, take: 1 });
+		// The planned window must be NAMED in the explicit list select, not just
+		// mapped. `GET /projects` selects field by field, so omitting it here would
+		// leave the list reading without the window while the detail read - which
+		// uses `include` - carried it. That asymmetry is silent: nothing errors, the
+		// field is simply always null in the list.
+		//
+		// Asserted key by key rather than via `deep.include`, which would require
+		// restating the entire select and break every time an unrelated column is
+		// added.
+		const select = (receivedArgs as { select: Record<string, unknown> }).select;
+		expect(select.plannedStartDate, "plannedStartDate must be selected").to.equal(true);
+		expect(select.plannedEndDate, "plannedEndDate must be selected").to.equal(true);
+	});
+
+	it("reports a null planned window rather than omitting the keys", async () => {
+		// An unplanned project is a normal state, and a client that reads
+		// `plannedStartDate` must get `null` — not `undefined` from a missing key —
+		// so "no window recorded" and "the API forgot to send it" stay
+		// distinguishable. Mirrors how completedAt is handled.
+		const app = appFor({
+			project: {
+				count: async () => 1,
+				findMany: async () => [{
+					id: "project-1",
+					projectCode: "PLAN-001",
+					name: "Unplanned",
+					status: "DRAFT",
+					productId: null,
+					rowVersion: 1,
+					createdAt: new Date("2026-07-01T00:00:00.000Z"),
+					releasedAt: null,
+					completedAt: null,
+					plannedStartDate: null,
+					plannedEndDate: null,
+					product: null,
+					lot: null,
+				}],
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/projects")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		const row = response.body.data[0];
+		expect(row).to.have.property("plannedStartDate", null);
+		expect(row).to.have.property("plannedEndDate", null);
+	});
+
+	it("carries completedAt on the list so a client can show a real end date", async () => {
+		// `Project` has no startDate/endDate; completedAt is the only end-of-life
+		// date the model has. The list used to omit it (the detail route returned
+		// it), so any list-level date could only ever be a fabricated start.
+		let selected: Record<string, unknown> | undefined;
+		const app = appFor({
+			project: {
+				count: async () => 2,
+				findMany: async (args: Record<string, unknown>) => {
+					selected = args.select as Record<string, unknown>;
+					return [
+						{
+							id: "project-1",
+							projectCode: "PLAN-001",
+							name: "Done",
+							status: "COMPLETED",
+							productId: null,
+							rowVersion: 4,
+							createdAt: new Date("2026-07-01T00:00:00.000Z"),
+							releasedAt: new Date("2026-07-02T00:00:00.000Z"),
+							completedAt: new Date("2026-07-31T00:00:00.000Z"),
+							product: null,
+							lot: null,
+						},
+						{
+							id: "project-2",
+							projectCode: "PLAN-002",
+							name: "Still running",
+							status: "RELEASED",
+							productId: null,
+							rowVersion: 1,
+							createdAt: new Date("2026-08-01T00:00:00.000Z"),
+							releasedAt: new Date("2026-08-02T00:00:00.000Z"),
+							completedAt: null,
+							product: null,
+							lot: null,
+						},
+					];
+				},
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/projects")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		// The column must be selected, not just mapped, or Prisma drops it.
+		expect(selected).to.include({ completedAt: true });
+		expect(response.body.data[0].completedAt).to.equal("2026-07-31T00:00:00.000Z");
+		// An unfinished project reports null — never a fabricated end.
+		expect(response.body.data[1].completedAt).to.equal(null);
 	});
 
 	it("preserves lot execution bindings in project detail reads", async () => {
@@ -173,6 +281,33 @@ describe("canonical PATS domain read contract", () => {
 
 		expect(response.status).to.equal(200);
 		expect(response.body.data).to.deep.equal([{ id: "stage-1", name: "Injection", workflowGroup: { id: "group-1", name: "Factory" }, subStageLinks: [] }]);
+	});
+
+	it("carries a nullable server-authored code on stages, never a fabricated one", async () => {
+		// Stage.code is how the drill-down shows a human-meaningful code
+		// (display-human-readable-codes: prefer a server business code over a
+		// client-fabricated scheme). It stays NULL until ops authors one, and
+		// the read must not substitute the id or an abbreviation.
+		const app = appFor({
+			stage: {
+				findMany: async () => [
+					{ id: "stage-inj", name: "Injection", code: "INJ", workflowGroup: { id: "g1", name: "Main" }, subStageLinks: [] },
+					{ id: "stage-whs", name: "Warehouse", code: null, workflowGroup: { id: "g1", name: "Main" }, subStageLinks: [] },
+				],
+			},
+			subStage: {
+				findMany: async () => [{ id: "sub-1", name: "Molding", code: "MOLD", eligibleStages: [] }],
+			},
+		});
+
+		const stages = await request(app).get("/api/v1/stages").set("Authorization", "Bearer t");
+		const subStages = await request(app).get("/api/v1/sub-stages").set("Authorization", "Bearer t");
+
+		expect(stages.status).to.equal(200);
+		expect(stages.body.data[0].code).to.equal("INJ");
+		expect(stages.body.data[1].code).to.equal(null);
+		expect(subStages.status).to.equal(200);
+		expect(subStages.body.data[0].code).to.equal("MOLD");
 	});
 
 	it("returns quality inspections with server-owned batch and part evidence", async () => {

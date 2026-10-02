@@ -19,76 +19,14 @@ import { invalidateEntityCache, getOrFetch } from "../../helper/cache-helper";
 
 import { config } from "../../config/constant";
 import { employeeRepository } from "./employee.repository";
-import { createEmployeeService, EmployeeService } from "./employee.service";
 import {
 	CreateEmployeeSchema,
 	UpdateEmployeeSchema,
-	SyncConfigSchema,
 } from "../../zod/employee.zod";
 import asyncHandler from "../../middleware/asyncHandler";
 import { AuthRequest } from "../../middleware/verifyToken";
 
 const employeeLogger = createLogger("employee");
-
-// Default HRIS configuration
-const HRIS_CONFIG = {
-	baseUrl: process.env.HRIS_API_URL || "http://localhost:3001/api",
-	timeout: 30000,
-	retryAttempts: 2,
-	retryDelay: 1000,
-	batchSize: 100,
-	pageLimit: 1000,
-};
-
-/**
- * Extract bearer token from authorization header
- */
-const extractBearerToken = (authHeader?: string): string | undefined => {
-	return authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
-};
-
-/**
- * Build HRIS API URL with query parameters
- */
-const buildHrisApiUrl = (baseUrl: string): string => {
-	return `${baseUrl}/employee?document=true&page=1&limit=${HRIS_CONFIG.pageLimit}&pagination=true`;
-};
-
-/**
- * Perform HRIS sync before fetching from database
- */
-const performSyncFirst = async (
-	service: EmployeeService,
-	workspaceId: string,
-	hrisUrl: string | undefined,
-	authToken: string | undefined
-): Promise<{ source: "api" | "database"; message?: string }> => {
-	if (!authToken) {
-		employeeLogger.warn("SyncFirst: No auth token provided");
-		return { source: "database", message: "No auth token for sync" };
-	}
-
-	const apiUrl = buildHrisApiUrl(hrisUrl || HRIS_CONFIG.baseUrl);
-
-	try {
-		const result = await service.syncEmployees(workspaceId, {
-			apiUrl,
-			authType: "bearer",
-			authToken,
-			timeout: HRIS_CONFIG.timeout,
-			retryAttempts: HRIS_CONFIG.retryAttempts,
-			retryDelay: HRIS_CONFIG.retryDelay,
-			batchSize: HRIS_CONFIG.batchSize,
-			syncAllOrganizations: false,
-		});
-
-		employeeLogger.info(`SyncFirst: ${result.synced || 0} employees synced from ${result.source}`);
-		return { source: result.source, message: result.message };
-	} catch (error: any) {
-		employeeLogger.warn(`SyncFirst failed: ${error.message}`);
-		return { source: "database", message: `Sync failed: ${error.message}` };
-	}
-};
 
 export interface IEmployeeController {
 	getAll(req: AuthRequest, res: Response, next: NextFunction): void;
@@ -96,16 +34,12 @@ export interface IEmployeeController {
 	create(req: AuthRequest, res: Response, next: NextFunction): void;
 	update(req: AuthRequest, res: Response, next: NextFunction): void;
 	remove(req: AuthRequest, res: Response, next: NextFunction): void;
-	sync(req: AuthRequest, res: Response, next: NextFunction): void;
-	getSyncStatus(req: AuthRequest, res: Response, next: NextFunction): void;
-	getSyncIssues(req: AuthRequest, res: Response, next: NextFunction): void;
 	getStats(req: AuthRequest, res: Response, next: NextFunction): void;
 	getByExternalId(req: AuthRequest, res: Response, next: NextFunction): void;
 }
 
 export const controller = (prisma: PrismaClient): IEmployeeController => {
 	const repository = employeeRepository(prisma);
-	const service = createEmployeeService(prisma, employeeLogger);
 
 	const getAll = asyncHandler(async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const workspaceId = req.workspaceId!;
@@ -119,27 +53,6 @@ export const controller = (prisma: PrismaClient): IEmployeeController => {
 			page, limit, order, fields, sort, skip, query,
 			document, pagination, count, filter, groupBy,
 		} = validationResult.validatedParams!;
-
-		// Handle syncFirst - try HRIS API before reading from database
-		const syncFirst = req.query.syncFirst === "true";
-		let dataSource: "api" | "database" = "database";
-		let syncMessage: string | undefined;
-
-		if (syncFirst) {
-			employeeLogger.info("SyncFirst requested");
-			const authToken = extractBearerToken(req.headers.authorization);
-			const syncResult = await performSyncFirst(
-				service,
-				workspaceId,
-				req.query.hrisUrl as string | undefined,
-				authToken
-			);
-			dataSource = syncResult.source;
-			syncMessage = syncResult.message;
-			if (dataSource === "api") {
-				await invalidateEntityCache("employee", employeeLogger);
-			}
-		}
 
 		employeeLogger.info(`Getting employees, page: ${page}, limit: ${limit}`);
 
@@ -173,8 +86,6 @@ export const controller = (prisma: PrismaClient): IEmployeeController => {
 			...(count && { count: total }),
 			...(pagination && { pagination: buildPagination(total, page, limit) }),
 			...(groupBy && { groupedBy: groupBy }),
-			source: dataSource,
-			...(syncMessage && { syncMessage }),
 		};
 
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.EMPLOYEE.RETRIEVED_ALL, responseData, 200));
@@ -198,7 +109,7 @@ export const controller = (prisma: PrismaClient): IEmployeeController => {
 			};
 			let result = await repository.getById(queryById);
 
-			// If not found by _id, try to find by externalId (for HRIS IDs)
+			// If not found by _id, try to find by externalId (legacy external identifiers)
 			if (!result) {
 				employeeLogger.info(`Employee not found by _id, trying externalId: ${id}`);
 				const queryByExternalId: Prisma.EmployeeFindFirstArgs = {
@@ -338,47 +249,6 @@ export const controller = (prisma: PrismaClient): IEmployeeController => {
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.EMPLOYEE.DELETED, {}, 200));
 	});
 
-	const sync = asyncHandler(async (req: AuthRequest, res: Response, _next: NextFunction) => {
-		const workspaceId = req.workspaceId!;
-
-		const validation = SyncConfigSchema.safeParse(req.body);
-		if (!validation.success) {
-			res.status(400).json(buildErrorResponse(config.ERROR.COMMON.VALIDATION_ERROR, 400, validation.error.issues as any));
-			return;
-		}
-
-		employeeLogger.info(`Starting employee sync for organization: ${workspaceId}`);
-
-		const result = await service.triggerSync(workspaceId, validation.data);
-
-		employeeLogger.info(`Sync completed: ${result.synced} employees synced`);
-		await invalidateEntityCache("employee", employeeLogger);
-
-		res.status(200).json(
-			buildSuccessResponse(result.message, {
-				source: result.source,
-				total: result.total,
-				synced: result.synced,
-				created: result.created,
-				updated: result.updated,
-				failed: result.failed,
-				errors: result.errors,
-			}, 200)
-		);
-	});
-
-	const getSyncStatus = asyncHandler(async (req: AuthRequest, res: Response, _next: NextFunction) => {
-		const workspaceId = req.workspaceId!;
-		const status = await service.getSyncStatus(workspaceId);
-		res.status(200).json(buildSuccessResponse(config.SUCCESS.EMPLOYEE.SYNC_STATUS, status, 200));
-	});
-
-	const getSyncIssues = asyncHandler(async (req: AuthRequest, res: Response, _next: NextFunction) => {
-		const workspaceId = req.workspaceId!;
-		const issues = await repository.getWithSyncIssues(workspaceId);
-		res.status(200).json(buildSuccessResponse(config.SUCCESS.EMPLOYEE.SYNC_ISSUES, issues, 200));
-	});
-
 	const getStats = asyncHandler(async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const workspaceId = req.workspaceId!;
 		const stats = await repository.getStats(workspaceId);
@@ -407,9 +277,6 @@ export const controller = (prisma: PrismaClient): IEmployeeController => {
 		create,
 		update,
 		remove,
-		sync,
-		getSyncStatus,
-		getSyncIssues,
 		getStats,
 		getByExternalId,
 	};

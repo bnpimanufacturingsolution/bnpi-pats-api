@@ -68,8 +68,22 @@ describe("PATS Prisma boundary", () => {
     expect(schema).to.match(/model Batch \{[\s\S]*?part\s+Part/);
     expect(schema).not.to.contain("model BatchPartLine {");
     expect(schema).not.to.match(/model Lot \{[\s\S]*?partId\s+String/);
-    expect(schema).not.to.match(/model Project \{[^}]*requiredProductionQuantity/);
+    // The production quantity belongs to Lot, and Lot is where the API reads and
+    // writes it (domain-read sources it from `project.lot`; every create/patch
+    // writes `transaction.lot`). Project must not be a second source of truth.
     expect(schema).to.match(/model Lot \{[\s\S]*?requiredProductionQuantity\s+Int/);
+    // `Project.requiredProductionQuantity` is a LEGACY column, not a second source
+    // of truth. It is never read and never written by the API, but it exists in the
+    // live database as `integer NOT NULL DEFAULT 0`, so deleting it from the schema
+    // would make `pats-prisma-postgres-push.mjs` emit a DROP COLUMN - and that
+    // script passes no `--accept-data-loss`, so the push would fail closed and
+    // block every future additive change (including plannedStartDate/
+    // plannedEndDate).
+    //
+    // So the column is asserted PRESENT and flagged as legacy rather than asserted
+    // absent. It should be dropped in a dedicated, acknowledged migration with an
+    // explicit data-loss decision - not smuggled in via a schema edit.
+    expect(schema).to.match(/model Project \{[^}]*requiredProductionQuantity/);
     expect(schema).to.match(/enum SourceRunStatus[\s\S]*?\bPARTIAL\b/);
     expect(schema).to.match(/enum SourceArtifactType[\s\S]*?\bPDF\b/);
     expect(schema).to.match(/enum SourceExtractionStatus[\s\S]*?\bFAILED\b/);

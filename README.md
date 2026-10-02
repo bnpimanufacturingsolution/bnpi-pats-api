@@ -18,8 +18,11 @@ the complete application API. It currently contains:
 
 The default Express composition does not mount quarantined legacy routes.
 Set `ENABLE_LEGACY_API=true` only for a controlled compatibility run. Auth,
-workspace membership, project membership, employee/HRIS, and legacy product
+workspace membership, project membership, employee, and legacy product
 surfaces remain unchanged pending external or security review.
+The legacy third-party HRIS employee-sync surface (`POST /api/employee/sync*`,
+`GET /api/employee/sync/*`, `syncFirst`) was retired by owner decision on
+2026-09-15; no consumer existed and the sync target defaulted to the API itself.
 
 No seeded record, initial, fixture, or legacy field name is a PATS requirement.
 The frontend still contains prototype/local transport on active surfaces while

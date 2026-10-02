@@ -1,12 +1,27 @@
 import { env } from "./env";
 
+const devOrigins =
+	env.NODE_ENV === "development"
+		? [
+				"http://localhost:5173",
+				"http://127.0.0.1:5173",
+				"http://localhost:5174",
+				"http://127.0.0.1:5174",
+			]
+		: [];
+
 export const config = {
 	port: env.PORT,
 	baseApiPath: "/api",
 	betterStackSourceToken: env.BETTER_STACK_SOURCE_TOKEN ?? "",
 	betterStackHost: env.BETTER_STACK_HOST ?? "",
 	cors: {
-		origins: env.CORS_ORIGINS.split(",").map((origin) => origin.trim()),
+		origins: Array.from(
+			new Set([
+				...env.CORS_ORIGINS.split(",").map((origin) => origin.trim()),
+				...devOrigins,
+			]),
+		),
 		credentials: env.CORS_CREDENTIALS === "true",
 	},
 	redis: {
