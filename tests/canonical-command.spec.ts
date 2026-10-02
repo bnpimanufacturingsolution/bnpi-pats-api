@@ -1349,6 +1349,106 @@ describe("canonical PATS command contract", () => {
 		expect(response.status).to.equal(201);
 		expect(response.body).to.include({ subStageId: "substage-1", name: "New SubStage" });
 	});
+
+	// Stage/SubStage could be created but never edited — there was no
+	// STAGE_UPDATED / SUB_STAGE_UPDATED command at all. Without one, a business
+	// code could never be authored or corrected after creation.
+	function codeApp(model: "stage" | "subStage") {
+		const updates: Array<{ where: unknown; data: Record<string, unknown> }> = [];
+		const id = model === "stage" ? "stage-1" : "substage-1";
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-code" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (t: Record<string, unknown>) => Promise<unknown>) => work(database),
+			[model]: {
+				findUnique: async () => ({ id, name: "Injection", code: null, displayOrder: 1 }),
+				update: async (args: { where: unknown; data: Record<string, unknown> }) => {
+					updates.push(args);
+					return { id, name: "Injection", displayOrder: 1, ...args.data };
+				},
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		return { app: appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]), updates };
+	}
+
+	it("sets a stage code and records the update", async () => {
+		const { app, updates } = codeApp("stage");
+		const response = await request(app)
+			.patch("/api/v1/stages/stage-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "stage-code-1")
+			.send({ code: "INJ" });
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.include({ stageId: "stage-1", code: "INJ" });
+		expect(updates[0].data).to.deep.equal({ code: "INJ" });
+	});
+
+	it("blanks a stage code with an explicit null, which is not the same as omitting it", async () => {
+		const { app, updates } = codeApp("stage");
+		const response = await request(app)
+			.patch("/api/v1/stages/stage-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "stage-code-clear")
+			.send({ code: null });
+
+		expect(response.status).to.equal(200);
+		expect(updates[0].data).to.deep.equal({ code: null });
+	});
+
+	it("sets a sub-stage code", async () => {
+		const { app, updates } = codeApp("subStage");
+		const response = await request(app)
+			.patch("/api/v1/sub-stages/substage-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "substage-code-1")
+			.send({ code: "MOLD" });
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.include({ subStageId: "substage-1", code: "MOLD" });
+		expect(updates[0].data).to.deep.equal({ code: "MOLD" });
+	});
+
+	it("rejects an empty stage patch and an over-long code", async () => {
+		const { app } = codeApp("stage");
+		const base = { Authorization: "Bearer command-token", "Idempotency-Key": "stage-code-bad" };
+
+		const empty = await request(app).patch("/api/v1/stages/stage-1").set(base).send({});
+		expect(empty.status).to.equal(422);
+
+		const tooLong = await request(app)
+			.patch("/api/v1/stages/stage-1")
+			.set({ ...base, "Idempotency-Key": "stage-code-long" })
+			.send({ code: "X".repeat(41) });
+		expect(tooLong.status).to.equal(422);
+	});
+
+	it("404s a stage code patch for an unknown stage", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-missing" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (t: Record<string, unknown>) => Promise<unknown>) => work(database),
+			stage: { findUnique: async () => null, update: async () => undefined },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const response = await request(appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]))
+			.patch("/api/v1/stages/missing")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "stage-code-missing")
+			.send({ code: "INJ" });
+		expect(response.status).to.equal(404);
+	});
 });
 
 describe("project part cycle-time override (REQ-CT-1 S3)", () => {
