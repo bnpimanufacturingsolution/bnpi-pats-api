@@ -119,6 +119,9 @@ model Stage {
   workflowGroup           WorkflowGroup            @relation(fields: [workflowGroupId], references: [id])
   // Manufacturing route stage (for example Injection or Decoration), not floor Section/Process.
   name                    String
+  // Server-authored business code shown to operators (e.g. "INJ"). Nullable: no code
+  // is better than a fabricated one, and readers must never fall back to the id.
+  code                    String?
   // Optional per-locale name overrides: { ja?: string, fil?: string }
   nameLocalized           Json?
   displayOrder            Int
@@ -133,6 +136,8 @@ model Stage {
 model SubStage {
   id                            String                @id @default(uuid())
   name                          String
+  // Server-authored business code shown to operators. Nullable; see Stage.code.
+  code                          String?
   nameLocalized                 Json?
   displayOrder                  Int
   isSystemSeed                  Boolean               @default(false)
@@ -1104,6 +1109,21 @@ model Project {
   completedAt                DateTime?
   completedBySubjectId       String?
   completedBySubject         Subject?                  @relation("ProjectCompletionActor", fields: [completedBySubjectId], references: [id])
+  // Planned production window. The model's FIRST plan dates (client request
+  // 2026-10-02: "where is the start and end date here?").
+  //
+  // Named `planned*` deliberately, and not `startDate`/`endDate`: the fields they
+  // sit beside — `releasedAt`, `completedAt` — are ACTUALS. A bare "Start"/"End"
+  // beside two actuals reads as actuals too, which is exactly the confusion that
+  // made `createdAt` unusable as a start date (all 15 seeded projects share one
+  // `createdAt` constant, so it is a seed artifact, not a schedule).
+  //
+  // Nullable with NO default and NO backfill, on purpose. Backfilling would invent
+  // a schedule for every existing project — the fabrication the app-side honesty
+  // rules (`display-human-readable-codes`, the lot card's own "no date" decision)
+  // exist to prevent. An unset window is an honest absence.
+  plannedStartDate           DateTime?
+  plannedEndDate             DateTime?
   productId                  String?
   product                    Product?                  @relation(fields: [productId], references: [id])
   createdAt                  DateTime                  @default(now())
