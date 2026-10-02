@@ -487,6 +487,34 @@ model ProductionLine {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sections     Section[]
+  machines     Machine[]
+}
+
+// Optional equipment identity owned by a ProductionLine. `machineCode` is the
+// operational key a scan or label refers to; `name` is display text. A line with
+// no machines simply has no rows - the field is optional rather than defaulted,
+// so "not configured" stays distinguishable from "configured as blank".
+//
+// Every field here is dictated by code that already existed before this model
+// did: `command-router.ts` create/patch/delete handlers and the
+// `productionLineMachine*` read routes, plus their passing contract tests. The
+// model was missing, which is why `DomainReadDatabase` could not be satisfied by
+// a real `PrismaClient` and `npm run type-check` failed. Row shape and defaults
+// mirror `ProductionLine` above (`rowVersion` for the If-Match/ETag contract,
+// `displayOrder`, `isEnabled` for the soft-delete the delete handler performs).
+model Machine {
+  id              String        @id @default(uuid())
+  productionLineId String
+  productionLine  ProductionLine @relation(fields: [productionLineId], references: [id])
+  machineCode     String        @unique
+  name            String
+  displayOrder    Int           @default(0)
+  isEnabled       Boolean       @default(true)
+  rowVersion      Int           @default(1)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([productionLineId])
 }
 
 model Section {
