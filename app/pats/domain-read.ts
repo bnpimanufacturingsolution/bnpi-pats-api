@@ -454,6 +454,15 @@ export function domainReadRouter(
 						rowVersion: true,
 						createdAt: true,
 						releasedAt: true,
+						completedAt: true,
+						// Planned window (added 2026-10-03, schema
+						// 2026-10-02 plannedStartDate/plannedEndDate). Explicit `select`
+						// here, so both must be named or they are silently absent from the
+						// list read while the detail read - which uses `include` - already
+						// carries them. That asymmetry is exactly how a field ends up
+						// half-wired, so it is asserted in the read contract test.
+						plannedStartDate: true,
+						plannedEndDate: true,
 						product: { select: { productName: true } },
 						lot: { select: { id: true, requiredProductionQuantity: true } },
 					},
@@ -471,6 +480,9 @@ export function domainReadRouter(
 			rowVersion: project.rowVersion,
 			createdAt: project.createdAt.toISOString(),
 			releasedAt: date(project.releasedAt),
+			completedAt: date(project.completedAt),
+			plannedStartDate: date(project.plannedStartDate),
+			plannedEndDate: date(project.plannedEndDate),
 		}));
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(data, page, totalItems));
 		} catch {
@@ -537,6 +549,12 @@ export function domainReadRouter(
 				product: project.product,
 				productSpecification: project.productSpecification,
 				completedAt: date((project as { completedAt?: Date | null }).completedAt ?? null),
+				// Planned window. `GET /projects/:id` selects with `include`, so these
+				// scalars are already on `project`; they only needed naming on the
+				// wire. `date()` returns null for absent, so an un-planned project
+				// reports an honest null rather than omitting the key.
+				plannedStartDate: date(project.plannedStartDate),
+				plannedEndDate: date(project.plannedEndDate),
 				completionReady,
 				modelRequirements: project.modelRequirements.map((requirement) => ({
 					modelRequirementId: requirement.id,
