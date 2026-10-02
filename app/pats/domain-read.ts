@@ -403,6 +403,10 @@ export function domainReadRouter(
 										orderBy: [{ createdAt: "desc" }, { id: "desc" }],
 										include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] } },
 									},
+									defectAnalyses: {
+										orderBy: [{ decidedAt: "desc" }, { id: "desc" }],
+										take: 1,
+									},
 								},
 								orderBy: [{ createdAt: "asc" }, { id: "asc" }],
 							},
@@ -415,18 +419,21 @@ export function domainReadRouter(
 				return;
 			}
 			const projectBatches = project.lot?.batches ?? [];
+			// D-045 terminal rule (mirrors the completion guard): CLOSED, or
+			// SCRAPPED through a SCRAP analysis. Verdicts alone never terminate.
+			const batchTerminal = (batch: {
+				status: string;
+				qualityInspections: Array<{ decisions: Array<{ decision: string }> }>;
+				defectAnalyses: Array<{ disposition: string }>;
+			}) => {
+				if (batch.status === "CLOSED") return true;
+				if (batch.status === "SCRAPPED" && batch.defectAnalyses[0]?.disposition === "SCRAP") return true;
+				return false;
+			};
 			const completionReady =
 				project.status === "RELEASED" &&
 				projectBatches.length > 0 &&
-				projectBatches.every((batch) => {
-					const latest = batch.qualityInspections[0]?.decisions[0];
-					return (
-						(batch.status === "CLOSED" && latest?.decision === "PASSED") ||
-						(batch.status === "SCRAPPED" &&
-							latest?.decision === "FAILED" &&
-							latest.failureDisposition === "TRUE_NG")
-					);
-				});
+				projectBatches.every(batchTerminal);
 			// Mutable project resources expose the optimistic-concurrency token as a strong ETag.
 			// Clients must send this value (or body.rowVersion) as If-Match on project commands.
 			res.setHeader("ETag", `"${project.rowVersion}"`);
@@ -477,9 +484,11 @@ export function domainReadRouter(
 						part: { partId: batch.part.id, partCode: batch.part.partCode, partName: batch.part.partName },
 						qcDisposition: (() => {
 							const latest = batch.qualityInspections[0]?.decisions[0];
+							const analysis = batch.defectAnalyses[0];
+							if (analysis) return analysis.disposition;
 							if (latest?.decision === "PASSED") return "PASSED";
 							if (latest?.decision === "HOLD") return "HOLD";
-							if (latest?.decision === "FAILED") return latest.failureDisposition ?? "FAILED";
+							if (latest?.decision === "FAILED") return "FAILED";
 							return null;
 						})(),
 						position: batch.positionProjection,
@@ -1474,9 +1483,57 @@ export function domainReadRouter(
 				steps.push(routeStep);
 				routeStepsByPartsListId.set(routeStep.partsListId, steps);
 			}
+			// D-045 QC gate state per pack (single batched read): the verdict
+			// covering the pack's current step decides whether its next hop
+			// is receivable. Keyed by batch + source step; latest decision wins.
+			const batchIds = positions.map((position) => position.batch.id);
+			const gateInspections = batchIds.length
+				? await database.qualityInspection.findMany({
+						where: { batchId: { in: batchIds } },
+						orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+						include: {
+							decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }], take: 1 },
+						},
+					})
+				: [];
+			const gateByBatchStep = new Map<string, { decision: string | null; decidedAt: string }>();
+			for (const inspection of gateInspections) {
+				const key = `${inspection.batchId}::${inspection.stageId}::${inspection.subStageId ?? ""}`;
+				if (gateByBatchStep.has(key)) continue;
+				const latest = inspection.decisions[0];
+				gateByBatchStep.set(key, {
+					decision: latest?.decision ?? null,
+					decidedAt: latest ? latest.decidedAt.toISOString() : inspection.createdAt.toISOString(),
+				});
+			}
+			const qcGateFor = (position: (typeof positions)[number]): string => {
+				if (position.batch.status !== "ACTIVE") return "BLOCKED";
+				if (position.stageId === "STG-PROJECTS") return "RELEASE";
+				const steps = (routeStepsByPartsListId.get(position.batch.lot.partsListId) ?? [])
+					.filter((step) => step.partId === position.batch.part.id)
+					.sort((a, b) => a.stepOrder - b.stepOrder || (a.id < b.id ? -1 : 1));
+				if (steps.length === 0) return "BLOCKED";
+				const currentIndex = position.routeStepId
+					? steps.findIndex((step) => step.id === position.routeStepId)
+					: steps.findIndex(
+							(step) =>
+								step.stageId === position.stageId &&
+								(step.subStageId ?? null) === (position.subStageId ?? null),
+						);
+				if (currentIndex < 0) return "BLOCKED";
+				const current = steps[currentIndex];
+				const next = steps.find((step) => step.stepOrder > current.stepOrder);
+				if (!next) return "COMPLETE";
+				const gate = gateByBatchStep.get(
+					`${position.batch.id}::${current.stageId}::${current.subStageId ?? ""}`,
+				);
+				if (!gate || !gate.decision) return "PENDING";
+				return gate.decision === "PASSED" ? "PASSED" : "HELD";
+			};
 			res.setHeader("Cache-Control", "no-store").json({
 				data: positions.map((position) => ({
 					...position,
+					qcGate: qcGateFor(position),
 					quantityMagnitude: decimal(position.quantityMagnitude),
 					updatedAt: position.updatedAt.toISOString(),
 					batch: {

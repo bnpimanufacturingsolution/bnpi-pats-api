@@ -18,6 +18,8 @@ import {
 	PutObjectInput,
 	ReadUrlOptions,
 	StoredObject,
+	UploadUrl,
+	UploadUrlOptions,
 } from "./object-storage";
 
 export {
@@ -29,7 +31,7 @@ export {
 	ObjectStorageNotFoundError,
 	ObjectStorageValidationError,
 };
-export type { ObjectStorage, PutObjectInput, ReadUrlOptions, StoredObject } from "./object-storage";
+export type { ObjectStorage, PutObjectInput, ReadUrlOptions, StoredObject, UploadUrl, UploadUrlOptions } from "./object-storage";
 
 const CHECKSUM_METADATA_KEY = "pats-checksum-sha256";
 const SIZE_METADATA_KEY = "pats-content-length";
@@ -177,15 +179,7 @@ export class MinioObjectStorage implements ObjectStorage {
 	public async createReadUrl(key: string, options: ReadUrlOptions = {}): Promise<string> {
 		assertApprovedObjectKey(key);
 		const expiresInSeconds = options.expiresInSeconds ?? DEFAULT_URL_EXPIRY_SECONDS;
-		if (
-			!Number.isInteger(expiresInSeconds) ||
-			expiresInSeconds < 1 ||
-			expiresInSeconds > this.maxReadUrlExpirySeconds
-		) {
-			throw new ObjectStorageValidationError(
-				`expiresInSeconds must be an integer between 1 and ${this.maxReadUrlExpirySeconds}`,
-			);
-		}
+		assertExpiry(expiresInSeconds, this.maxReadUrlExpirySeconds);
 
 		try {
 			await this.client.send(
@@ -203,10 +197,47 @@ export class MinioObjectStorage implements ObjectStorage {
 			throw toStorageError(error, key);
 		}
 	}
+
+	public async createUploadUrl(key: string, options: UploadUrlOptions): Promise<UploadUrl> {
+		assertApprovedObjectKey(key);
+		validateContentType(options.contentType);
+		const expiresInSeconds = options.expiresInSeconds ?? DEFAULT_URL_EXPIRY_SECONDS;
+		assertExpiry(expiresInSeconds, this.maxReadUrlExpirySeconds);
+
+		try {
+			const url = await getSignedUrl(
+				this.client,
+				new PutObjectCommand({
+					Bucket: this.bucket,
+					Key: key,
+					ContentType: options.contentType,
+				}),
+				{ expiresIn: expiresInSeconds },
+			);
+			return {
+				url,
+				expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+			};
+		} catch (error) {
+			throw toStorageError(error, key);
+		}
+	}
 }
 
 export function createMinioObjectStorage(config: MinioObjectStorageConfig): ObjectStorage {
 	return new MinioObjectStorage(config);
+}
+
+function assertExpiry(expiresInSeconds: number, maxReadUrlExpirySeconds: number): void {
+	if (
+		!Number.isInteger(expiresInSeconds) ||
+		expiresInSeconds < 1 ||
+		expiresInSeconds > maxReadUrlExpirySeconds
+	) {
+		throw new ObjectStorageValidationError(
+			`expiresInSeconds must be an integer between 1 and ${maxReadUrlExpirySeconds}`,
+		);
+	}
 }
 
 function validateEndpoint(endpoint: string, tls?: boolean): string {

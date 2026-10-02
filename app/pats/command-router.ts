@@ -194,28 +194,17 @@ const projectPartCycleTimesSchema = z.object({
 const qualityDecisionSchema = z
 	.object({
 		decision: z.enum(["PASSED", "FAILED", "HOLD"]),
-		failureDisposition: z.enum(["REWORK", "TRUE_NG"]).nullable().optional(),
-		reasonCode: z.string().trim().max(80).nullable().optional(),
-		reasonNote: z.string().trim().max(500).nullable().optional(),
 	})
-	.strict()
-	.superRefine((body, ctx) => {
-		// A fail must say why (2026-09-09 QC project D3); PASSED/HOLD need no reason.
-		if (body.decision === "FAILED" && !(body.reasonCode && body.reasonCode.length > 0)) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ["reasonCode"],
-				message: "A FAILED decision requires a reason code.",
-			});
-		}
-		if (body.decision !== "FAILED" && body.failureDisposition !== undefined && body.failureDisposition !== null) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ["failureDisposition"],
-				message: "failureDisposition only applies to a FAILED decision.",
-			});
-		}
-	});
+	.strict();
+
+const defectAnalysisSchema = z
+	.object({
+		inspectionId: z.string().trim().min(1).max(100),
+		reasonCode: z.string().trim().min(1).max(80),
+		reasonNote: z.string().trim().max(500).nullable().optional(),
+		disposition: z.enum(["REWORK", "SCRAP", "WAIVE"]),
+	})
+	.strict();
 
 const routingViolationResolutionSchema = z.object({
 	resolutionNote: z.string().trim().min(1).max(500),
@@ -667,23 +656,30 @@ export function commandRouter(
 										decisions: {
 											orderBy: [{ decidedAt: "desc" }, { id: "desc" }],
 											take: 1,
-											select: { decision: true, failureDisposition: true },
+											select: { decision: true },
 										},
 									},
+							},
+							defectAnalyses: {
+								orderBy: [{ decidedAt: "desc" }, { id: "desc" }],
+								take: 1,
+								select: { disposition: true },
 							},
 						},
 					});
 					if (batches.length === 0) conflict("A project with no batches cannot be completed.");
+					// D-045 terminal rule: a batch is terminal when production closed
+					// it (FG) or scrapped it through a SCRAP analysis. QC verdicts
+					// alone never terminate.
 					const unresolved = batches.filter((batch) => {
-						const latest = batch.qualityInspections[0]?.decisions[0];
-						return !(
-							(batch.status === BatchStatus.CLOSED && latest?.decision === "PASSED") ||
-							(batch.status === BatchStatus.SCRAPPED &&
-								latest?.decision === "FAILED" &&
-								latest.failureDisposition === "TRUE_NG")
-						);
+						if (batch.status === BatchStatus.CLOSED) return false;
+						if (
+							batch.status === BatchStatus.SCRAPPED &&
+							batch.defectAnalyses[0]?.disposition === "SCRAP"
+						) return false;
+						return true;
 					});
-					if (unresolved.length > 0) conflict("Every batch requires a final QC disposition of PASSED or TRUE_NG; unresolved rework or hold prevents completion.");
+					if (unresolved.length > 0) conflict("Every batch requires production close-out (FG) or a SCRAP analysis; unresolved QC, rework, or hold prevents completion.");
 					const project = await transaction.project.update({
 						where: { id: current.id },
 						data: { status: ProjectLifecycleStatus.COMPLETED, completedAt: new Date(), completedBySubjectId: actorId(req), rowVersion: { increment: 1 } },
@@ -1069,6 +1065,13 @@ export function commandRouter(
 			const body = parseCommandBody(req, stageEventCreateSchema);
 			const response = await executeCommand(database, req, "stageEventRecord", body, async (transaction) => {
 				const context = await batchRouteContext(transaction, body.batchId);
+				// D-045 quarantine: terminal and held packs take no scans.
+				if (context.batch.status === BatchStatus.CLOSED || context.batch.status === BatchStatus.SCRAPPED) {
+					conflict("A terminal batch cannot take another scan.");
+				}
+				if (context.batch.status === BatchStatus.HELD) {
+					conflict("This pack is quarantined awaiting its production defect analysis.");
+				}
 				const attemptedSubStageId = body.subStageId ?? null;
 				const accepted = context.expected.stageId === body.stageId && context.expected.subStageId === attemptedSubStageId;
 				if (body.partId !== undefined && body.partId !== null && body.partId !== context.defaultPartId) {
@@ -1098,6 +1101,63 @@ export function commandRouter(
 				});
 				let routingViolationId: string | null = null;
 				if (accepted) {
+					// D-045 scan-out release: a pre-route pack scanned at its
+					// step-1 station is released here — ISSUANCE posts and the
+					// origin hop advances atomically with the scan. Printing
+					// alone no longer moves anything.
+					const preRoute = (context.batch.positionProjection?.stageId ?? context.batch.currentStageId) === "STG-PROJECTS";
+					if (preRoute) {
+						const releaseQty = body.quantity ?? context.batch.plannedQuantity;
+						await transaction.inventoryTransaction.create({
+							data: {
+								transactionType: "ISSUANCE",
+								batchId: context.batch.id,
+								partId,
+								lotId: context.batch.lotId,
+								fromStageId: "STG-PROJECTS",
+								fromSubStageId: null,
+								toStageId: context.expected.stageId,
+								toSubStageId: context.expected.subStageId,
+								expectedQuantity: releaseQty,
+								actualQuantity: releaseQty,
+								recordedAt: new Date(),
+								recordedBy: actorDisplay(req),
+								recordedBySubjectId: actorId(req),
+								status: "ACCEPTED",
+								expectedQuantityMagnitude: String(releaseQty),
+								actualQuantityMagnitude: String(releaseQty),
+								quantityUom: body.quantityUom ?? "EA",
+								usageBasis: body.usageBasis ?? null,
+							},
+						});
+					} else {
+						// D-045 QC gate: a downstream receive requires a covering
+						// PASSED verdict (inspection at the source step) for this
+						// hop. No verdict, HOLD, or FAIL blocks the receive.
+						const currentStep = context.routeSteps.find(
+							(step) => step.id === context.batch.positionProjection?.routeStepId,
+						) ?? context.routeSteps.find(
+							(step) =>
+								step.stageId === (context.batch.positionProjection?.stageId ?? context.batch.currentStageId) &&
+								(step.subStageId ?? null) === (context.batch.positionProjection?.subStageId ?? context.batch.currentSubStageId),
+						);
+						const gateInspection = currentStep
+							? await transaction.qualityInspection.findFirst({
+									where: {
+										batchId: context.batch.id,
+										stageId: currentStep.stageId,
+										subStageId: currentStep.subStageId,
+									},
+									orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+									include: {
+										decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }], take: 1 },
+									},
+								})
+							: null;
+						if (gateInspection?.decisions[0]?.decision !== "PASSED") {
+							conflict("Receiving requires a passing QC verdict for this hop.");
+						}
+					}
 					await transaction.batch.update({
 						where: { id: context.batch.id },
 						data: { currentStageId: body.stageId, currentSubStageId: attemptedSubStageId, rowVersion: { increment: 1 } },
@@ -1309,9 +1369,6 @@ export function commandRouter(
 					data: {
 						inspectionId: inspection.id,
 						decision: body.decision,
-						failureDisposition: body.decision === "FAILED" ? (body.failureDisposition ?? null) : null,
-						reasonCode: body.reasonCode ?? null,
-						reasonNote: body.reasonNote ?? null,
 						decidedBySubjectId: actorId(req),
 					},
 				});
@@ -1319,22 +1376,127 @@ export function commandRouter(
 					where: { id: inspection.id },
 					data: { status: body.decision === "HOLD" ? QualityInspectionStatus.IN_PROGRESS : QualityInspectionStatus.COMPLETED, completedAt: body.decision === "HOLD" ? null : new Date(), rowVersion: { increment: 1 } },
 				});
-				// Batch disposition follows the output QC verdict: a passing final gate
-				// closes the batch, True-NG scraps it, and rework/hold keeps it held for
-				// another inspection attempt. Intermediate-stage QC that is not the final
-				// output gate is a floor-design boundary; this slice treats the recorded
-				// output verdict as the batch disposition.
-				const batchStatus = body.decision === "PASSED"
-					? BatchStatus.CLOSED
-					: body.decision === "FAILED" && body.failureDisposition === "TRUE_NG"
-						? BatchStatus.SCRAPPED
+				// D-045 verdict-only: a QC tag moves no batch. A non-passed
+				// verdict quarantines the pack (HELD) until production records
+				// its defect analysis; PASSED leaves an ACTIVE batch untouched.
+				// Only the production terminal action closes or scraps.
+				if (body.decision !== "PASSED") {
+					await transaction.batch.update({
+						where: { id: inspection.batchId },
+						data: { status: BatchStatus.HELD, rowVersion: { increment: 1 } },
+					});
+				}
+				await recordCommandSuccess(transaction, req, "QUALITY_DECISION_RECORDED", "QualityInspection", inspection.id, { qualityDecisionId: decision.id, decision: decision.decision });
+				return { status: 201, body: { qualityDecisionId: decision.id, qualityInspectionId: updatedInspection.id, decision: decision.decision, inspectionStatus: updatedInspection.status, rowVersion: updatedInspection.rowVersion }, headers: { Location: `/api/v1/quality-inspections/${inspection.id}/decisions/${decision.id}`, ETag: `"${updatedInspection.rowVersion}"` } };
+			});
+			respondCommand(res, response);
+		} catch (error) {
+			commandError(error, req, res, next);
+		}
+	});
+
+	// D-045 production defect analysis: production owns the reason and the
+	// disposition for a non-passing QC verdict (REWORK returns the pack to
+	// the source step's queue, SCRAP terminates it, WAIVE lifts the hold
+	// while still requiring a covering PASSED for receivability).
+	// Capability is execution.write (production hands), not quality.resolve.
+	router.post("/defect-analyses", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, defectAnalysisSchema);
+			const response = await executeCommand(database, req, "defectAnalysisCreate", body, async (transaction) => {
+				const inspection = await transaction.qualityInspection.findUnique({
+					where: { id: body.inspectionId },
+					include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }], take: 1 } },
+				});
+				if (!inspection) notFound("The requested quality inspection was not found.");
+				const latest = inspection.decisions[0];
+				if (!latest || latest.decision === "PASSED") conflict("Defect analysis applies only to a non-passing QC verdict.");
+				const existing = await transaction.defectAnalysis.findUnique({ where: { inspectionId: inspection.id } });
+				if (existing) conflict("This inspection already has a defect analysis.");
+				const batch = await transaction.batch.findUnique({ where: { id: inspection.batchId } });
+				if (!batch) notFound("The inspected batch was not found.");
+				if (batch.status === BatchStatus.CLOSED || batch.status === BatchStatus.SCRAPPED) conflict("A terminal batch cannot take a new defect analysis.");
+				const analysis = await transaction.defectAnalysis.create({
+					data: {
+						inspectionId: inspection.id,
+						batchId: inspection.batchId,
+						reasonCode: body.reasonCode,
+						reasonNote: body.reasonNote ?? null,
+						disposition: body.disposition,
+						decidedBySubjectId: actorId(req),
+					},
+				});
+				const batchStatus = body.disposition === "SCRAP"
+					? BatchStatus.SCRAPPED
+					: body.disposition === "WAIVE"
+						? BatchStatus.ACTIVE
 						: BatchStatus.HELD;
 				await transaction.batch.update({
 					where: { id: inspection.batchId },
 					data: { status: batchStatus, rowVersion: { increment: 1 } },
 				});
-				await recordCommandSuccess(transaction, req, "QUALITY_DECISION_RECORDED", "QualityInspection", inspection.id, { qualityDecisionId: decision.id, decision: decision.decision, batchStatus });
-				return { status: 201, body: { qualityDecisionId: decision.id, qualityInspectionId: updatedInspection.id, decision: decision.decision, inspectionStatus: updatedInspection.status, batchStatus, rowVersion: updatedInspection.rowVersion }, headers: { Location: `/api/v1/quality-inspections/${inspection.id}/decisions/${decision.id}`, ETag: `"${updatedInspection.rowVersion}"` } };
+				await recordCommandSuccess(transaction, req, "DEFECT_ANALYSIS_RECORDED", "DefectAnalysis", analysis.id, { inspectionId: inspection.id, batchId: inspection.batchId, disposition: analysis.disposition, batchStatus });
+				return { status: 201, body: { defectAnalysisId: analysis.id, inspectionId: inspection.id, batchId: inspection.batchId, disposition: analysis.disposition, batchStatus, rowVersion: analysis.rowVersion }, headers: { Location: `/api/v1/defect-analyses/${analysis.id}`, ETag: `"${analysis.rowVersion}"` } };
+			});
+			respondCommand(res, response);
+		} catch (error) {
+			commandError(error, req, res, next);
+		}
+	});
+
+	// D-045 FG close: production closes a batch into Finish Goods once its
+	// route is complete and the final hop carries a covering PASSED.
+	// Intermediate PASSED verdicts never close; only this explicit action
+	// (or a SCRAP analysis) terminates a batch.
+	router.post("/batches/:batchId/closure", requireCapability("execution.write", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const response = await executeCommand(database, req, "batchClose", { batchId: req.params.batchId }, async (transaction) => {
+				const batch = await transaction.batch.findUnique({
+					where: { id: req.params.batchId },
+					include: { lot: true, positionProjection: true },
+				});
+				if (!batch) notFound("The requested batch was not found.");
+				if (batch.status === BatchStatus.CLOSED || batch.status === BatchStatus.SCRAPPED) {
+					conflict("A terminal batch cannot be closed again.");
+				}
+				if (batch.status !== BatchStatus.ACTIVE) {
+					conflict("Only an active batch can be closed into Finish Goods.");
+				}
+				const routeSteps = await transaction.routingStep.findMany({
+					where: { partsListId: batch.lot.partsListId, partId: batch.partId },
+					orderBy: [{ stepOrder: "asc" }, { id: "asc" }],
+				});
+				if (routeSteps.length === 0) conflict("The batch does not have an ordered route step for execution.");
+				const currentIndex = batch.positionProjection?.routeStepId
+					? routeSteps.findIndex((step) => step.id === batch.positionProjection?.routeStepId)
+					: -1;
+				const threshold = currentIndex < 0 ? -1 : routeSteps[currentIndex].stepOrder;
+				if (routeSteps.some((step) => step.stepOrder > threshold)) {
+					conflict("The batch has not completed its route.");
+				}
+				const currentStep = currentIndex >= 0 ? routeSteps[currentIndex] : null;
+				const gateInspection = currentStep
+					? await transaction.qualityInspection.findFirst({
+							where: {
+								batchId: batch.id,
+								stageId: currentStep.stageId,
+								subStageId: currentStep.subStageId,
+							},
+							orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+							include: {
+								decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }], take: 1 },
+							},
+						})
+					: null;
+				if (gateInspection?.decisions[0]?.decision !== "PASSED") {
+					conflict("Closing requires a passing QC verdict for the final hop.");
+				}
+				const closed = await transaction.batch.update({
+					where: { id: batch.id },
+					data: { status: BatchStatus.CLOSED, rowVersion: { increment: 1 } },
+				});
+				await recordCommandSuccess(transaction, req, "BATCH_CLOSED", "Batch", closed.id, { lotId: closed.lotId, batchCode: closed.batchCode });
+				return { status: 201, body: { batchId: closed.id, status: closed.status, rowVersion: closed.rowVersion }, headers: { Location: `/api/v1/batches/${closed.id}/closure` } };
 			});
 			respondCommand(res, response);
 		} catch (error) {

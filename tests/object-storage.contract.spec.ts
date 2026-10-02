@@ -49,6 +49,11 @@ class FakeObjectStorage implements ObjectStorage {
 		if (!this.objects.has(key)) throw new ObjectStorageNotFoundError(key);
 		return `fake://storage/${key}`;
 	}
+
+	async createUploadUrl(key: string): Promise<{ url: string; expiresAt: string }> {
+		assertApprovedObjectKey(key);
+		return { url: `fake://storage-upload/${key}`, expiresAt: new Date().toISOString() };
+	}
 }
 
 describe("object-storage contract", () => {

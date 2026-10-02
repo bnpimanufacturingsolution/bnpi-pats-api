@@ -17,9 +17,4 @@ export const config = {
 		db: env.REDIS_DB,
 		enabled: env.REDIS_ENABLED === "true",
 	},
-	cloudinary: {
-		cloudName: env.CLOUDINARY_CLOUD_NAME ?? "",
-		apiKey: env.CLOUDINARY_API_KEY ?? "",
-		apiSecret: env.CLOUDINARY_API_SECRET ?? "",
-	},
 };

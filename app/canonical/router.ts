@@ -66,6 +66,15 @@ export interface CanonicalRouterOptions {
 		router: Router;
 		requiredCapability: string;
 	};
+	/**
+	 * Optional model-image asset boundary (D-044). Reads require the read
+	 * capability; every mutation requires the write capability.
+	 */
+	assets?: {
+		router: Router;
+		readCapability: string;
+		writeCapability: string;
+	};
 	/** Optional deployment-scoped operational read boundary backed by canonical PATS persistence. */
 	domainReads?: {
 		router: Router;
@@ -533,6 +542,26 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 		router.use("/catalog", catalogMutationGate, options.catalogMutations.router);
 	}
 
+	if (options.assets) {
+		const assetsIdentity =
+			identityMiddleware ??
+			((_req: Request, res: Response) => identityUnavailable(_req, res));
+		const assetsGate: RequestHandler = (req, res, next) => {
+			const capability =
+				req.method === "GET" || req.method === "HEAD"
+					? options.assets?.readCapability
+					: options.assets?.writeCapability;
+			assetsIdentity(req, res, (identityError?: unknown) => {
+				if (identityError) {
+					next(identityError);
+					return;
+				}
+				requireCanonicalCapability(capability ?? "catalog.manage")(req, res, next);
+			});
+		};
+		router.use("/assets", assetsGate, options.assets.router);
+	}
+
 	if (options.catalogCollection) {
 		const catalogCollectionIdentity =
 			identityMiddleware ??
@@ -700,6 +729,7 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			"/stage-events",
 			"/inventory-transactions",
 			"/quality-inspections",
+			"/defect-analyses",
 			"/routing-violations",
 			"/print-jobs",
 		];

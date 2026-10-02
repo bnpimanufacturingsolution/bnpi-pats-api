@@ -446,8 +446,11 @@ describe("canonical PATS command contract", () => {
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
 			batch: {
-				findUnique: async () => ({ id: "batch-1", lotId: "lot-1", partId: "part-1", lot: { id: "lot-1", partsListId: "route-1" }, positionProjection: null }),
+				findUnique: async () => ({ id: "batch-1", lotId: "lot-1", partId: "part-1", status: "ACTIVE", currentStageId: "STG-PROJECTS", currentSubStageId: null, plannedQuantity: 240, lot: { id: "lot-1", partsListId: "route-1" }, positionProjection: null }),
 				update: async () => undefined,
+			},
+			inventoryTransaction: {
+				create: async () => ({ id: "issuance-1" }),
 			},
 			partsList: {
 				findUnique: async () => ({ steps: [{ id: "step-1", partId: "part-1", stageId: "stage-1", subStageId: null, stepOrder: 1 }] }),
@@ -469,6 +472,158 @@ describe("canonical PATS command contract", () => {
 
 		expect(response.status).to.equal(201);
 		expect(response.body).to.deep.equal({ stageEventId: "event-1", status: "ACCEPTED", routingViolationId: null });
+	});
+
+	function scanDatabase(overrides: Record<string, unknown> = {}) {
+		return {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-stage", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(scanDatabase(overrides)),
+			batch: {
+				findUnique: async () => ({
+					id: "batch-1",
+					lotId: "lot-1",
+					partId: "part-1",
+					status: "ACTIVE",
+					currentStageId: "stage-1",
+					currentSubStageId: null,
+					plannedQuantity: 240,
+					lot: { id: "lot-1", partsListId: "route-1" },
+					positionProjection: {
+						stageId: "stage-1",
+						subStageId: null,
+						routeStepId: "step-1",
+					},
+				}),
+				update: async () => undefined,
+			},
+			inventoryTransaction: {
+				create: async () => ({ id: "issuance-1" }),
+			},
+			partsList: {
+				findUnique: async () => ({
+					steps: [
+						{ id: "step-1", partId: "part-1", stageId: "stage-1", subStageId: null, stepOrder: 1 },
+						{ id: "step-2", partId: "part-1", stageId: "stage-2", subStageId: null, stepOrder: 2 },
+					],
+				}),
+			},
+			stageEvent: {
+				create: async () => ({ id: "event-1", batchId: "batch-1", status: "ACCEPTED" }),
+			},
+			batchPositionProjection: { update: async () => undefined },
+			qualityInspection: { findFirst: async () => null },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+			...overrides,
+		};
+	}
+
+	it("scan-out releases a pre-route pack with its issuance", async () => {
+		let issuance: Record<string, unknown> | null = null;
+		const database = scanDatabase({
+			batch: {
+				findUnique: async () => ({
+					id: "batch-1",
+					lotId: "lot-1",
+					partId: "part-1",
+					status: "ACTIVE",
+					currentStageId: "STG-PROJECTS",
+					currentSubStageId: null,
+					plannedQuantity: 240,
+					lot: { id: "lot-1", partsListId: "route-1" },
+					positionProjection: null,
+				}),
+				update: async () => undefined,
+			},
+			inventoryTransaction: {
+				create: async ({ data }: { data: Record<string, unknown> }) => {
+					issuance = data;
+					return { id: "issuance-1" };
+				},
+			},
+		});
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.post("/api/v1/stage-events")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "scan-out-1")
+			.send({ batchId: "batch-1", stageId: "stage-1", eventType: "STAGE_SCAN_RECORDED" });
+
+		expect(response.status).to.equal(201);
+		expect(issuance).to.include({
+			transactionType: "ISSUANCE",
+			batchId: "batch-1",
+			expectedQuantity: 240,
+			actualQuantity: 240,
+			status: "ACCEPTED",
+		});
+	});
+
+	it("refuses a downstream receive without a covering QC pass (409)", async () => {
+		const app = appFor(scanDatabase(), [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.post("/api/v1/stage-events")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "scan-gated-1")
+			.send({ batchId: "batch-1", stageId: "stage-2", eventType: "STAGE_SCAN_RECORDED" });
+
+		expect(response.status).to.equal(409);
+	});
+
+	it("receives downstream once the covering step reads PASSED", async () => {
+		const database = scanDatabase({
+			qualityInspection: {
+				findFirst: async () => ({
+					id: "inspection-1",
+					decisions: [{ decision: "PASSED" }],
+				}),
+			},
+		});
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.post("/api/v1/stage-events")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "scan-gated-2")
+			.send({ batchId: "batch-1", stageId: "stage-2", eventType: "STAGE_SCAN_RECORDED" });
+
+		expect(response.status).to.equal(201);
+		expect(response.body.status).to.equal("ACCEPTED");
+	});
+
+	it("refuses scans on held and terminal batches (409)", async () => {
+		for (const status of ["HELD", "SCRAPPED", "CLOSED"]) {
+			const database = scanDatabase({
+				batch: {
+					findUnique: async () => ({
+						id: "batch-1",
+						lotId: "lot-1",
+						partId: "part-1",
+						status,
+						currentStageId: "stage-1",
+						currentSubStageId: null,
+						plannedQuantity: 240,
+						lot: { id: "lot-1", partsListId: "route-1" },
+						positionProjection: { stageId: "stage-1", subStageId: null, routeStepId: "step-1" },
+					}),
+					update: async () => undefined,
+				},
+			});
+			const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+			const response = await request(app)
+				.post("/api/v1/stage-events")
+				.set("Authorization", "Bearer command-token")
+				.set("Idempotency-Key", `scan-${status}`)
+				.send({ batchId: "batch-1", stageId: "stage-2", eventType: "STAGE_SCAN_RECORDED" });
+			expect(response.status, status).to.equal(409);
+		}
 	});
 
 	it("keeps quality commands behind the quality resolver capability", async () => {

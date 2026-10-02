@@ -244,12 +244,30 @@ paths:
   /quality-inspections/{inspectionId}/decisions:
     post:
       operationId: qualityDecisionCreate
-      summary: Record a quality decision and close or hold the inspection
-      description: FAILED accepts failureDisposition REWORK or TRUE_NG; the batch becomes HELD (rework/hold), SCRAPPED (True-NG), or CLOSED (PASSED).
+      summary: Record a verdict-only quality decision
+      description: D-045 verdict-only QC. The decision carries PASSED/FAILED/HOLD and moves no batch; a non-pass quarantines the pack (HELD) until production records its defect analysis.
       tags: [PATS Quality]
       x-required-capability: quality.resolve
       parameters: [{ name: inspectionId, in: path, required: true, schema: { type: string } }, { $ref: '#/components/parameters/IfMatch' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '412': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412' } }
+  /defect-analyses:
+    post:
+      operationId: defectAnalysisCreate
+      summary: Record the production defect analysis for a non-passing verdict
+      description: D-045 production ownership. Carries reasonCode/reasonNote plus disposition REWORK (batch stays HELD), SCRAP (batch SCRAPPED, True NG terminal), or WAIVE (batch ACTIVE; a covering PASSED is still required for receivability). One analysis per inspection; terminal batches refuse.
+      tags: [PATS Quality]
+      x-required-capability: execution.write
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' }, '422': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422' } }
+  /batches/{batchId}/closure:
+    post:
+      operationId: batchClose
+      summary: Close a batch into Finish Goods
+      description: D-045 FG close. Production terminal action guarded by route completion plus a covering PASSED for the final hop. Terminal batches refuse.
+      tags: [PATS Execution]
+      x-required-capability: execution.write
+      parameters: [{ name: batchId, in: path, required: true, schema: { type: string } }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '201': { $ref: '#/components/responses/CommandRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '409': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409' } }
   /routing-violations/{violationId}/resolve:
     post:
       operationId: routingViolationResolve

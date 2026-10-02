@@ -277,6 +277,9 @@ describe("canonical PATS domain read contract", () => {
 					part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
 				}],
 			},
+			qualityInspection: {
+				findMany: async () => [],
+			},
 		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
 
 		const response = await request(app)
@@ -294,6 +297,8 @@ describe("canonical PATS domain read contract", () => {
 			quantityUom: "EA",
 			projectionVersion: 3,
 			updatedAt: "2026-07-31T01:00:00.000Z",
+			// Single-step route at its only step: route complete.
+			qcGate: "COMPLETE",
 			batch: {
 				id: "batch-1",
 				batchCode: "BATCH-001",
@@ -328,6 +333,117 @@ describe("canonical PATS domain read contract", () => {
 				stepOrder: 1,
 			}],
 		}]);
+	});
+
+	it("reports the per-pack QC gate for the next hop", async () => {
+		const position = (batchId: string, stageId: string, routeStepId: string | null, status = "ACTIVE") => ({
+			batchId,
+			stageId,
+			subStageId: null,
+			routeStepId,
+			positionStatus: "ACCEPTED",
+			quantityMagnitude: "12",
+			quantityUom: "EA",
+			projectionVersion: 1,
+			updatedAt: new Date("2026-07-31T01:00:00.000Z"),
+			batch: {
+				id: batchId,
+				batchCode: batchId,
+				barcodeValue: `${batchId}-QR`,
+				lotId: "lot-1",
+				plannedQuantity: 12,
+				labelPackSize: 12,
+				projectModelRequirementId: "requirement-1",
+				seriesNumber: 1,
+				seriesCount: 1,
+				status,
+				rowVersion: 2,
+				createdAt: new Date("2026-07-30T01:00:00.000Z"),
+				lot: {
+					id: "lot-1",
+					lotCode: "LOT-001",
+					lotName: "July lot",
+					projectId: "project-1",
+					partsListId: "parts-list-1",
+					project: { id: "project-1", name: "July project", projectCode: "PRJ-JUL", status: "RELEASED" },
+				},
+				part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
+			},
+		});
+		const app = appFor({
+			batchPositionProjection: {
+				findMany: async () => [
+					// Pre-route: needs scan-out release, not QC.
+					{ ...position("batch-release", "STG-PROJECTS", null), stageId: "STG-PROJECTS" },
+					// Mid-route, no verdict yet.
+					position("batch-pending", "stage-injection", "route-step-1"),
+					// Mid-route, covering PASSED.
+					position("batch-passed", "stage-injection", "route-step-1"),
+					// Mid-route, covering FAILED.
+					position("batch-held", "stage-injection", "route-step-1"),
+					// Held batch: blocked regardless of verdicts.
+					position("batch-blocked", "stage-injection", "route-step-1", "HELD"),
+				],
+			},
+			routingStep: {
+				findMany: async () => [
+					{
+						id: "route-step-1",
+						partsListId: "parts-list-1",
+						partId: "part-1",
+						stageId: "stage-injection",
+						subStageId: null,
+						stepOrder: 1,
+						part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
+					},
+					{
+						id: "route-step-2",
+						partsListId: "parts-list-1",
+						partId: "part-1",
+						stageId: "stage-decoration",
+						subStageId: null,
+						stepOrder: 2,
+						part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
+					},
+				],
+			},
+			qualityInspection: {
+				findMany: async () => [
+					{
+						id: "inspection-passed",
+						batchId: "batch-passed",
+						stageId: "stage-injection",
+						subStageId: null,
+						createdAt: new Date("2026-07-31T02:00:00.000Z"),
+						decisions: [{ decision: "PASSED", decidedAt: new Date("2026-07-31T03:00:00.000Z") }],
+					},
+					{
+						id: "inspection-held",
+						batchId: "batch-held",
+						stageId: "stage-injection",
+						subStageId: null,
+						createdAt: new Date("2026-07-31T02:00:00.000Z"),
+						decisions: [{ decision: "FAILED", decidedAt: new Date("2026-07-31T03:00:00.000Z") }],
+					},
+				],
+			},
+		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/batch-positions")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		const gates = Object.fromEntries(
+			(response.body.data as Array<{ batch: { id: string }; qcGate: string }>).map((row) => [row.batch.id, row.qcGate]),
+		);
+		expect(gates).to.deep.equal({
+			"batch-release": "RELEASE",
+			"batch-pending": "PENDING",
+			"batch-passed": "PASSED",
+			"batch-held": "HELD",
+			"batch-blocked": "BLOCKED",
+		});
 	});
 
 	it("returns server-owned station history from execution evidence", async () => {

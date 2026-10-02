@@ -9,7 +9,7 @@ import {
 import { deriveModelSkuCode } from "./catalog-foundation";
 import { ObjectStorageNotFoundError, type ObjectStorage } from "../storage/object-storage";
 
-type PatsProductClient = Pick<PatsPrismaClient, "product">;
+type PatsProductClient = Pick<PatsPrismaClient, "product" | "asset">;
 
 const PRODUCT_SORT_FIELDS = [
 	"product_code",
@@ -163,6 +163,18 @@ export function catalogController(
 				return;
 			}
 
+			// Managed-asset handles for image replace/remove (D-044): one query
+			// for the product's models; seed-linked images have no Asset row.
+			const managedAssets = await patsPrisma.asset.findMany({
+				where: {
+					ownerType: "MODEL",
+					ownerId: { in: product.models.map((model) => model.id) },
+					status: "AVAILABLE",
+				},
+				select: { id: true, ownerId: true },
+			});
+			const managedAssetIds = new Map(managedAssets.map((asset) => [asset.ownerId, asset.id]));
+
 			const models = await Promise.all(product.models.map(async (model) => {
 				const sourceReference = toPublicSourceReference(model.sourceReference);
 				const imageObjectKey = getImageObjectKey(model.sourceReference);
@@ -193,6 +205,9 @@ export function catalogController(
 							}
 						: {}),
 					imageUrl,
+					// Managed-asset handle for image replace/remove (D-044). Null when
+					// the image is seed-linked or absent; never the private object key.
+					assetId: managedAssetIds.get(model.id) ?? null,
 					pinned: model.pinned,
 					updatedAt: model.updatedAt.toISOString(),
 					modelParts: model.modelParts.map((part) => ({
@@ -213,9 +228,8 @@ export function catalogController(
 			}));
 
 			// Canonical envelope is `{ data }` (C-004); the transitional route
-			// keeps its legacy `{ success, data }` wrapper until retirement.
-			const detail = {
-				productId: product.id,
+						// keeps its legacy `{ success, data }` wrapper until retirement.
+			const detail = {				productId: product.id,
 				productCode: product.productCode,
 				productName: product.productName,
 				...(options.canonical

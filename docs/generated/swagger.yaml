@@ -1752,6 +1752,135 @@ paths:
           description: Published part or project parts still reference it
         "412":
           description: Stale or missing If-Match
+  /api/v1/assets:
+    post:
+      operationId: assetCreate
+      summary: Register a model image asset for direct upload
+      tags:
+        - PATS Assets
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Asset metadata registered; no bytes stored yet
+        "401":
+          description: Authentication required
+        "403":
+          description: catalog.manage capability required
+        "404":
+          description: Owning model not found
+        "409":
+          description: Idempotency payload conflict
+        "422":
+          description: Invalid asset declaration
+  /api/v1/assets/{assetId}/upload-requests:
+    post:
+      operationId: assetUploadRequestCreate
+      summary: Issue a short-lived direct-upload URL for an asset
+      tags:
+        - PATS Assets
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: assetId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Short-lived upload URL issued; safe to retry
+        "401":
+          description: Authentication required
+        "403":
+          description: catalog.manage capability required
+        "404":
+          description: Asset not found
+        "409":
+          description: Asset already finalized, quarantined, or retired
+        "503":
+          description: Object storage unavailable
+  /api/v1/assets/{assetId}:
+    patch:
+      operationId: assetFinalize
+      summary: Verify uploaded bytes and link the asset to its model
+      tags:
+        - PATS Assets
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: assetId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Bytes verified; model image linked
+        "401":
+          description: Authentication required
+        "403":
+          description: catalog.manage capability required
+        "404":
+          description: Asset not found
+        "409":
+          description: Asset already finalized, quarantined, or retired
+        "412":
+          description: Stale or missing If-Match
+        "422":
+          description: Bytes missing or failed verification
+        "503":
+          description: Object storage unavailable
+    get:
+      operationId: assetGet
+      summary: Read asset metadata with a short-lived read URL
+      tags:
+        - PATS Assets
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: assetId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Asset metadata; readUrl is null until available
+        "401":
+          description: Authentication required
+        "403":
+          description: catalog.read capability required
+        "404":
+          description: Asset not found
+        "503":
+          description: Object storage unavailable
+    delete:
+      operationId: assetDelete
+      summary: Retire an asset and unlink it from its model
+      tags:
+        - PATS Assets
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: assetId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Asset retired; bytes retained under review
+        "401":
+          description: Authentication required
+        "403":
+          description: catalog.manage capability required
+        "404":
+          description: Asset not found
+        "412":
+          description: Stale or missing If-Match
   openapi:
     "0": "3"
     "1": .
@@ -2145,12 +2274,44 @@ paths:
     get:
       operationId: projectCollectionGet
       summary: List project summaries
+      description: >
+        Optional filters combine with AND and share the same predicate for count
+        and page so tab counters reuse pagination.totalItems (e.g. status=draft
+        with limit=1). status accepts all, general, draft, released, ongoing
+        (alias of released), completed case-insensitively; all/general means no
+        status filter. search is a trimmed case-insensitive partial match (max
+        100 chars) across projectCode, name, product.productName, and
+        product.productCode. lot is a trimmed exact match (max 200 chars)
+        against projectCode or name only.
       tags:
         - PATS Planning
       x-required-capability: planning.read
       parameters:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - all
+              - general
+              - draft
+              - released
+              - ongoing
+              - completed
+        - name: search
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+        - name: lot
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
       responses:
         "200":
           $ref: "#/components/responses/PaginatedRead"

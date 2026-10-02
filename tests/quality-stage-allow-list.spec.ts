@@ -367,8 +367,9 @@ describe("Journey D quality stage allow-list", () => {
 		expect(response.body.type).to.equal("urn:bandai:pats:problem:authorization-denied");
 	});
 
-	it("rejects a FAILED decision without a reason code (422, reason required)", async () => {
+	it("records a verdict-only FAILED decision and quarantines the batch HELD", async () => {
 		let decided = 0;
+		let batchStatus: string | null = null;
 		const database = idempotentDatabase({
 			qualityStageAssignment: { findMany: async () => [{ stageId: "stage-decoration" }] },
 			qualityInspection: {
@@ -381,11 +382,16 @@ describe("Journey D quality stage allow-list", () => {
 				update: async () => ({ id: "inspection-1", status: "COMPLETED", rowVersion: 2 }),
 			},
 			batch: {
-				update: async () => ({}),
+				update: async ({ data }: { data: { status: string } }) => {
+					batchStatus = data.status;
+					return {};
+				},
 			},
 			qualityDecision: {
-				create: async () => {
+				create: async ({ data }: { data: Record<string, unknown> }) => {
 					decided += 1;
+					expect(data).to.not.have.property("reasonCode");
+					expect(data).to.not.have.property("failureDisposition");
 					return { id: "decision-1", decision: "FAILED" };
 				},
 			},
@@ -397,21 +403,17 @@ describe("Journey D quality stage allow-list", () => {
 		const response = await request(app)
 			.post("/api/v1/quality-inspections/inspection-1/decisions")
 			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "qc-fail-no-reason")
+			.set("Idempotency-Key", "qc-fail-verdict-only")
 			.set("If-Match", '"1"')
 			.send({ decision: "FAILED" });
 
-		expect(response.status).to.equal(422);
-		expect(response.body.type).to.equal("urn:bandai:pats:problem:validation-error");
-		const reasonIssue = (response.body.errors ?? []).find(
-			(issue: { field: string }) => issue.field === "reasonCode",
-		);
-		expect(reasonIssue).to.exist;
-		expect(decided).to.equal(0);
+		expect(response.status).to.equal(201);
+		expect(decided).to.equal(1);
+		expect(batchStatus).to.equal("HELD");
+		expect(response.body).to.not.have.property("batchStatus");
 	});
 
-	it("records a FAILED decision that carries a reason code", async () => {
-		let recordedReasonCode: string | null = null;
+	it("rejects reason fields on verdicts (strict verdict-only contract)", async () => {
 		const database = idempotentDatabase({
 			qualityStageAssignment: { findMany: async () => [{ stageId: "stage-decoration" }] },
 			qualityInspection: {
@@ -427,10 +429,7 @@ describe("Journey D quality stage allow-list", () => {
 				update: async () => ({}),
 			},
 			qualityDecision: {
-				create: async ({ data }: { data: { reasonCode: string | null } }) => {
-					recordedReasonCode = data.reasonCode;
-					return { id: "decision-1", decision: "FAILED" };
-				},
+				create: async () => ({ id: "decision-1", decision: "FAILED" }),
 			},
 			auditRecord: { create: async () => undefined },
 			outboxMessage: { create: async () => undefined },
@@ -444,8 +443,7 @@ describe("Journey D quality stage allow-list", () => {
 			.set("If-Match", '"1"')
 			.send({ decision: "FAILED", reasonCode: "REWORK" });
 
-		expect(response.status).to.equal(201);
-		expect(recordedReasonCode).to.equal("REWORK");
+		expect(response.status).to.equal(422);
 	});
 
 	it("still accepts PASSED and HOLD without a reason code", async () => {
@@ -484,6 +482,145 @@ describe("Journey D quality stage allow-list", () => {
 		expect(passed.status).to.equal(201);
 
 		expect(decisions).to.equal(1);
+	});
+
+	const operatorAssignments: SubjectAssignmentRecord[] = [
+		{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" },
+	];
+
+	function analysisDatabase(
+		overrides: Record<string, unknown> = {},
+		onBatchStatus?: (status: string) => void,
+	) {
+		return idempotentDatabase({
+			qualityInspection: {
+				findUnique: async () => ({
+					id: "inspection-1",
+					stageId: "stage-decoration",
+					status: "COMPLETED",
+					decisions: [{ decision: "FAILED" }],
+				}),
+			},
+			defectAnalysis: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({
+					id: "analysis-1",
+					rowVersion: 1,
+					...data,
+				}),
+			},
+			batch: {
+				findUnique: async () => ({ id: "batch-1", status: "HELD" }),
+				update: async ({ data }: { data: { status: string } }) => {
+					onBatchStatus?.(data.status);
+					return {};
+				},
+			},
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+			...overrides,
+		});
+	}
+
+	it("lets production record REWORK analysis on a failed verdict (batch stays HELD)", async () => {
+		let batchStatus: string | null = null;
+		const app = commandApp(analysisDatabase({}, (status) => { batchStatus = status; }), operatorAssignments);
+
+		const response = await request(app)
+			.post("/api/v1/defect-analyses")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "analysis-rework")
+			.send({
+				inspectionId: "inspection-1",
+				reasonCode: "PAINT_DEFECT",
+				reasonNote: "Mask spray miss — return to Decoration.",
+				disposition: "REWORK",
+			});
+
+		expect(response.status).to.equal(201);
+		expect(response.body.disposition).to.equal("REWORK");
+		expect(batchStatus).to.equal("HELD");
+	});
+
+	it("scraps the batch on a SCRAP analysis (True NG)", async () => {
+		let batchStatus: string | null = null;
+		const app = commandApp(analysisDatabase({}, (status) => { batchStatus = status; }), operatorAssignments);
+
+		const response = await request(app)
+			.post("/api/v1/defect-analyses")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "analysis-scrap")
+			.send({ inspectionId: "inspection-1", reasonCode: "CRACKED", disposition: "SCRAP" });
+
+		expect(response.status).to.equal(201);
+		expect(batchStatus).to.equal("SCRAPPED");
+	});
+
+	it("reactivates the batch on a WAIVE analysis", async () => {
+		let batchStatus: string | null = null;
+		const app = commandApp(analysisDatabase({}, (status) => { batchStatus = status; }), operatorAssignments);
+
+		const response = await request(app)
+			.post("/api/v1/defect-analyses")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "analysis-waive")
+			.send({ inspectionId: "inspection-1", reasonCode: "COSMETIC_OK", disposition: "WAIVE" });
+
+		expect(response.status).to.equal(201);
+		expect(batchStatus).to.equal("ACTIVE");
+	});
+
+	it("refuses a second analysis for the same inspection (409)", async () => {
+		const app = commandApp(
+			analysisDatabase({
+				defectAnalysis: { findUnique: async () => ({ id: "analysis-1" }) },
+			}),
+			operatorAssignments,
+		);
+
+		const response = await request(app)
+			.post("/api/v1/defect-analyses")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "analysis-duplicate")
+			.send({ inspectionId: "inspection-1", reasonCode: "PAINT_DEFECT", disposition: "REWORK" });
+
+		expect(response.status).to.equal(409);
+	});
+
+	it("refuses analysis on a passing verdict (409)", async () => {
+		const app = commandApp(
+			analysisDatabase({
+				qualityInspection: {
+					findUnique: async () => ({
+						id: "inspection-1",
+						stageId: "stage-decoration",
+						status: "COMPLETED",
+						decisions: [{ decision: "PASSED" }],
+					}),
+				},
+			}),
+			operatorAssignments,
+		);
+
+		const response = await request(app)
+			.post("/api/v1/defect-analyses")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "analysis-on-pass")
+			.send({ inspectionId: "inspection-1", reasonCode: "PAINT_DEFECT", disposition: "REWORK" });
+
+		expect(response.status).to.equal(409);
+	});
+
+	it("keeps defect analysis behind execution.write (qi denied)", async () => {
+		const app = commandApp(analysisDatabase());
+
+		const response = await request(app)
+			.post("/api/v1/defect-analyses")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "analysis-qi-denied")
+			.send({ inspectionId: "inspection-1", reasonCode: "PAINT_DEFECT", disposition: "REWORK" });
+
+		expect(response.status).to.equal(403);
 	});
 
 	it("lets quality.read list but not resolve or decide", async () => {

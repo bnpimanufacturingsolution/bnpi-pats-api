@@ -96,7 +96,7 @@ describe("resolveQualityInspectionByCode", () => {
 						stageId: "stage-decoration",
 						status: "COMPLETED",
 						rowVersion: 3,
-						decisions: [{ decision: "PASSED", reasonCode: null, reasonNote: null }],
+						decisions: [{ decision: "PASSED" }],
 					}],
 				}),
 			}),

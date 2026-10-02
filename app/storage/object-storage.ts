@@ -14,6 +14,17 @@ export interface ReadUrlOptions {
 	expiresInSeconds?: number;
 }
 
+export interface UploadUrlOptions {
+	contentType: string;
+	expiresInSeconds?: number;
+}
+
+export interface UploadUrl {
+	url: string;
+	/** ISO 8601 UTC instant when the signed URL stops working. */
+	expiresAt: string;
+}
+
 export interface StoredObject {
 	key: string;
 	body: Uint8Array;
@@ -28,6 +39,14 @@ export interface ObjectStorage {
 	getObject(key: string): Promise<StoredObject>;
 	deleteObject(key: string): Promise<void>;
 	createReadUrl(key: string, options?: ReadUrlOptions): Promise<string>;
+	/**
+	 * Mint a short-lived presigned PUT URL for direct client upload. The
+	 * content type is part of the signature: the uploader must send it back
+	 * verbatim as the request `Content-Type`, otherwise the request is
+	 * rejected by object storage. Byte/size/checksum verification stays a
+	 * server-side finalize step — never trust the upload alone.
+	 */
+	createUploadUrl(key: string, options: UploadUrlOptions): Promise<UploadUrl>;
 }
 
 export class ObjectStorageError extends Error {

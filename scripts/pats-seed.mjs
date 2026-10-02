@@ -522,6 +522,10 @@ async function seedProfile(tx) {
 					origin: "client-parts-list",
 					productCode: CLIENT_B251.productCode,
 					modelNumber: model.modelNumber,
+					// Private MinIO object; catalog read resolves it server-side
+					// into a short-lived imageUrl and never returns the key.
+					// Bytes are synced by scripts/pats-sync-model-images.mjs.
+					imageObjectKey: `pats/models/b251/model-${model.modelNumber}.png`,
 					...(model.nameConflict ? { nameConflict: model.nameConflict } : {}),
 				},
 			},
@@ -538,6 +542,10 @@ async function seedProfile(tx) {
 					origin: "client-parts-list",
 					productCode: CLIENT_B251.productCode,
 					modelNumber: model.modelNumber,
+					// Private MinIO object; catalog read resolves it server-side
+					// into a short-lived imageUrl and never returns the key.
+					// Bytes are synced by scripts/pats-sync-model-images.mjs.
+					imageObjectKey: `pats/models/b251/model-${model.modelNumber}.png`,
 					...(model.nameConflict ? { nameConflict: model.nameConflict } : {}),
 				},
 			},
@@ -1875,7 +1883,7 @@ async function seedProfile(tx) {
 		["batch-av-dec", "BNI-2607-002", "01", "B251-01-01", tray, decorationStageId, subFullSprayId, "ACTIVE"],
 		["batch-av-qc", "BNI-2607-003", "01", "B251-01-04", tray, assemblyStageId, subSubAssemblyId, "ACTIVE"],
 		["batch-hd-inj", "BNI-2607-004", "02", "B251-01-08", tray, injectionStageId, null, "ACTIVE"],
-		["batch-hd-dec", "BNI-2607-005", "02", "B251-01-10", tray, decorationStageId, subLineSprayId, "ACTIVE"],
+		["batch-hd-dec", "BNI-2607-005", "02", "B251-01-10", tray, decorationStageId, subLineSprayId, "HELD"],
 		["batch-tc-inj", "BNI-2607-006", "03", "B251-01-11", tray, injectionStageId, null, "ACTIVE"],
 		["batch-tc-asm", "BNI-2607-007", "03", "B251-01-12", tray, assemblyStageId, subAssortmentId, "ACTIVE"],
 		["batch-fw-dec", "BNI-2607-008", "04", "B251-01-15", tray, decorationStageId, subTampoId, "ACTIVE"],
@@ -2349,12 +2357,29 @@ async function seedProfile(tx) {
 		// Floor visibility (2026-09-30): ACTIVE story batches get the same
 		// position projection as anchor batches so released story lots reach
 		// station arrival/issuance queues. CLOSED story lots stay terminal.
+		// Route-step pointer (2026-10-01): see anchor block — a null pointer
+		// mid-route bricks the pack (arriving but unscannable).
 		if (batchStatus !== "CLOSED") {
+			const [existingStoryPosition, matchingStoryStep] = await Promise.all([
+				tx.batchPositionProjection.findUnique({ where: { batchId: id }, select: { routeStepId: true } }),
+				tx.routingStep.findFirst({
+					where: {
+						partsListId: storyPartsListId,
+						partId: storyProjectPartIds[partCode],
+						stageId,
+						subStageId,
+					},
+					orderBy: { stepOrder: "asc" },
+					select: { id: true },
+				}),
+			]);
+			const storyRouteStepId = existingStoryPosition?.routeStepId ?? matchingStoryStep?.id ?? null;
 			await tx.batchPositionProjection.upsert({
 				where: { batchId: id },
 				update: {
 					stageId,
 					subStageId,
+					routeStepId: storyRouteStepId,
 					lastEventId: null,
 					positionStatus: "ACCEPTED",
 					quantityMagnitude: `${tray}.000000`,
@@ -2365,6 +2390,7 @@ async function seedProfile(tx) {
 					batchId: id,
 					stageId,
 					subStageId,
+					routeStepId: storyRouteStepId,
 					lastEventId: null,
 					positionStatus: "ACCEPTED",
 					quantityMagnitude: `${tray}.000000`,
@@ -2637,11 +2663,30 @@ async function seedProfile(tx) {
 		if (status === "CLOSED") continue;
 		const id = batchIds[key];
 		const lastEv = eventDefs.find((e) => e[1] === key && e[8] === "STAGE_COMPLETED");
+		// Route-step pointer (2026-10-01): the scan classifier derives next
+		// from position.routeStepId while the arrival queue derives it from
+		// stage/sub — a null pointer mid-route bricks the pack (arriving but
+		// unscannable). Stamp the matching step; never clobber a live value.
+		const [existingPosition, matchingStep] = await Promise.all([
+			tx.batchPositionProjection.findUnique({ where: { batchId: id }, select: { routeStepId: true } }),
+			tx.routingStep.findFirst({
+				where: {
+					partsListId,
+					partId: projectPartIds[partCode],
+					stageId,
+					subStageId,
+				},
+				orderBy: { stepOrder: "asc" },
+				select: { id: true },
+			}),
+		]);
+		const routeStepId = existingPosition?.routeStepId ?? matchingStep?.id ?? null;
 		await tx.batchPositionProjection.upsert({
 			where: { batchId: id },
 			update: {
 				stageId,
 				subStageId,
+				routeStepId,
 				lastEventId: lastEv ? stableId(lastEv[0]) : null,
 				positionStatus: "ACCEPTED",
 				quantityMagnitude: `${qty}.000000`,
@@ -2652,6 +2697,7 @@ async function seedProfile(tx) {
 				batchId: id,
 				stageId,
 				subStageId,
+				routeStepId,
 				lastEventId: lastEv ? stableId(lastEv[0]) : null,
 				positionStatus: "ACCEPTED",
 				quantityMagnitude: `${qty}.000000`,
@@ -2714,7 +2760,9 @@ async function seedProfile(tx) {
 		});
 	}
 
-	// Completed inspections with decisions for history panel
+	// Completed inspections with verdict-only decisions for history panel
+	// (D-045: QC tags PASSED/FAILED/HOLD; reasons + dispositions live on the
+	// production defect analysis, seeded below for the FAILED row).
 	const qcDoneDefs = [
 		["qi-b251-hold", "batch-av-dec", "B251-01-01", "Avocado Burger Upper Bun", tray, decorationStageId, subFullSprayId, "HOLD", "ROUTING_REVIEW", "Batch advanced without full decoration completion evidence.", 0, 6],
 		["qi-b251-pass-wh", "batch-av-wh", "B251-01-01", "Avocado Burger Upper Bun", 240, warehouseStageId, subMainPackingId, "PASSED", "VISUAL_OK", "Pack appearance and label match B251 tray standard.", 2, 4],
@@ -2779,8 +2827,6 @@ async function seedProfile(tx) {
 			update: {
 				inspectionId,
 				decision,
-				reasonCode,
-				reasonNote,
 				decidedBySubjectId: quality.id,
 				decidedAt,
 			},
@@ -2788,12 +2834,36 @@ async function seedProfile(tx) {
 				id: stableId(`qd-${key}`),
 				inspectionId,
 				decision,
-				reasonCode,
-				reasonNote,
 				decidedBySubjectId: quality.id,
 				decidedAt,
 			},
 		});
+		// Production analysis for the FAILED row: reason + REWORK live here,
+		// never on the QC tag. PASSED/HOLD rows carry no analysis.
+		if (decision === "FAILED") {
+			const analysisId = stableId(`da-${key}`);
+			await tx.defectAnalysis.upsert({
+				where: { inspectionId },
+				update: {
+					batchId: batchIds[batchKey],
+					reasonCode,
+					reasonNote,
+					disposition: "REWORK",
+					decidedBySubjectId: operator.id,
+					decidedAt,
+				},
+				create: {
+					id: analysisId,
+					inspectionId,
+					batchId: batchIds[batchKey],
+					reasonCode,
+					reasonNote,
+					disposition: "REWORK",
+					decidedBySubjectId: operator.id,
+					decidedAt,
+				},
+			});
+		}
 	}
 
 	// Completion evidence for the COMPLETED story projects: every CLOSED batch
@@ -2857,8 +2927,6 @@ async function seedProfile(tx) {
 			update: {
 				inspectionId,
 				decision: "PASSED",
-				reasonCode: "VISUAL_OK",
-				reasonNote: "Seed history: closed lots carry PASSED dispositions.",
 				decidedBySubjectId: quality.id,
 				decidedAt,
 			},
@@ -2866,8 +2934,6 @@ async function seedProfile(tx) {
 				id: stableId(`qd-${key}`),
 				inspectionId,
 				decision: "PASSED",
-				reasonCode: "VISUAL_OK",
-				reasonNote: "Seed history: closed lots carry PASSED dispositions.",
 				decidedBySubjectId: quality.id,
 				decidedAt,
 			},

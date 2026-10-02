@@ -25,6 +25,7 @@ import { domainReadRouter } from "./pats/domain-read";
 import { commandRouter } from "./pats/command-router";
 import { catalogController, catalogProductCollectionController } from "./pats/catalog";
 import { catalogFoundationRouter } from "./pats/catalog-foundation";
+import { assetsRouter } from "./pats/assets";
 import { createMinioObjectStorage } from "./storage/minio-object-storage";
 import { canonicalRouter, requireCanonicalCapability } from "./canonical/router";
 import { PrismaCatalogIdempotencyStore } from "./canonical/prisma-idempotency-store";
@@ -112,6 +113,13 @@ export function createApp(options: AppOptions = {}): Application {
 							idempotencyStore: catalogIdempotencyStore,
 						}),
 					),
+			},
+			assets: {
+				readCapability: "catalog.read",
+				writeCapability: "catalog.manage",
+				router: assetsRouter(patsPrisma, patsObjectStorage, {
+					idempotencyStore: catalogIdempotencyStore,
+				}),
 			},
 			domainReads: {
 				router: domainReadRouter(patsPrisma, requireCanonicalCapability),
