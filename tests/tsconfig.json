@@ -17,13 +17,21 @@
 		// Both are installed; naming them explicitly stops TS pulling in every
 		// unrelated @types package as well.
 		"types": ["node", "mocha"],
-		// The suite runs through `ts-node/register`, which is CommonJS. Inheriting
-		// the root's `node16` made TS treat these files as ESM-emitting and raise
-		// TS1479 on every `import ... = require(...)` line - 35 errors that were an
-		// artefact of this file rather than a real problem. The module format is
-		// matched to how the tests actually run, not to the app build.
-		"module": "commonjs",
-		"moduleResolution": "node",
+		// `nodenext` rather than the root's `node16`, and both parts are load-bearing.
+		//
+		// Under `node16` TS raised TS1479 on 35 `import ... = require(...)` lines:
+		// the specs import app code that the resolver classified as ESM. Switching
+		// this project to `nodenext` resolves those as CommonJS - `package.json`
+		// declares no `"type"`, so every `.ts` here is CJS, which is how the suite
+		// actually runs under `ts-node/register`.
+		//
+		// The obvious alternative, `"module": "commonjs"` + `"moduleResolution":
+		// "node"`, silences TS1479 too but resolves via node10, which TypeScript
+		// 7.0 removes - the editor flags it as deprecated today. `nodenext` is the
+		// successor that keeps the resolution honest, so it is used instead of
+		// pinning a removed mode behind `"ignoreDeprecations": "6.0"`.
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
 		// Strictness is inherited from the root, unchanged. Turning it OFF here was
 		// tried and measured WORSE (38 errors vs 30): without `strictNullChecks`
 		// TS trades one set of errors for another rather than removing any.
