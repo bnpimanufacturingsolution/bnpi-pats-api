@@ -89,6 +89,43 @@ model ModelPart {
   @@index([modelId])
 }
 
+// ---------------------------------------------------------------------------
+// Assets (D-044 scoped slice: Model image upload only)
+// ---------------------------------------------------------------------------
+// API-owned metadata; private MinIO owns the bytes. `objectKey` is
+// server-generated, unique, and never returned to clients. The Model link is
+// transitional via `Model.sourceReference.imageObjectKey` (same key the
+// catalog read resolves); a typed AssetLink relation stays deferred with
+// D-014. Retention/orphan/quarantine ownership is D-014/D-017/D-027 open.
+
+enum AssetOwnerType {
+  MODEL
+}
+
+enum AssetStatus {
+  REQUESTED
+  UPLOAD_REQUESTED
+  AVAILABLE
+  QUARANTINED
+  RETIRED
+}
+
+model Asset {
+  id             String         @id @default(uuid())
+  ownerType      AssetOwnerType
+  ownerId        String
+  objectKey      String         @unique
+  contentType    String
+  size           Int
+  checksumSha256 String
+  status         AssetStatus    @default(REQUESTED)
+  rowVersion     Int            @default(1)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([ownerType, ownerId, status])
+}
+
 // A versioned material relationship for one reusable catalog model was removed
 // 2026-09-25 under the scoped §7 exception (BomDefinition/BomLine/BomRelationshipKind;
 // no production deployment, zero active app callers).

@@ -36,7 +36,7 @@ type ProductRecord = {
 function makeApp(
 	product: ProductRecord | null,
 	storage: ObjectStorage,
-	options: { storageError?: Error } = {},
+	options: { storageError?: Error; assetRows?: Array<{ id: string; ownerId: string }> } = {},
 ) {
 	const findFirst = async (args: { where?: unknown }) => {
 		expect(args.where).to.deep.equal({
@@ -46,6 +46,7 @@ function makeApp(
 		if (options.storageError) throw options.storageError;
 		return product;
 	};
+	const findMany = async () => options.assetRows ?? [];
 
 	const workspaceAccess = (req: Request, _res: Response, next: NextFunction) => {
 		expect(req.headers["x-workspace-id"]).to.equal(workspaceId);
@@ -57,7 +58,10 @@ function makeApp(
 	app.use(
 		patsModule(
 			{
-				patsPrisma: { product: { findFirst } } as never,
+				patsPrisma: {
+					product: { findFirst },
+					asset: { findMany },
+				} as never,
 				objectStorage: storage,
 				workspaceAccess,
 			},
@@ -76,6 +80,10 @@ function makeStorage(overrides: Partial<ObjectStorage> = {}): ObjectStorage {
 		},
 		deleteObject: async () => undefined,
 		createReadUrl: async () => "https://minio.invalid/pats-private/read-url",
+		createUploadUrl: async () => ({
+			url: "https://minio.invalid/pats-private/upload-url",
+			expiresAt: new Date().toISOString(),
+		}),
 		...overrides,
 	};
 }
@@ -149,6 +157,7 @@ describe("PATS catalog read contract", () => {
 						},
 						skuCode: "B251-01",
 						imageUrl: null,
+						assetId: null,
 						pinned: true,
 						updatedAt: "2026-07-13T00:00:00.000Z",
 						modelParts: [
@@ -206,6 +215,25 @@ describe("PATS catalog read contract", () => {
 
 		expect(response.status).to.equal(200);
 		expect(response.body.data.models[0].imageUrl).to.equal(null);
+	});
+
+	it("exposes the managed asset handle without leaking the object key", async () => {
+		const withImage = completeProduct();
+		withImage.models[0].sourceReference = { imageObjectKey: "pats/models/b251/model-01.png" };
+		const app = makeApp(withImage, makeStorage(), {
+			assetRows: [{ id: "asset-1", ownerId: "model-01" }],
+		});
+
+		const response = await request(app)
+			.get(`/pats/catalog/products/${productId}`)
+			.set("x-workspace-id", workspaceId);
+
+		expect(response.status).to.equal(200);
+		expect(response.body.data.models[0].assetId).to.equal("asset-1");
+		expect(response.body.data.models[0].imageUrl).to.equal(
+			"https://minio.invalid/pats-private/read-url",
+		);
+		expect(JSON.stringify(response.body)).to.not.contain("pats/models/b251/model-01.png");
 	});
 
 	it("returns an explicit storage-unavailable response", async () => {

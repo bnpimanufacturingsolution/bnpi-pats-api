@@ -5,7 +5,7 @@ import type { ObjectStorage } from "../storage/object-storage";
 import type { PrismaClient as PatsPrismaClient } from "../../generated/pats-client";
 
 export const catalogRouter = (
-	patsPrisma: Pick<PatsPrismaClient, "product">,
+	patsPrisma: Pick<PatsPrismaClient, "product" | "asset">,
 	objectStorage: ObjectStorage,
 	workspaceAccess: RequestHandler,
 	options: { canonical?: boolean } = {},
@@ -17,7 +17,7 @@ export const catalogRouter = (
 	 * /api/pats/catalog/products/{productId}:
 	 *   get:
 	 *     summary: Read a workspace-scoped PATS product catalog record
-	 *     description: Returns Product -> Model -> ModelPart data without legacy seed fallback. Optional private imageObjectKey metadata is resolved to a short-lived read URL and is never returned.
+	 *     description: Returns Product -> Model -> ModelPart data without legacy seed fallback. Optional private imageObjectKey metadata is resolved to a short-lived read URL and is never returned. A managed assetId handle is exposed for image replace/remove.
 	 *     tags: [PATS Catalog]
 	 *     security:
 	 *       - bearerAuth: []

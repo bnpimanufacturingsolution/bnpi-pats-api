@@ -9,6 +9,7 @@ The response keeps sparse data explicit:
 - `models` and each model's `modelParts` are always arrays.
 - `sourceReference` and `modelName` may be `null`.
 - `imageUrl` is always present as either a short-lived private MinIO read URL or `null`.
+- `assetId` is the managed-asset handle for image replace/remove (D-044), or `null` when the image is seed-linked or absent. It is opaque metadata identity, never the private object key.
 - An optional private `imageObjectKey` may be carried in source metadata for the current boundary; it is consumed server-side and never returned. Its durable asset ownership remains `NEEDS_CONFIRMATION` and is not a new catalog relation in this pass.
 - A missing object returns `imageUrl: null`; an unavailable object-storage operation returns `503` with `errorCode: PATS_IMAGE_STORAGE_UNAVAILABLE`.
 - A product not linked to the requested workspace returns `404`; an invalid or missing workspace header returns `400`.

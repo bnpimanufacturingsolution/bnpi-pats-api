@@ -29,9 +29,6 @@ export type QcResolveBody = {
 	blockReason: QcResolveBlockReason | null;
 	latestDecision: {
 		decision: string;
-		failureDisposition: string | null;
-		reasonCode: string | null;
-		reasonNote: string | null;
 	} | null;
 };
 
@@ -98,9 +95,6 @@ export type QcResolveBatch = {
 		rowVersion: number;
 		decisions: Array<{
 			decision: string;
-			failureDisposition: string | null;
-			reasonCode: string | null;
-			reasonNote: string | null;
 		}>;
 	}>;
 };
@@ -110,9 +104,6 @@ function latestDecision(inspection: QcResolveBatch["qualityInspections"][number]
 	if (!decision) return null;
 	return {
 		decision: decision.decision,
-		failureDisposition: decision.failureDisposition,
-		reasonCode: decision.reasonCode,
-		reasonNote: decision.reasonNote,
 	};
 }
 

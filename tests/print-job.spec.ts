@@ -121,7 +121,7 @@ const simulated: PrintPort = {
 };
 
 describe("recordPrintJob", () => {
-	it("records a simulated first print and one issuance", async () => {
+	it("records a simulated first print as a PENDING label (no issuance)", async () => {
 		const db = store();
 		const job = await recordPrintJob(
 			db,
@@ -131,12 +131,17 @@ describe("recordPrintJob", () => {
 		expect(job.status).to.equal("SIMULATED");
 		expect(job.barcodeValue).to.equal("BC-BATCH-000001");
 		expect(job.sequence).to.equal(1);
-		expect(db.issued).to.equal(1);
+		// D-045: printing is label-only. Release happens exclusively
+		// through the scan-out path, so no ledger row is ever written here.
+		expect(db.issued).to.equal(0);
+		expect(db.transactions).to.have.length(0);
+		expect(db.events).to.have.length(0);
+		expect(job.originStageEventId).to.equal(null);
 		expect(String(db.jobs[0]?.renderedPayload)).to.include("BC-BATCH-000001");
 		expect(String(db.jobs[0]?.renderedPayload)).to.include("SERIES: 1/2");
 	});
 
-	it("does not issue a second inventory move on reprint", async () => {
+	it("records reprints as labels only", async () => {
 		const db = store();
 		await recordPrintJob(
 			db,
@@ -156,10 +161,11 @@ describe("recordPrintJob", () => {
 		);
 		expect(reprint.sequence).to.equal(2);
 		expect(reprint.reprintOf).to.equal("pj-1");
-		expect(db.issued).to.equal(1);
+		expect(db.issued).to.equal(0);
+		expect(db.transactions).to.have.length(0);
 	});
 
-	it("does not issue when the port fails", async () => {
+	it("records no ledger row when the port fails", async () => {
 		const db = store();
 		const job = await recordPrintJob(
 			db,
@@ -174,7 +180,7 @@ describe("recordPrintJob", () => {
 		expect(db.issued).to.equal(0);
 	});
 
-	it("issues on the fresh retry after a failed first print (first successful print wins)", async () => {
+	it("never issues on retry: release lives on the scan-out path, not the label", async () => {
 		const db = store();
 		const failed = await recordPrintJob(
 			db,
@@ -188,8 +194,7 @@ describe("recordPrintJob", () => {
 		expect(failed.sequence).to.equal(1);
 		expect(db.issued).to.equal(0);
 
-		// The operator retries from the desk (fresh idempotency key, no reprintOf):
-		// this successful print IS the pack's first — it must post the ISSUANCE.
+		// The operator retries from the desk (fresh idempotency key, no reprintOf).
 		const retry = await recordPrintJob(
 			db,
 			{ batchId: "batch-1", stationId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
@@ -198,18 +203,19 @@ describe("recordPrintJob", () => {
 		expect(retry.sequence).to.equal(2);
 		expect(retry.reprintOf).to.equal(null);
 		expect(retry.status).to.equal("SIMULATED");
-		expect(db.issued).to.equal(1);
+		expect(db.issued).to.equal(0);
+		expect(db.transactions).to.have.length(0);
 
-		// And it stays one-per-pack: further fresh prints never re-issue.
+		// And it stays ledger-free: further fresh prints never issue either.
 		await recordPrintJob(
 			db,
 			{ batchId: "batch-1", stationId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
 			simulated,
 		);
-		expect(db.issued).to.equal(1);
+		expect(db.issued).to.equal(0);
 	});
 
-	it("labels and issues the ACTUAL pcs when provided (variance → RECORDED)", async () => {
+	it("labels the ACTUAL pcs when provided (label face only, no ledger)", async () => {
 		const db = store();
 		const job = await recordPrintJob(
 			db,
@@ -225,17 +231,12 @@ describe("recordPrintJob", () => {
 		// The label face carries what physically shipped, not the plan.
 		expect(job.quantity).to.equal(235);
 		expect(String(db.jobs[0]?.renderedPayload)).to.include("235 PCS");
-		// Ledger honesty: expected = planned (240), actual = counted (235) → variance.
-		expect(db.transactions[0]).to.include({
-			expectedQuantity: 240,
-			actualQuantity: 235,
-			status: "RECORDED",
-		});
+		expect(db.transactions).to.have.length(0);
 	});
 
-	it("issues ACCEPTED when the actual pcs match the plan", async () => {
+	it("labels the planned pcs when actuals match the plan", async () => {
 		const db = store();
-		await recordPrintJob(
+		const job = await recordPrintJob(
 			db,
 			{
 				batchId: "batch-1",
@@ -246,11 +247,8 @@ describe("recordPrintJob", () => {
 			},
 			simulated,
 		);
-		expect(db.transactions[0]).to.include({
-			expectedQuantity: 240,
-			actualQuantity: 240,
-			status: "ACCEPTED",
-		});
+		expect(job.quantity).to.equal(240);
+		expect(db.transactions).to.have.length(0);
 	});
 
 	it("records no origin hop for a mid-route batch (labels only)", async () => {
@@ -262,7 +260,7 @@ describe("recordPrintJob", () => {
 		);
 		expect(job.originStageEventId).to.equal(null);
 		expect(db.events).to.have.length(0);
-		expect(db.issued).to.equal(1);
+		expect(db.issued).to.equal(0);
 	});
 
 	it("queries batch relations only (Prisma rejects scalars in include)", async () => {
@@ -277,36 +275,17 @@ describe("recordPrintJob", () => {
 		expect(include).to.not.have.property("seriesCount");
 	});
 
-	it("stamps issuance with recordedAt (required ledger field)", async () => {
-		const db = store();
-		await recordPrintJob(
-			db,
-			{ batchId: "batch-1", sectionId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
-			simulated,
-		);
-		expect(db.transactions).to.have.length(1);
-		expect(db.transactions[0]?.recordedAt).to.be.instanceOf(Date);
-	});
-
-	it("advances a pre-route batch through its origin hop on first aligned print", async () => {
+	it("never advances a pre-route batch: the origin hop lives on scan-out", async () => {
 		const db = store({ preRoute: true });
 		const job = await recordPrintJob(
 			db,
 			{ batchId: "batch-1", sectionId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
 			simulated,
 		);
-		// Print + issuance + origin hop, atomically.
-		expect(db.issued).to.equal(1);
-		expect(job.originStageEventId).to.equal("se-1");
-		expect(db.events).to.have.length(1);
-		expect(db.events[0]).to.include({
-			stageId: "STG-INJECTION",
-			batchId: "batch-1",
-			eventType: "STAGE_SCAN_RECORDED",
-			isRoutingViolation: false,
-			status: "ACCEPTED",
-			routeStepId: "step-1",
-		});
+		// Label only: no issuance, no origin hop, position untouched.
+		expect(db.issued).to.equal(0);
+		expect(job.originStageEventId).to.equal(null);
+		expect(db.events).to.have.length(0);
 	});
 
 	it("prints without advancing when the section is not the batch's next step", async () => {
@@ -317,19 +296,19 @@ describe("recordPrintJob", () => {
 			simulated,
 		);
 		expect(job.status).to.equal("SIMULATED");
-		expect(db.issued).to.equal(1);
+		expect(db.issued).to.equal(0);
 		expect(job.originStageEventId).to.equal(null);
 		expect(db.events).to.have.length(0);
 	});
 
-	it("does not advance twice: reprint after the origin hop is labels-only", async () => {
+	it("reprints stay labels-only after any earlier print", async () => {
 		const db = store({ preRoute: true });
 		await recordPrintJob(
 			db,
 			{ batchId: "batch-1", sectionId: "station-1", actor: "Station", actorSubjectId: "sub-1" },
 			simulated,
 		);
-		expect(db.events).to.have.length(1);
+		expect(db.events).to.have.length(0);
 		const reprint = await recordPrintJob(
 			db,
 			{
@@ -342,7 +321,7 @@ describe("recordPrintJob", () => {
 			simulated,
 		);
 		expect(reprint.originStageEventId).to.equal(null);
-		expect(db.events).to.have.length(1);
-		expect(db.issued).to.equal(1);
+		expect(db.events).to.have.length(0);
+		expect(db.issued).to.equal(0);
 	});
 });

@@ -5,6 +5,19 @@ import path from "node:path";
 const repositoryRoot = path.resolve(__dirname, "..");
 
 describe("PATS seed contract", () => {
+  it("stamps position routeStepId so arrival and scan agree on next", () => {
+    const script = fs.readFileSync(path.join(repositoryRoot, "scripts", "pats-seed.mjs"), "utf8");
+
+    // The scan classifier derives next from position.routeStepId while the
+    // arrival queue derives it from stage/sub — a null pointer mid-route
+    // bricks the pack (arriving but unscannable). Both position writers
+    // stamp the matching step and never clobber a live-advanced value.
+    expect(script).to.contain("existingPosition?.routeStepId");
+    expect(script).to.contain("existingStoryPosition?.routeStepId");
+    expect(script).to.contain("matchingStep?.id");
+    expect(script).to.contain("matchingStoryStep?.id");
+  });
+
   it("keeps the canonical seed separate from the legacy root seed", () => {
     const packageJson = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "package.json"), "utf8")) as {
       scripts?: Record<string, string>;

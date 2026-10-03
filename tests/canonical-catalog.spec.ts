@@ -32,6 +32,10 @@ function storage(): ObjectStorage {
 		getObject: async () => { throw new Error("not used"); },
 		deleteObject: async () => undefined,
 		createReadUrl: async () => "https://minio.invalid/read-url",
+		createUploadUrl: async () => ({
+			url: "https://minio.invalid/upload-url",
+			expiresAt: new Date().toISOString(),
+		}),
 	};
 }
 
@@ -58,7 +62,7 @@ describe("canonical deployment-scoped catalog", () => {
 			catalog: {
 				requiredCapability: "catalog.read",
 				handler: catalogController(
-					{ product: { findFirst } } as never,
+					{ product: { findFirst }, asset: { findMany: async () => [] } } as never,
 					storage(),
 					{ canonical: true },
 				),
