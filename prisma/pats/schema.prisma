@@ -203,6 +203,41 @@ enum QualityDecisionType {
 }
 
 // ---------------------------------------------------------------------------
+// Catalog assets (model image upload)
+// ---------------------------------------------------------------------------
+// Restored 2026-10-03: the develop schema consolidation dropped this model
+// while branch code (assets router, catalog usage, contract tests) and
+// migration 20261001080816_add_asset_model_image_upload still reference it.
+
+enum AssetOwnerType {
+  MODEL
+}
+
+enum AssetStatus {
+  REQUESTED
+  UPLOAD_REQUESTED
+  AVAILABLE
+  QUARANTINED
+  RETIRED
+}
+
+model Asset {
+  id             String         @id @default(uuid())
+  ownerType      AssetOwnerType
+  ownerId        String
+  objectKey      String         @unique
+  contentType    String
+  size           Int
+  checksumSha256 String
+  status         AssetStatus    @default(REQUESTED)
+  rowVersion     Int            @default(1)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([ownerType, ownerId, status])
+}
+
+// ---------------------------------------------------------------------------
 // Execution containers
 // ---------------------------------------------------------------------------
 
@@ -242,6 +277,7 @@ model Batch {
   createdAt                 DateTime                 @default(now())
   positionProjection        BatchPositionProjection?
   qualityInspections        QualityInspection[]
+  defectAnalyses            DefectAnalysis[]
 
   @@index([lotId])
   @@index([partId])
@@ -421,29 +457,47 @@ model QualityInspection {
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
   decisions            QualityDecision[]
+  defectAnalysis       DefectAnalysis?
 
   @@index([batchId, createdAt])
   @@index([status, createdAt])
 }
 
-enum QualityFailureDisposition {
+enum DefectDisposition {
   REWORK
-  TRUE_NG
+  SCRAP
+  WAIVE
 }
 
 model QualityDecision {
-  id                 String                     @id @default(uuid())
+  id                 String            @id @default(uuid())
   inspectionId       String
-  inspection         QualityInspection          @relation(fields: [inspectionId], references: [id])
+  inspection         QualityInspection @relation(fields: [inspectionId], references: [id])
   decision           QualityDecisionType
-  failureDisposition QualityFailureDisposition?
-  reasonCode         String?
-  reasonNote         String?
   decidedBySubjectId String?
-  decidedBySubject   Subject?                   @relation("QualityDecisionActor", fields: [decidedBySubjectId], references: [id])
-  decidedAt          DateTime                   @default(now())
+  decidedBySubject   Subject?          @relation("QualityDecisionActor", fields: [decidedBySubjectId], references: [id])
+  decidedAt          DateTime          @default(now())
 
   @@index([inspectionId, decidedAt])
+}
+
+model DefectAnalysis {
+  id                 String            @id @default(uuid())
+  inspectionId       String            @unique
+  inspection         QualityInspection @relation(fields: [inspectionId], references: [id])
+  batchId            String
+  batch              Batch             @relation(fields: [batchId], references: [id])
+  reasonCode         String
+  reasonNote         String?
+  disposition        DefectDisposition
+  decidedBySubjectId String?
+  decidedBySubject   Subject?          @relation("DefectAnalysisActor", fields: [decidedBySubjectId], references: [id])
+  decidedAt          DateTime          @default(now())
+  rowVersion         Int               @default(1)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([batchId, decidedAt])
 }
 
 enum QualityStageAssignmentStatus {
@@ -889,6 +943,7 @@ model Subject {
   processChangeRecords        ProcessChangeLog[]       @relation("ProcessChangeActor")
   qualityInspections          QualityInspection[]      @relation("QualityInspectionInspector")
   qualityDecisions            QualityDecision[]        @relation("QualityDecisionActor")
+  defectAnalysisRecords     DefectAnalysis[]         @relation("DefectAnalysisActor")
   qualityStageAssignments     QualityStageAssignment[] @relation("QualityStageAssignee")
   releasedPlans               Project[]                @relation("PlanReleaseActor")
   completedProjects           Project[]                @relation("ProjectCompletionActor")

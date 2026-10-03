@@ -161,30 +161,38 @@ paths:
     get:
       operationId: projectGet
       summary: Read a project and its planning snapshot
-      description: Returns the active Project snapshot, model quantities, Parts, Parts List versions, Lot, and execution lineage. Demand allocation, PMRS placeholder, and MaterialRequirement properties were removed by the user-approved 2026-09-25 v1 scope amendment.
+      description: Returns the active Project snapshot, model quantities, Parts, Parts List versions, Lot, and execution lineage. Demand allocation, PMRS placeholder, and MaterialRequirement properties were removed by the user-approved 2026-09-25 v1 scope amendment. `?batches=summary` returns lot batch counts with no batch rows (large orders carry thousands of series); the terminal guard stays exact.
       tags: [PATS Planning]
       x-required-capability: planning.read
-      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/BatchMode'
       responses: { '200': { $ref: '#/components/responses/ResourceRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
   /batches:
     get:
       operationId: batchCollectionGet
       summary: List batches and their current positions
+      description: Lot- or project-scoped reads order by part code then series number; each row carries the derived `qcDisposition` alongside the raw persistence shape.
       tags: [PATS Execution]
       x-required-capability: execution.read
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/BatchId'
+        - $ref: '#/components/parameters/LotId'
+        - $ref: '#/components/parameters/ProjectFilterId'
       responses: { '200': { $ref: '#/components/responses/PaginatedRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
   /batch-positions:
     get:
       operationId: batchPositionCollectionGet
       summary: Read rebuildable station-ready batch-position projections
-      description: Returns current positions together with batch, lot, part, and ordered route-step identity needed by execution workstations. The projection is rebuildable from the execution ledger and is not a second source of truth.
+      description: Returns current positions together with batch, lot, part, and ordered route-step identity needed by execution workstations. Paged (page/limit, max 100). Each row carries qcGate for its next hop (RELEASE = pre-route scan-out pending, PASSED = receivable, PENDING = awaiting verdict, HELD = quarantined, COMPLETE = route done, BLOCKED = not receivable) and the route steps of the pack's own part only. The projection is rebuildable from the execution ledger and is not a second source of truth.
       tags: [PATS Execution]
       x-required-capability: execution.read
-      responses: { '200': { $ref: '#/components/responses/CollectionRead' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses: { '200': { $ref: '#/components/responses/PaginatedRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
   /stage-events:
     get:
       operationId: stageEventCollectionGet
@@ -255,11 +263,13 @@ paths:
   /subjects:
     get:
       operationId: subjectCollectionGet
-      summary: Read the subject directory for leader/operator pickers
+      summary: Read the subject directory for leader/operator pickers and user management
       description: >
         Admin-only identity read (identity.read) backing the line-screen management
-        pickers: assigned/active leader selection and operator assignment. Returns
-        opaque subject ids plus display/email snapshots; never provider identifiers.
+        pickers (assigned/active leader selection and operator assignment) and the admin
+        Users tab. Search matches display name, email snapshot, and login username. Each row carries the
+        opaque subject id plus display/email snapshots, login username, active role bundle,
+        and status; never provider identifiers or password hashes.
       tags: [PATS Configuration]
       x-required-capability: identity.read
       parameters:
@@ -268,6 +278,27 @@ paths:
         - { name: search, in: query, schema: { type: string, minLength: 1 } }
         - { name: status, in: query, schema: { type: string, enum: [ACTIVE, DISABLED] } }
       responses: { '200': { $ref: '#/components/responses/PaginatedRead' }, '400': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem400' }, '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }, '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' } }
+  /subjects/{subjectId}:
+    get:
+      operationId: subjectGet
+      summary: Read a single subject for admin user management
+      description: >
+        Admin-only identity read (identity.read). Provider-safe projection: opaque id,
+        login username, display/email snapshots, status, active role bundle, last login,
+        and timestamps; never provider identifiers or password hashes. Unknown ids return
+        404 (soft-disabled subjects remain readable; there is no hard delete).
+      tags: [PATS Configuration]
+      x-required-capability: identity.read
+      parameters:
+        - name: subjectId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200': { $ref: '#/components/responses/ResourceRead' }
+        '404': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404' }
+        '403': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403' }
+        '503': { $ref: './2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503' }
   /dashboard-summaries:
     get:
       operationId: dashboardSummaryGet
@@ -287,6 +318,9 @@ components:
     Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
     Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
     BatchId: { name: batch_id, in: query, schema: { type: string, minLength: 1 } }
+    LotId: { name: lot_id, in: query, schema: { type: string, minLength: 1 } }
+    ProjectFilterId: { name: project_id, in: query, schema: { type: string, minLength: 1 } }
+    BatchMode: { name: batches, in: query, schema: { type: string, enum: [full, summary], default: full } }
     ProjectId: { name: projectId, in: path, required: true, schema: { type: string, minLength: 1 } }
     IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
     IfMatch: { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[0-9]+"$' } }

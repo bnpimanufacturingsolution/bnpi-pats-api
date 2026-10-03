@@ -45,6 +45,10 @@ function makeApp() {
 		getObject: async () => { throw new Error("not used"); },
 		deleteObject: async () => undefined,
 		createReadUrl: async () => "https://minio.invalid/read-url",
+		createUploadUrl: async () => ({
+			url: "https://minio.invalid/upload-url",
+			expiresAt: new Date().toISOString(),
+		}),
 	};
 	const app = express();
 	app.use(patsModule({

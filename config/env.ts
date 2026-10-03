@@ -33,11 +33,6 @@ const envSchema = z.object({
 
 	// SSO
 	SSO_BASE_URL: z.string().default("http://localhost:3000/api"),
-
-	// Cloudinary
-	CLOUDINARY_CLOUD_NAME: z.string().optional(),
-	CLOUDINARY_API_KEY: z.string().optional(),
-	CLOUDINARY_API_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

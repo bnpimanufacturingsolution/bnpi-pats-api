@@ -614,3 +614,103 @@ The app's Injection issuance Lot → Part grouping (per-part required pcs, issue
 
 The app's desk lot title switcher + per-tab lot focus (FIFO by lot code, completed sunk, remembered per station) is a read-only composition of the same existing reads: GET /batch-positions (lot/project/series/`projectStatus` fields) + GET /print-jobs first-prints. No new endpoint, field, or semantic; checklist result: no review items. FIFO ordering is a lotCode proxy; carrying true `releasedAt` on positions remains `NEEDS_CONFIRMATION` and is not part of this slice. Seeder change in the same slice: story ACTIVE batches now get position projections (anchor pattern), so all released story lots reach floor queues; no schema or migration change.
 
+## D-044 amendment — model image assets (2026-10-01)
+
+Scoped Asset slice so the app Edit Model dialog can replace/remove a Model image. Owner scope is Model only; retention/orphan/quarantine ownership and non-Model link targets stay open with D-014/D-017/D-027. The catalog read additionally exposes `assetId` (managed-asset handle, `null` when seed-linked or absent) next to the derived `imageUrl`; the private object key is never returned.
+
+| Operation | Contract | Unchanged behavior |
+|---|---|---|
+| `POST /api/v1/assets` | New CANONICAL command: `catalog.manage`, body `{ownerType: "model", ownerId, contentType, size, checksumSha256}` (strict; allowlist png/jpeg/webp, 1B–10MB, hex sha256), `Idempotency-Key` required with replay/conflict; `201` + `Location`, `ETag`; unknown owner → `404` | — |
+| `POST /api/v1/assets/{assetId}/upload-requests` | New CANONICAL command: `catalog.manage`; issues a short-lived presigned direct-to-MinIO PUT URL for the server-generated key plus required `Content-Type` header; safe to retry (`200`); finalized/quarantined/retired → `409`; MinIO down → `503` | — |
+| `PATCH /api/v1/assets/{assetId}` | Finalize: `catalog.manage`, body `{finalize: true}`, `If-Match`/`rowVersion` (`412` on stale/missing); verifies existence, size, type, and checksum against stored bytes (missing → `422`; mismatch → `422` + `QUARANTINED`); links `Model.sourceReference.imageObjectKey` and bumps model `rowVersion` in one transaction; retires superseded managed assets and deletes superseded bytes best-effort; `200` with asset + short-lived `readUrl` + `modelRowVersion` | — |
+| `GET /api/v1/assets/{assetId}` | New CANONICAL read: `catalog.read`; `Cache-Control: no-store`; `200` metadata with `readUrl` (`null` until `available`, `null` on missing bytes); retired/missing → `404`; MinIO down → `503` | — |
+| `DELETE /api/v1/assets/{assetId}` | Retire: `catalog.manage`, `If-Match` (`412`); `204`; unlinks the model image and bumps model `rowVersion`; bytes retained under review; repeat delete → `404` | — |
+| `GET /api/v1/catalog/products/{productId}` | Additive `assetId: string \| null` on each model | `imageUrl` derivation, sparse rules, `503` storage behavior, auth unchanged |
+
+### Endpoint checklist result (D-044)
+
+| Checklist area | Result | Evidence |
+|---|---|---|
+| Contract identity | `PASS` | `CANONICAL`; `/api/v1`, plural kebab-case (`assets`, `upload-requests`), opaque UUIDs, no verb paths (`finalize` is a PATCH body flag, not a path). |
+| Relationships and collections | `PASS` | One-level nesting (`/assets/:id/upload-requests`); no collection surface in this slice. |
+| HTTP semantics | `PASS` | POST create `201`+`Location`; POST upload-request `200` retry-safe; PATCH finalize `200`; GET `200`+`no-store`; DELETE `204`; `405`+`Allow` on wrong methods; no error in `2xx`. |
+| Errors | `PASS` | `400` (idempotency/body), `401/403`, `404` (asset, owner, retired), `409` (key conflict, wrong lifecycle), `412` (stale/missing `If-Match`), `422` (validation, missing/mismatched bytes, with `errors` array), `503` (MinIO); `application/problem+json` throughout; internals never leak. |
+| Security and operational scope | `PASS` | `catalog.read` reads / `catalog.manage` mutations via canonical gates; Model-existence object check; server-generated keys under `pats/`; no credentials or keys in responses/logs; browser uploads need no new trust (presigned PUT, content-type signed). |
+| Concurrency and retries | `PASS` | `If-Match`+`rowVersion` on PATCH/DELETE (`412` tested); `Idempotency-Key` on create (replay/conflict tested); upload-request and finalize are retry-safe. |
+| Data and observability | `PASS` | `camelCase` fields; ISO-8601 UTC; `console.error` on storage outage (catalog precedent); no audit/outbox in this slice (asset events are not domain ledger entries — revisit with D-014). |
+| OpenAPI/tests/generated documentation | `PASS` with noted scope | Inline `@openapi` annotations (`assetCreate`, `assetUploadRequestCreate`, `assetFinalize`, `assetGet`, `assetDelete`); `swagger.json`/`swagger.yaml` regenerated (additive); focused tests `tests/assets.contract.spec.ts` (10) + catalog `assetId` case; full suite 489 pass / lint / `tsc` clean; live proof (real auth/DB/MinIO + app service flow) recorded in the D-044 handoff. `endpoints.json`/postman export remains a release-pass residual per precedent. |
+
+No §7 exception required: all changes are additive and non-breaking. Standards checked: v1.2.1 §2, §3, §4, §5 (N/A — no collection), §6, §7, §8, §9, §10, §11, §12.
+
+
+
+## D-045 amendment — QC verdict-only + gate flow (2026-10-01)
+
+User-approved redesign (no production data; destructive schema change allowed). QC tags verdicts only; production owns reasons and batch fate. Print is label-only (reverses D-042 first-print issuance); release happens on scan-out; receive requires a covering PASSED; production closes FG.
+
+| Operation | Contract amendment | Unchanged behavior |
+|---|---|---|
+| `POST /api/v1/quality-inspections/{id}/decisions` | Verdict-only `{decision}` (strict; reason/disposition fields rejected `422`); non-pass quarantines batch HELD; PASSED leaves ACTIVE untouched; response drops `batchStatus` | `201`, `Location`, `If-Match`/`412`, `Idempotency-Key`, `quality.resolve` + stage allow-list |
+| `POST /api/v1/defect-analyses` | New CANONICAL command: production analysis `{inspectionId, reasonCode, reasonNote?, disposition REWORK/SCRAP/WAIVE}`; `execution.write`; one per inspection (`409` duplicate); PASSED-verdict and terminal-batch refuse (`409`); REWORK→HELD, SCRAP→SCRAPPED, WAIVE→ACTIVE (covering PASSED still required) | `201`, `Location`, `ETag`, idempotency replay/conflict, RFC 9457 errors |
+| `POST /api/v1/stage-events` | Scan-out release: accepted pre-route scan posts ISSUANCE + advances origin hop atomically; accepted downstream scan requires covering PASSED (`409` otherwise); HELD/CLOSED/SCRAPPED scans refuse (`409`) | `201`, routing-violation path, idempotency, `execution.write` |
+| `POST /api/v1/batches/{batchId}/closure` | New CANONICAL command: FG close guarded by route completion + covering PASSED on final hop; `execution.write`; terminal refuses (`409`) | `201`, `Location`, idempotency, audit |
+| `GET /api/v1/batch-positions` | Additive `qcGate` per row (`RELEASE/PASSED/PENDING/HELD/COMPLETE/BLOCKED`) | Envelope, pagination, `execution.read`, route steps unchanged |
+| `GET /api/v1/projects/{projectId}` | `completionReady` + `qcDisposition` follow the terminal rule (CLOSED, or SCRAPPED via SCRAP analysis); disposition vocabulary gains `REWORK/SCRAP/WAIVE` | Shape, ETag, auth unchanged |
+| `GET /api/v1/batches/resolve`, `GET /api/v1/quality-inspections*` | Decision payloads drop reason/disposition fields | Paths, auth, pagination unchanged |
+
+### Endpoint checklist result (D-045)
+
+| Checklist area | Result | Evidence |
+|---|---|---|
+| Contract identity | `PASS` | `CANONICAL`; `/api/v1`, plural kebab-case, opaque UUIDs, no verbs (closure is a collection-style command resource, precedent: approvals). |
+| Relationships and collections | `PASS` | One-level nesting (`/batches/:id/closure`); no new collection filters; `{data,pagination}` untouched. |
+| HTTP semantics | `PASS` | POST create `201`+`Location`; no error in `2xx`; scan-out folded into the existing scan command (no new verb path for release). |
+| Errors | `PASS` | `400` (idempotency/body), `401/403`, `404`, `409` (duplicate analysis, terminal, gate, quarantine, route-incomplete), `412` (decision concurrency), `422` (strict verdict/analysis validation); `application/problem+json` throughout. |
+| Security and operational scope | `PASS` | `quality.resolve` verdicts (+stage allow-list) vs `execution.write` production analysis/close/release; server-resolved deployment context; object checks (inspection/batch existence, terminal guards). |
+| Concurrency and retries | `PASS` | `If-Match` on decisions; `Idempotency-Key` replay/conflict on all commands (scan-out issuance covered by the scan key); analysis unique-per-inspection as race guard. |
+| Data and observability | `PASS` | camelCase, UTC, audit (`QUALITY_DECISION_RECORDED`, `DEFECT_ANALYSIS_RECORDED`, `BATCH_CLOSED`, scan-out `STAGE_EVENT_ACCEPTED` + issuance) + outbox per command. |
+| OpenAPI/tests/generated documentation | `PASS` with noted scope | Source yamls updated (decision rewrite, defect-analyses, batch closure, qcGate); focused tests `quality-stage-allow-list` (verdict + 6 analysis cases), `print-job` (label-only rewrite), `canonical-command` (scan-out/gate/quarantine), `canonical-domain-read` (qcGate matrix), `pats-seed-contract` (routeStepId + verdict seed); full suite green; live proof pending headed e2e. Generated `swagger`/`postman`/`endpoints.json` export remains a release-pass residual per precedent. |
+
+No §7 exception required: breaking pre-production corrections on an undeployed contract with the sole consumer migrated in-slice (app phase follows). Standards checked: v1.2.1 §2, §3, §4, §5, §6, §7, §8, §9, §10, §11, §12.
+
+## D-047 amendment � release CT gate, label-grain reads (2026-10-02)
+
+| Operation | Contract amendment | Unchanged behavior |
+|---|---|---|
+| `PATCH /api/v1/projects/{projectId}` with `status: RELEASED` | Refused `409` while any routed part step lacks a designed cycle time (override, then snapshot; parts with no route steps are not reported) | `201`-family release, mint, activation, `If-Match`, idempotency, other `409` cases unchanged |
+| `GET /api/v1/batches` | Additive `lot_id` / `project_id` filters; lot-scoped reads order by part code then series; each row carries derived `qcDisposition` | Default ordering, envelope, `batch_id` filter, capabilities unchanged |
+| `GET /api/v1/projects/{projectId}` | Additive `?batches=summary`: lot batch counts with no batch rows (terminal guard exact via narrow rows); unknown mode value `400` | Default full detail unchanged |
+
+### Endpoint checklist result (D-047)
+
+| Checklist area | Result | Evidence |
+|---|---|---|
+| Contract identity | `PASS` | `CANONICAL`; no new paths except query params on existing resources. |
+| Relationships and collections | `PASS` | `snake_case` filters (`lot_id`, `project_id`, `batches`); `data`+`pagination` unchanged. |
+| HTTP semantics | `PASS` | New `409` refusal case only; no new methods or status families. |
+| Errors | `PASS` | RFC 9457 throughout; CT refusal names offending part codes (bounded); invalid mode `400`. |
+| Security and operational scope | `PASS` | `planning.manage` release / `planning.read` + `execution.read` reads unchanged; Model-existence-grade object checks already present. |
+| Concurrency and retries | `PASS` | `If-Match`/`Idempotency-Key` behavior unchanged. |
+| Data and observability | `PASS` | camelCase, UTC; no new audit surface (release audit event unchanged). |
+| OpenAPI/tests/generated documentation | `PASS` with noted scope | Domain read/write yamls updated; focused tests (release 409/pass pair, batch filters + disposition, summary counts + invalid mode); full suite green. Generated export remains a release-pass residual per precedent. |
+
+No �7 exception required: all changes are additive and non-breaking. Standards checked: v1.2.1 �2, �3, �4, �5, �6, �7, �8, �9, �11, �12.
+
+## D-048 amendment — batch-positions scale compliance (2026-10-03)
+
+| Operation | Contract amendment | Unchanged behavior |
+|---|---|---|
+| GET /api/v1/batch-positions | Enforced page/limit (max 100, offset envelope) per the long-documented pagination contract; per-row outeSteps scoped to the pack own part (same scope the QC gate already used) | Row fields, qcGate vocabulary, execution.read, ordering unchanged |
+
+### Endpoint checklist result (D-048)
+
+| Checklist area | Result | Evidence |
+|---|---|---|
+| Contract identity | PASS | CANONICAL; no new paths; query params on an existing collection. |
+| Relationships and collections | PASS | page/limit only; data+pagination envelope (documented, now honored). |
+| HTTP semantics | PASS | No method/status changes; invalid pagination  0 per shared helper. |
+| Errors | PASS | RFC 9457 throughout; unbounded dump no longer risks (3 via serialization failure. |
+| Security and operational scope | PASS | execution.read unchanged; server-resolved deployment context unchanged. |
+| Concurrency and retries | PASS | Read-only; no concurrency surface. |
+| Data and observability | PASS | camelCase, UTC; row shape preserved except part-scoped steps (every app consumer treats row steps as the pack own route). |
+| OpenAPI/tests/generated documentation | PASS with noted scope | Domain-read yaml updated; focused tests (pagination envelope, part-scope matrix); full suite green; headed e2e re-run. Generated export remains a release-pass residual per precedent. |
