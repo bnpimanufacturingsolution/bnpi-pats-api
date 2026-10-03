@@ -237,6 +237,7 @@ describe("Journey D quality stage allow-list", () => {
 				findMany: async () => [{ stageId: "stage-decoration" }],
 			},
 			qualityInspection: {
+				count: async () => 0,
 				findMany: async (args: { where?: Record<string, unknown> }) => {
 					listWhere = args.where;
 					return [];
@@ -628,7 +629,7 @@ describe("Journey D quality stage allow-list", () => {
 		const listApp = readApp(
 			{
 				qualityStageAssignment: { findMany: async () => [{ stageId: "stage-decoration" }] },
-				qualityInspection: { findMany: async () => [] },
+				qualityInspection: { count: async () => 0, findMany: async () => [] },
 			},
 			readOnly,
 		);
@@ -661,7 +662,7 @@ describe("Journey D quality stage allow-list", () => {
 		const listApp = readApp(
 			{
 				qualityStageAssignment: { findMany: async () => [{ stageId: "stage-decoration" }] },
-				qualityInspection: { findMany: async () => [] },
+				qualityInspection: { count: async () => 0, findMany: async () => [] },
 			},
 			adminAssignments,
 		);

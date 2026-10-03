@@ -38,6 +38,94 @@ function appFor(
 }
 
 describe("canonical PATS domain read contract", () => {
+	it("lists defect analyses with batch/inspection filters in the standard envelope", async () => {
+		let receivedWhere: Record<string, unknown> | undefined;
+		const app = appFor({
+			defectAnalysis: {
+				count: async () => 1,
+				findMany: async (args: { where: Record<string, unknown> }) => {
+					receivedWhere = args.where;
+					return [{
+						id: "analysis-1",
+						inspectionId: "inspection-1",
+						batchId: "batch-1",
+						reasonCode: "PAINT_DEFECT",
+						reasonNote: null,
+						disposition: "REWORK",
+						decidedBySubjectId: "subject-1",
+						decidedAt: new Date("2026-10-01T08:00:00.000Z"),
+						rowVersion: 1,
+						createdAt: new Date("2026-10-01T08:00:00.000Z"),
+						updatedAt: new Date("2026-10-01T08:00:00.000Z"),
+						decidedBySubject: { id: "subject-1", displayNameSnapshot: "Operator" },
+						batch: { id: "batch-1", batchCode: "B-001" },
+						inspection: { id: "inspection-1", stageId: "stage-1", subStageId: null },
+					}];
+				},
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/defect-analyses")
+			.query({ batch_id: "batch-1", page: 1, limit: 10 })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedWhere).to.deep.equal({ batchId: "batch-1" });
+		expect(response.body.pagination).to.deep.equal({ page: 1, pageSize: 10, totalItems: 1, totalPages: 1 });
+		expect(response.body.data).to.have.length(1);
+		expect(response.body.data[0]).to.include({
+			id: "analysis-1",
+			reasonCode: "PAINT_DEFECT",
+			disposition: "REWORK",
+		});
+	});
+
+	it("returns a single defect analysis and 404s unknown ids", async () => {
+		const app = appFor({
+			defectAnalysis: {
+				findUnique: async ({ where }: { where: { id: string } }) =>
+					where.id === "analysis-1"
+						? {
+								id: "analysis-1",
+								inspectionId: "inspection-1",
+								batchId: "batch-1",
+								reasonCode: "PAINT_DEFECT",
+								reasonNote: null,
+								disposition: "REWORK",
+								decidedBySubjectId: "subject-1",
+								decidedAt: new Date("2026-10-01T08:00:00.000Z"),
+								rowVersion: 1,
+								createdAt: new Date("2026-10-01T08:00:00.000Z"),
+								updatedAt: new Date("2026-10-01T08:00:00.000Z"),
+								decidedBySubject: { id: "subject-1", displayNameSnapshot: "Operator" },
+								batch: { id: "batch-1", batchCode: "B-001" },
+								inspection: { id: "inspection-1", stageId: "stage-1", subStageId: null },
+							}
+						: null,
+			},
+		});
+
+		const found = await request(app)
+			.get("/api/v1/defect-analyses/analysis-1")
+			.set("Authorization", "Bearer read-contract-token");
+		expect(found.status).to.equal(200);
+		expect(found.body.id).to.equal("analysis-1");
+
+		const missing = await request(app)
+			.get("/api/v1/defect-analyses/analysis-9")
+			.set("Authorization", "Bearer read-contract-token");
+		expect(missing.status).to.equal(404);
+	});
+
+	it("keeps defect analysis reads behind quality.read (operator denied)", async () => {
+		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+		const response = await request(app)
+			.get("/api/v1/defect-analyses")
+			.set("Authorization", "Bearer read-contract-token");
+		expect(response.status).to.equal(403);
+	});
+
 	it("returns a paginated project summary from server persistence", async () => {
 		let receivedArgs: Record<string, unknown> | undefined;
 		const app = appFor({
@@ -159,6 +247,130 @@ describe("canonical PATS domain read contract", () => {
 		expect(receivedWhere).to.deep.equal({ id: "batch-1" });
 	});
 
+	it("filters batches by lot and project and derives the QC disposition", async () => {
+		let receivedWhere: unknown;
+		let receivedOrder: unknown;
+		const database = {
+			batch: {
+				count: async () => 2,
+				findMany: async ({ where, orderBy }: { where: unknown; orderBy: unknown }) => {
+					receivedWhere = where;
+					receivedOrder = orderBy;
+					return [
+						{
+							id: "batch-1",
+							batchCode: "LOT-001-B001",
+							status: "ACTIVE",
+							plannedQuantity: 200,
+							seriesNumber: 1,
+							seriesCount: 2,
+							part: { id: "part-1", partCode: "PART-1", partName: "Casing" },
+							positionProjection: null,
+							qualityInspections: [{ decisions: [{ decision: "PASSED" }] }],
+							defectAnalyses: [],
+						},
+						{
+							id: "batch-2",
+							batchCode: "LOT-001-B002",
+							status: "ACTIVE",
+							plannedQuantity: 200,
+							seriesNumber: 2,
+							seriesCount: 2,
+							part: { id: "part-1", partCode: "PART-1", partName: "Casing" },
+							positionProjection: null,
+							qualityInspections: [],
+							defectAnalyses: [],
+						},
+					];
+				},
+			},
+		};
+		const scopedApp = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+
+		const response = await request(scopedApp)
+			.get("/api/v1/batches")
+			.query({ lot_id: "lot-1", project_id: "proj-1", limit: 50 })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedWhere).to.deep.equal({ lotId: "lot-1", lot: { projectId: "proj-1" } });
+		expect(receivedOrder).to.deep.equal([
+			{ part: { partCode: "asc" } },
+			{ seriesNumber: "asc" },
+			{ id: "asc" },
+		]);
+		expect(response.body.pagination).to.include({ totalItems: 2 });
+		expect(response.body.data.map((row: { qcDisposition: string | null }) => row.qcDisposition)).to.deep.equal([
+			"PASSED",
+			null,
+		]);
+	});
+
+	it("reads a project summary with batch counts instead of batch rows", async () => {
+		let batchQueried = false;
+		const database = {
+			project: {
+				findUnique: async () => ({
+					id: "project-1",
+					projectCode: "PLAN-001",
+					name: "Big order",
+					status: "RELEASED",
+					rowVersion: 2,
+					createdAt: new Date("2026-07-01T00:00:00.000Z"),
+					releasedAt: new Date("2026-07-02T00:00:00.000Z"),
+					product: null,
+					productSpecification: null,
+					modelRequirements: [],
+					parts: [],
+					partsLists: [],
+					lot: {
+						id: "lot-1",
+						lotCode: "LOT-001",
+						lotName: "Lot 01",
+						partsListId: "route-1",
+						partsListVersion: 1,
+						status: "ACTIVE",
+						requiredProductionQuantity: 400,
+						labelPackSize: 200,
+					},
+				}),
+			},
+			batch: {
+				findMany: async () => {
+					batchQueried = true;
+					return [
+						{ id: "batch-1", status: "CLOSED", qualityInspections: [], defectAnalyses: [] },
+						{
+							id: "batch-2",
+							status: "ACTIVE",
+							qualityInspections: [],
+							defectAnalyses: [],
+						},
+					];
+				},
+			},
+		};
+		const summaryApp = appFor(database);
+
+		const response = await request(summaryApp)
+			.get("/api/v1/projects/project-1")
+			.query({ batches: "summary" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(batchQueried).to.equal(true);
+		expect(response.body.lots[0]).to.include({ lotId: "lot-1", batchCount: 2 });
+		expect(response.body.lots[0].batches).to.deep.equal([]);
+		expect(response.body.completionReady).to.equal(false);
+
+		const invalid = await request(summaryApp)
+			.get("/api/v1/projects/project-1")
+			.query({ batches: "everything" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(invalid.status).to.equal(400);
+	});
+
 	it("exposes configuration reads as server-owned resources", async () => {
 		const database = {
 			stage: {
@@ -183,6 +395,7 @@ describe("canonical PATS domain read contract", () => {
 					findMany: async () => [{ stageId: "stage-assembly" }],
 				},
 				qualityInspection: {
+					count: async () => 1,
 					findMany: async () => [
 						{
 							id: "inspection-1",
@@ -231,6 +444,7 @@ describe("canonical PATS domain read contract", () => {
 	it("returns a server-owned station snapshot with batch identity and route steps", async () => {
 		const app = appFor({
 			batchPositionProjection: {
+				count: async () => 1,
 				findMany: async () => [{
 					batchId: "batch-1",
 					stageId: "stage-injection",
@@ -287,6 +501,12 @@ describe("canonical PATS domain read contract", () => {
 			.set("Authorization", "Bearer read-contract-token");
 
 		expect(response.status).to.equal(200);
+		expect(response.body.pagination).to.deep.equal({
+			page: 1,
+			pageSize: 50,
+			totalItems: 1,
+			totalPages: 1,
+		});
 		expect(response.body.data).to.deep.equal([{
 			batchId: "batch-1",
 			stageId: "stage-injection",
@@ -372,6 +592,7 @@ describe("canonical PATS domain read contract", () => {
 		});
 		const app = appFor({
 			batchPositionProjection: {
+				count: async () => 5,
 				findMany: async () => [
 					// Pre-route: needs scan-out release, not QC.
 					{ ...position("batch-release", "STG-PROJECTS", null), stageId: "STG-PROJECTS" },
@@ -444,6 +665,84 @@ describe("canonical PATS domain read contract", () => {
 			"batch-held": "HELD",
 			"batch-blocked": "BLOCKED",
 		});
+	});
+
+	it("scopes per-row route steps to the pack's own part", async () => {
+		const app = appFor({
+			batchPositionProjection: {
+				count: async () => 1,
+				findMany: async () => [{
+					batchId: "batch-2",
+					stageId: "stage-injection",
+					subStageId: null,
+					routeStepId: null,
+					positionStatus: "ACCEPTED",
+					quantityMagnitude: "12",
+					quantityUom: "EA",
+					projectionVersion: 1,
+					updatedAt: new Date("2026-07-31T01:00:00.000Z"),
+					batch: {
+						id: "batch-2",
+						batchCode: "BATCH-002",
+						barcodeValue: "BATCH-002-QR",
+						lotId: "lot-1",
+						plannedQuantity: 12,
+						labelPackSize: 12,
+						projectModelRequirementId: "requirement-1",
+						seriesNumber: 1,
+						seriesCount: 1,
+						status: "ACTIVE",
+						rowVersion: 2,
+						createdAt: new Date("2026-07-30T01:00:00.000Z"),
+						lot: {
+							id: "lot-1",
+							lotCode: "LOT-001",
+							lotName: "July lot",
+							projectId: "project-1",
+							partsListId: "parts-list-1",
+							project: { id: "project-1", name: "July project", projectCode: "PRJ-JUL", status: "RELEASED" },
+						},
+						part: { id: "part-2", partCode: "PART-002", partName: "Second part" },
+					},
+				}],
+			},
+			routingStep: {
+				findMany: async () => [
+					{
+						id: "route-step-1",
+						partsListId: "parts-list-1",
+						partId: "part-1",
+						stageId: "stage-injection",
+						subStageId: null,
+						stepOrder: 1,
+						part: { id: "part-1", partCode: "PART-001", partName: "Main part" },
+					},
+					{
+						id: "route-step-2",
+						partsListId: "parts-list-1",
+						partId: "part-2",
+						stageId: "stage-injection",
+						subStageId: null,
+						stepOrder: 1,
+						part: { id: "part-2", partCode: "PART-002", partName: "Second part" },
+					},
+				],
+			},
+			qualityInspection: {
+				findMany: async () => [],
+			},
+		}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.get("/api/v1/batch-positions")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(
+			(response.body.data as Array<{ routeSteps: Array<{ routeStepId: string }> }>)[0]?.routeSteps.map(
+				(step) => step.routeStepId,
+			),
+		).to.deep.equal(["route-step-2"]);
 	});
 
 	it("returns server-owned station history from execution evidence", async () => {
@@ -876,6 +1175,7 @@ describe("canonical PATS domain read contract", () => {
 		const app = appFor(
 			{
 				printJob: {
+					count: async () => 1,
 					findMany: async (args: { where: Record<string, unknown> }) => {
 						expect(args.where).to.deep.equal({});
 						return [
@@ -908,6 +1208,7 @@ describe("canonical PATS domain read contract", () => {
 		const app = appFor(
 			{
 				printJob: {
+					count: async () => 1,
 					findMany: async (args: { where: Record<string, unknown> }) => {
 						receivedWhere = args.where;
 						return [
@@ -1215,5 +1516,52 @@ describe("canonical PATS domain read contract", () => {
 
 		expect(response.status).to.equal(400);
 		expect(called).to.equal(false);
+	});
+
+	it("searches the subject directory by display name, email, and login username", async () => {
+		let receivedWhere: Record<string, unknown> | undefined;
+		const receivedCredentialWheres: Array<Record<string, unknown>> = [];
+		const app = appFor({
+			subject: {
+				count: async () => 1,
+				findMany: async (args: { where: Record<string, unknown> }) => {
+					receivedWhere = args.where;
+					return [{
+						id: "subject-1",
+						displayNameSnapshot: "E2E User",
+						emailSnapshot: "e2e.user@pats.local",
+						status: "ACTIVE",
+					}];
+				},
+			},
+			subjectCredential: {
+				findMany: async (args: { where: Record<string, unknown> }) => {
+					receivedCredentialWheres.push(args.where);
+					return [{ subjectId: "subject-1", username: "e2euser1" }];
+				},
+			},
+			subjectAssignment: {
+				findMany: async () => [{ subjectId: "subject-1", key: "operator" }],
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/subjects")
+			.query({ search: "e2euser1" })
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(200);
+		expect(receivedCredentialWheres[0]).to.deep.equal({
+			username: { contains: "e2euser1", mode: "insensitive" },
+		});
+		expect(receivedWhere).to.have.property("OR").with.lengthOf(3);
+		expect(response.body.data).to.deep.equal([{
+			id: "subject-1",
+			displayNameSnapshot: "E2E User",
+			emailSnapshot: "e2e.user@pats.local",
+			status: "ACTIVE",
+			username: "e2euser1",
+			roleBundle: "operator",
+		}]);
 	});
 });

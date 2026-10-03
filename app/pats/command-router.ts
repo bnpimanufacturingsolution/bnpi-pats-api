@@ -373,6 +373,23 @@ function conflict(detail: string): never {
 	throw new CommandProblem(409, "urn:bandai:pats:problem:conflict", "Conflict", detail);
 }
 
+function stepCycleTimeValue(map: unknown, stageId: string, subStageId: string | null): number | null {
+	if (!map || typeof map !== "object" || Array.isArray(map)) return null;
+	const value = (map as Record<string, unknown>)[`${stageId}::${subStageId ?? ""}`];
+	return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 86400 ? value : null;
+}
+
+function resolveStepCycleTime(
+	part: { plannedCycleTimes: unknown; plannedCycleTimesOverride: unknown },
+	stageId: string,
+	subStageId: string | null,
+): number | null {
+	return (
+		stepCycleTimeValue(part.plannedCycleTimesOverride, stageId, subStageId) ??
+		stepCycleTimeValue(part.plannedCycleTimes, stageId, subStageId)
+	);
+}
+
 function staleVersion(): never {
 	throw new CommandProblem(412, "urn:bandai:pats:problem:precondition-failed", "Precondition Failed", "The resource changed since it was read. Reload it before retrying.");
 }
@@ -564,13 +581,36 @@ export function commandRouter(
 						if (current.status !== ProjectLifecycleStatus.DRAFT) conflict("Only draft projects can be released.");
 						const requirements = await transaction.projectModelRequirement.findMany({ where: { projectId: current.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
 						if (requirements.length === 0) conflict("A project with no model requirements cannot be released.");
-						const parts = await transaction.part.findMany({ where: { projectId: current.id }, orderBy: [{ partCode: "asc" }, { id: "asc" }], select: { id: true, partCode: true, projectModelRequirementId: true } });
+						const parts = await transaction.part.findMany({ where: { projectId: current.id }, orderBy: [{ partCode: "asc" }, { id: "asc" }], select: { id: true, partCode: true, projectModelRequirementId: true, plannedCycleTimes: true, plannedCycleTimesOverride: true } });
 						if (parts.length === 0) conflict("A project with no parts cannot be released.");
 						const requirementIds = new Set(requirements.map((row) => row.id));
 						const orphanParts = parts.filter((part) => !part.projectModelRequirementId || !requirementIds.has(part.projectModelRequirementId));
 						if (orphanParts.length > 0) conflict("Every project part must belong to a model requirement before release.");
 						const lot = await transaction.lot.findUnique({ where: { projectId: current.id }, include: { batches: { select: { id: true } } } });
 						if (!lot) conflict("Create the lot before releasing the project.");
+						// Cycle-time gate: every route step of every part must
+						// resolve a designed time (override wins, then the
+						// snapshot) before the order releases to the floor.
+						// Parts with no route steps are covered by routing
+						// validation elsewhere — never double-reported here.
+						if (lot.partsListId) {
+							const routeSteps = await transaction.routingStep.findMany({ where: { partsListId: lot.partsListId }, select: { partId: true, stageId: true, subStageId: true } });
+							const stepsByPart = new Map<string, Array<{ stageId: string; subStageId: string | null }>>();
+							for (const step of routeSteps) {
+								const list = stepsByPart.get(step.partId) ?? [];
+								list.push({ stageId: step.stageId, subStageId: step.subStageId });
+								stepsByPart.set(step.partId, list);
+							}
+							const missingCtCodes = parts
+								.filter((part) => {
+									const steps = stepsByPart.get(part.id) ?? [];
+									if (steps.length === 0) return false;
+									return steps.some((step) => resolveStepCycleTime(part, step.stageId, step.subStageId) === null);
+								})
+								.map((part) => part.partCode)
+								.slice(0, 10);
+							if (missingCtCodes.length > 0) conflict(`Cycle times are missing for route steps of: ${missingCtCodes.join(", ")}. Time every step before release.`);
+						}
 						const spec = await transaction.productSpecification.findUnique({ where: { projectId: current.id }, select: { trayQuantityStandard: true } });
 						const batchSize = spec && spec.trayQuantityStandard > 0 ? spec.trayQuantityStandard : 200;
 						const requirementById = new Map(requirements.map((row) => [row.id, row]));
@@ -889,18 +929,27 @@ export function commandRouter(
 					partOrders.add(order);
 				}
 
-				const previous = await transaction.partsList.findFirst({ where: { projectId: project.id }, orderBy: [{ version: "desc" }, { id: "desc" }], select: { version: true } });
-				const partsList = await transaction.partsList.create({
-					data: {
-						projectId: project.id,
-						version: (previous?.version ?? 0) + 1,
-						status: "DRAFT",
-						sourceRevisionRef: body.sourceRevisionRef ?? null,
-						steps: { create: body.steps.map((step) => ({ partId: step.partId, stageId: step.stageId, subStageId: step.subStageId ?? null, stepOrder: step.stepOrder })) },
-					},
-					select: { id: true, version: true },
-				});
-				const updatedProject = await transaction.project.update({ where: { id: project.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
+			const previous = await transaction.partsList.findFirst({ where: { projectId: project.id }, orderBy: [{ version: "desc" }, { id: "desc" }], select: { version: true } });
+			const partsList = await transaction.partsList.create({
+				data: {
+					projectId: project.id,
+					version: (previous?.version ?? 0) + 1,
+					status: "DRAFT",
+					sourceRevisionRef: body.sourceRevisionRef ?? null,
+					steps: { create: body.steps.map((step) => ({ partId: step.partId, stageId: step.stageId, subStageId: step.subStageId ?? null, stepOrder: step.stepOrder })) },
+				},
+				select: { id: true, version: true },
+			});
+			// The project-owned lot cites the working draft route: without
+			// re-pointing, route add/remove edits would persist a new version
+			// no reader ever renders (reads resolve the lot-cited version).
+			// Safe: route edits are draft-only (released projects are
+			// immutable), and draft lots carry no batches until release mint.
+			await transaction.lot.updateMany({
+				where: { projectId: project.id },
+				data: { partsListId: partsList.id, partsListVersion: partsList.version },
+			});
+			const updatedProject = await transaction.project.update({ where: { id: project.id }, data: { rowVersion: { increment: 1 } }, select: { id: true, rowVersion: true } });
 				await recordCommandSuccess(transaction, req, "PROJECT_PARTS_LIST_VERSION_CREATED", "PartsList", partsList.id, { projectId: project.id, version: partsList.version, stepCount: body.steps.length });
 				return { status: 201, body: { partsListVersionId: partsList.id, version: partsList.version, projectRowVersion: updatedProject.rowVersion }, headers: resourceHeaders(project.id, updatedProject.rowVersion) };
 			});

@@ -803,3 +803,36 @@ sunset, as a scoped v1.2.1 §7 exception (same mechanism as D-038).
 - **Owner:** user, 2026-10-01. **Status:** USER_CONFIRMED_AMENDMENT (this entry).
 - **Review condition:** reopen before production deployment or any external v1 consumer.
 - **Open:** D-009 physical rework loop; FG packing boundary; waiver path/capability; uniform-vs-per-hop gating (uniform default); gate-read staleness residual.
+
+### D-045 addendum — waiver and gating uniformity (2026-10-02)
+
+- **Waiver:** no separate waiver capability. WAIVE is a defect-analysis disposition under the same execution.write gate with mandatory reasonCode and audit (DEFECT_ANALYSIS_RECORDED). A waived pack returns ACTIVE but still requires a covering PASSED for receivability; the waiver never authorizes movement by itself.
+- **Gating uniformity confirmed:** the QC gate applies at every hop with no per-hop configuration surface. Reopen only with a business case naming exempt hops.
+
+### D-046 — hop cycle time: dwell now, required-CT join later (2026-10-02)
+
+- **Required CT stays as-is:** per part per route step via plannedCycleTimes keyed stageId::subStageId. No floor surface resolves it today (planning.read is not a floor capability); no new fetch is added for it.
+- **Hop flow time ships now:** median pack dwell per hop (issuance at step H to next receiving) plus packs completed / in transit, read from the existing inventory ledger, filtered by the desk lot focus, shown on Production Desk Reports. Unattributed rows are skipped, never fabricated.
+- **Station actual CT untouched:** 3600/output per hourly tally remains the station-level actual. A per-hop actual CT waits on per-(part, step) output attribution, which does not exist yet.
+- **Explicitly out of scope:** QC-hold split inside dwell, required-vs-actual variance per hop, last-hop FG dwell semantics (final hops show in-transit by construction).
+
+## D-047 — release requires designed cycle times; label-grain series math (2026-10-02)
+
+- **Decision:** user direction 2026-10-02, general to all products (not B251-specific). (1) Release is refused with `409` while any routed part step lacks a designed cycle time (override wins, then the snapshot; parts with no route steps are a routing matter, never double-reported). The app disables Release with the same rule and keeps the warn banner. (2) Label grain: one Batch = one label = `labelPackSize` pcs (default 200); the tray standard stays a packing fact. Series count = `ceil(requiredQuantity / 200)` labels; a non-even order takes a partial final batch (236,332 / 200 = 1,181 × 200 + 132) — quantities are never rounded away. (3) Series lifecycle: a series stays a planned requirement until its batch is done on the station; completion never renumbers later series. (4) Large-order reads: `GET /batches` gains `lot_id`/`project_id` filters (lot-scoped reads order by part then series) plus derived `qcDisposition`; `GET /projects/{projectId}?batches=summary` returns lot batch counts with no batch rows (terminal guard stays exact via narrow rows). Status: USER_CONFIRMED_AMENDMENT (this entry).
+- **Rationale:** an order must not reach the floor with untimed steps; label counts and series x/y must agree (236,332 pcs at 200/label = 1,182 labels, series 1/1182…); embedded full batch arrays do not scale to thousand-series orders.
+- **Affected surfaces:** `command-router.ts` (release gate), `domain-read.ts` (`/batches` filters + `qcDisposition`, project `batches=summary` + `batchCount`), domain OpenAPI YAML, sibling app table (server paging in API mode, client paging in demo) + release checks + label-grain preference, seeder at 200/label with full per-step CT maps.
+- **Migration impact:** none (no schema change).
+- **Review condition:** reopen before production deployment or any external v1 consumer.
+- **Endpoint standard review (v1.2.1, no §7 exception — all additive):** CANONICAL; plural nouns, no verbs; `snake_case` collection params (`page`/`limit`/`batch_id`/`lot_id`/`project_id`, `batches` mode); `data`+`pagination`; new `409` case on release; RFC 9457 throughout; `planning.manage` release / `planning.read` + `execution.read` reads unchanged; `Idempotency-Key`/`If-Match` unchanged; focused tests (release 409/pass pair, batch filters + disposition, summary counts + invalid mode).
+- **Fix (2026-10-03, headed-verified):** route-version create now re-points the project-owned lot to the new draft version in the same transaction. Previously the new version persisted but the lot kept citing the old one, so step add/remove never rendered (reads resolve the lot-cited version) — the exact "cannot customize routing" report. Draft-only surface (released projects are immutable), so no execution history is rewritten; response shape unchanged.
+
+### D-048 — batch-positions pagination + part-scoped steps (2026-10-03)
+
+- **Bug:** GET /batch-positions ignored pagination and serialized the full table; at 22k rows the per-row route-step fan-out exceeded the V8 string limit (RangeError caught as 503). Floor queues went empty (no printable packs).
+- **Fix:** skip/take + offset envelope per the already-documented pagination contract; row shape unchanged (additive pagination key). App listBatchPositions collects all pages (limit 100, bounded parallelism) and returns the same shape, so no caller changes.
+- **Explicitly deferred:** trimming the per-row routeSteps duplication and line-scoped filtering; residue growth will make full-collection slower over time. Revisit when collection exceeds comfortable floor-load cost.
+
+### D-048 addendum — (folded above)
+
+- **Scale fix:** each row carried its whole parts-list route (120 steps x 23k rows = 800MB+ response, unserializable). Rows now carry only their pack part steps (same scope the QC gate already used internally); every app consumer treats row steps as the pack own route. Full dev collection dropped to ~54MB.
+- **Contract touchpoints updated:** endpoint catalog row and OpenAPI batch-positions operation (paged + part-scoped steps). Generated bundles refresh via repo tooling.

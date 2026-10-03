@@ -83,6 +83,10 @@ export interface CanonicalRouterOptions {
 	domainCommands?: {
 		router: Router;
 	};
+	/** Optional admin subject-management boundary (GET single, POST, PATCH on /subjects). */
+	subjectAdmin?: {
+		router: Router;
+	};
 }
 
 interface CanonicalIdentityRequest extends Request {
@@ -694,6 +698,7 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			"/inventory-transactions",
 			"/routing-violations",
 			"/quality-inspections",
+			"/defect-analyses",
 			"/print-jobs",
 			"/dashboard-summaries",
 			"/reports",
@@ -754,6 +759,20 @@ export function canonicalRouter(options: CanonicalRouterOptions = {}): Router {
 			next();
 		};
 		router.use(domainCommandIdentityGate, options.domainCommands.router);
+	}
+
+	if (options.subjectAdmin) {
+		const subjectAdminIdentity =
+			identityMiddleware ??
+			((_req: Request, res: Response) => identityUnavailable(_req, res));
+		const subjectAdminIdentityGate: RequestHandler = (req, res, next) => {
+			if (req.path === "/subjects" || req.path.startsWith("/subjects/")) {
+				subjectAdminIdentity(req, res, next);
+				return;
+			}
+			next();
+		};
+		router.use(subjectAdminIdentityGate, options.subjectAdmin.router);
 	}
 
 	router.use((req: Request, res: Response) => {

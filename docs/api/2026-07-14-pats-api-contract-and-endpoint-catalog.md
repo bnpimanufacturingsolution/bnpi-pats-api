@@ -672,3 +672,45 @@ User-approved redesign (no production data; destructive schema change allowed). 
 | OpenAPI/tests/generated documentation | `PASS` with noted scope | Source yamls updated (decision rewrite, defect-analyses, batch closure, qcGate); focused tests `quality-stage-allow-list` (verdict + 6 analysis cases), `print-job` (label-only rewrite), `canonical-command` (scan-out/gate/quarantine), `canonical-domain-read` (qcGate matrix), `pats-seed-contract` (routeStepId + verdict seed); full suite green; live proof pending headed e2e. Generated `swagger`/`postman`/`endpoints.json` export remains a release-pass residual per precedent. |
 
 No §7 exception required: breaking pre-production corrections on an undeployed contract with the sole consumer migrated in-slice (app phase follows). Standards checked: v1.2.1 §2, §3, §4, §5, §6, §7, §8, §9, §10, §11, §12.
+
+## D-047 amendment � release CT gate, label-grain reads (2026-10-02)
+
+| Operation | Contract amendment | Unchanged behavior |
+|---|---|---|
+| `PATCH /api/v1/projects/{projectId}` with `status: RELEASED` | Refused `409` while any routed part step lacks a designed cycle time (override, then snapshot; parts with no route steps are not reported) | `201`-family release, mint, activation, `If-Match`, idempotency, other `409` cases unchanged |
+| `GET /api/v1/batches` | Additive `lot_id` / `project_id` filters; lot-scoped reads order by part code then series; each row carries derived `qcDisposition` | Default ordering, envelope, `batch_id` filter, capabilities unchanged |
+| `GET /api/v1/projects/{projectId}` | Additive `?batches=summary`: lot batch counts with no batch rows (terminal guard exact via narrow rows); unknown mode value `400` | Default full detail unchanged |
+
+### Endpoint checklist result (D-047)
+
+| Checklist area | Result | Evidence |
+|---|---|---|
+| Contract identity | `PASS` | `CANONICAL`; no new paths except query params on existing resources. |
+| Relationships and collections | `PASS` | `snake_case` filters (`lot_id`, `project_id`, `batches`); `data`+`pagination` unchanged. |
+| HTTP semantics | `PASS` | New `409` refusal case only; no new methods or status families. |
+| Errors | `PASS` | RFC 9457 throughout; CT refusal names offending part codes (bounded); invalid mode `400`. |
+| Security and operational scope | `PASS` | `planning.manage` release / `planning.read` + `execution.read` reads unchanged; Model-existence-grade object checks already present. |
+| Concurrency and retries | `PASS` | `If-Match`/`Idempotency-Key` behavior unchanged. |
+| Data and observability | `PASS` | camelCase, UTC; no new audit surface (release audit event unchanged). |
+| OpenAPI/tests/generated documentation | `PASS` with noted scope | Domain read/write yamls updated; focused tests (release 409/pass pair, batch filters + disposition, summary counts + invalid mode); full suite green. Generated export remains a release-pass residual per precedent. |
+
+No �7 exception required: all changes are additive and non-breaking. Standards checked: v1.2.1 �2, �3, �4, �5, �6, �7, �8, �9, �11, �12.
+
+## D-048 amendment — batch-positions scale compliance (2026-10-03)
+
+| Operation | Contract amendment | Unchanged behavior |
+|---|---|---|
+| GET /api/v1/batch-positions | Enforced page/limit (max 100, offset envelope) per the long-documented pagination contract; per-row outeSteps scoped to the pack own part (same scope the QC gate already used) | Row fields, qcGate vocabulary, execution.read, ordering unchanged |
+
+### Endpoint checklist result (D-048)
+
+| Checklist area | Result | Evidence |
+|---|---|---|
+| Contract identity | PASS | CANONICAL; no new paths; query params on an existing collection. |
+| Relationships and collections | PASS | page/limit only; data+pagination envelope (documented, now honored). |
+| HTTP semantics | PASS | No method/status changes; invalid pagination  0 per shared helper. |
+| Errors | PASS | RFC 9457 throughout; unbounded dump no longer risks (3 via serialization failure. |
+| Security and operational scope | PASS | execution.read unchanged; server-resolved deployment context unchanged. |
+| Concurrency and retries | PASS | Read-only; no concurrency surface. |
+| Data and observability | PASS | camelCase, UTC; row shape preserved except part-scoped steps (every app consumer treats row steps as the pack own route). |
+| OpenAPI/tests/generated documentation | PASS with noted scope | Domain-read yaml updated; focused tests (pagination envelope, part-scope matrix); full suite green; headed e2e re-run. Generated export remains a release-pass residual per precedent. |

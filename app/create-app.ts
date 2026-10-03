@@ -23,6 +23,7 @@ import {
 import { patsModule } from "./pats";
 import { domainReadRouter } from "./pats/domain-read";
 import { commandRouter } from "./pats/command-router";
+import { subjectAdminRouter } from "./pats/subject-admin";
 import { catalogController, catalogProductCollectionController } from "./pats/catalog";
 import { catalogFoundationRouter } from "./pats/catalog-foundation";
 import { assetsRouter } from "./pats/assets";
@@ -126,6 +127,9 @@ export function createApp(options: AppOptions = {}): Application {
 			},
 			domainCommands: {
 				router: commandRouter(patsPrisma, requireCanonicalCapability),
+			},
+			subjectAdmin: {
+				router: subjectAdminRouter(patsPrisma, requireCanonicalCapability),
 			},
 		}),
 	);
