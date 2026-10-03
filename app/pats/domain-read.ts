@@ -1,5 +1,5 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
-import { Prisma, type PrismaClient as PatsPrismaClient } from "../../generated/pats-client";
+import { Prisma, type PrismaClient as PatsPrismaClient, type QualityInspectionStatus } from "../../generated/pats-client";
 import { buildOffsetPage, parseOffsetPagination } from "../canonical/collection";
 import { actorId, CommandProblem, sendCommandProblem } from "./command-support";
 import { parseBatchResolveCode, resolveBatchByCode } from "./batch-resolve";
@@ -113,9 +113,12 @@ function routeResource(route: {
 
 type DashboardProgressSegment = {
 	kind: "stage" | "blocked" | "remaining";
+	stationId?: string;
 	stageId: string;
 	stageName: string;
 	quantity: number;
+	batchCount?: number;
+	blockedBatchCount?: number;
 };
 
 function dashboardProgress(
@@ -128,10 +131,17 @@ function dashboardProgress(
 			requiredProductionQuantity: number;
 			project: { name: string; product: { productName: string } | null };
 		};
-		positionProjection: { stageId: string; quantityMagnitude: unknown } | null;
+		positionProjection: { stageId: string; subStageId?: string | null; quantityMagnitude: unknown } | null;
 	}>,
 	stageRows: Array<{ id: string; name: string; displayOrder: number }>,
 	openViolationRows: Array<{ batchId: string; attemptedStageId: string }>,
+	stationRows: Array<{
+		id: string;
+		name: string;
+		stageId: string;
+		displayOrder: number;
+		boundSteps?: Array<{ stageId: string; subStageId: string | null }>;
+	}> = [],
 ) {
 	const blockedBatchIds = new Set(openViolationRows.map((violation) => violation.batchId));
 	// Only real floor stages count toward progress. Release-minted batches sit at
@@ -148,7 +158,15 @@ function dashboardProgress(
 			activeQuantity: number;
 			activeBatchCount: number;
 			lotIds: Set<string>;
-			stages: Map<string, { healthy: number; blocked: number }>;
+			slots: Map<
+				string,
+				{
+					healthy: number;
+					blocked: number;
+					batchCount: number;
+					blockedBatchCount: number;
+				}
+			>;
 		}
 	>();
 
@@ -160,17 +178,48 @@ function dashboardProgress(
 			activeQuantity: 0,
 			activeBatchCount: 0,
 			lotIds: new Set(),
-			stages: new Map(),
+			slots: new Map(),
 		};
 		const quantity = Number(batch.positionProjection?.quantityMagnitude ?? batch.plannedQuantity);
 		const stageId = batch.positionProjection?.stageId;
 		if (!stageId || !Number.isFinite(quantity)) continue;
 		if (!knownStageIds.has(stageId)) continue;
-		const stage = project.stages.get(stageId) ?? { healthy: 0, blocked: 0 };
+		const subStageId = (batch.positionProjection as { subStageId?: string | null })?.subStageId ?? null;
+
+		let slotKey = stageId;
+		if (stationRows.length > 0) {
+			const matched =
+				(subStageId
+					? stationRows.find((st) =>
+							st.boundSteps?.some(
+								(step) => step.stageId === stageId && step.subStageId === subStageId,
+							),
+						)
+					: undefined) ??
+				stationRows.find((st) =>
+					st.boundSteps?.some(
+						(step) => step.stageId === stageId && step.subStageId == null,
+					),
+				) ??
+				stationRows.find((st) => st.stageId === stageId);
+			if (matched) slotKey = matched.id;
+		}
+
+		const slot = project.slots.get(slotKey) ?? {
+			healthy: 0,
+			blocked: 0,
+			batchCount: 0,
+			blockedBatchCount: 0,
+		};
 		const isBlocked = blockedBatchIds.has(batch.id);
-		if (isBlocked) stage.blocked += quantity;
-		else stage.healthy += quantity;
-		project.stages.set(stageId, stage);
+		slot.batchCount += 1;
+		if (isBlocked) {
+			slot.blocked += quantity;
+			slot.blockedBatchCount += 1;
+		} else {
+			slot.healthy += quantity;
+		}
+		project.slots.set(slotKey, slot);
 		if (!project.lotIds.has(batch.lot.id)) {
 			project.plannedQuantity += batch.lot.requiredProductionQuantity;
 			project.lotIds.add(batch.lot.id);
@@ -184,15 +233,62 @@ function dashboardProgress(
 		.map(([projectId, project]) => {
 			const effectiveTotal = Math.max(project.plannedQuantity, project.activeQuantity);
 			const segments: DashboardProgressSegment[] = [];
-			for (const stage of stageRows) {
-				const quantities = project.stages.get(stage.id);
-				if (!quantities) continue;
-				if (quantities.healthy > 0) segments.push({ kind: "stage", stageId: stage.id, stageName: stage.name, quantity: quantities.healthy });
-				if (quantities.blocked > 0) segments.push({ kind: "blocked", stageId: stage.id, stageName: stage.name, quantity: quantities.blocked });
+
+			if (stationRows.length > 0) {
+				for (const station of stationRows) {
+					const quantities = project.slots.get(station.id);
+					if (!quantities) continue;
+					const totalQty = quantities.healthy + quantities.blocked;
+					if (totalQty > 0) {
+						segments.push({
+							kind: "stage",
+							stationId: station.id,
+							stageId: station.stageId,
+							stageName: station.name,
+							quantity: totalQty,
+							batchCount: quantities.batchCount,
+							blockedBatchCount: quantities.blockedBatchCount,
+						});
+					}
+				}
+			} else {
+				for (const stage of stageRows) {
+					const quantities = project.slots.get(stage.id);
+					if (!quantities) continue;
+					if (quantities.healthy > 0)
+						segments.push({
+							kind: "stage",
+							stageId: stage.id,
+							stageName: stage.name,
+							quantity: quantities.healthy,
+						});
+					if (quantities.blocked > 0)
+						segments.push({
+							kind: "blocked",
+							stageId: stage.id,
+							stageName: stage.name,
+							quantity: quantities.blocked,
+						});
+				}
 			}
+
 			const remaining = effectiveTotal - project.activeQuantity;
-			if (remaining > 0) segments.push({ kind: "remaining", stageId: "remaining", stageName: "Not started", quantity: remaining });
-			return { projectId, projectName: project.projectName, productName: project.productName, plannedQuantity: project.plannedQuantity, activeQuantity: project.activeQuantity, activeBatchCount: project.activeBatchCount, segments };
+			if (remaining > 0)
+				segments.push({
+					kind: "remaining",
+					stageId: "remaining",
+					stageName: "Not started",
+					quantity: remaining,
+				});
+			return {
+				projectId,
+				projectName: project.projectName,
+				productName: project.productName,
+				plannedQuantity: project.plannedQuantity,
+				activeQuantity: project.activeQuantity,
+				activeBatchCount: project.activeBatchCount,
+				segments,
+			};
 		})
 		.filter((row) => row.segments.length > 0)
 		.sort((left, right) => {
@@ -361,6 +457,15 @@ export function domainReadRouter(
 						rowVersion: true,
 						createdAt: true,
 						releasedAt: true,
+						completedAt: true,
+						// Planned window (added 2026-10-03, schema
+						// 2026-10-02 plannedStartDate/plannedEndDate). Explicit `select`
+						// here, so both must be named or they are silently absent from the
+						// list read while the detail read - which uses `include` - already
+						// carries them. That asymmetry is exactly how a field ends up
+						// half-wired, so it is asserted in the read contract test.
+						plannedStartDate: true,
+						plannedEndDate: true,
 						product: { select: { productName: true } },
 						lot: { select: { id: true, requiredProductionQuantity: true } },
 					},
@@ -378,6 +483,9 @@ export function domainReadRouter(
 			rowVersion: project.rowVersion,
 			createdAt: project.createdAt.toISOString(),
 			releasedAt: date(project.releasedAt),
+			completedAt: date(project.completedAt),
+			plannedStartDate: date(project.plannedStartDate),
+			plannedEndDate: date(project.plannedEndDate),
 		}));
 			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(data, page, totalItems));
 		} catch {
@@ -512,6 +620,12 @@ export function domainReadRouter(
 				product: project.product,
 				productSpecification: project.productSpecification,
 				completedAt: date((project as { completedAt?: Date | null }).completedAt ?? null),
+				// Planned window. `GET /projects/:id` selects with `include`, so these
+				// scalars are already on `project`; they only needed naming on the
+				// wire. `date()` returns null for absent, so an un-planned project
+				// reports an honest null rather than omitting the key.
+				plannedStartDate: date(project.plannedStartDate),
+				plannedEndDate: date(project.plannedEndDate),
 				completionReady,
 				modelRequirements: project.modelRequirements.map((requirement) => ({
 					modelRequirementId: requirement.id,
@@ -622,8 +736,8 @@ export function domainReadRouter(
 					`).then(r => r[0]?.count ?? 0)
 					: database.section.count({ where: whereClause }),
 				searchText.length >= 3
-					? database.$queryRaw<{ id: string; sectionCode: string; name: string; displayOrder: number; isEnabled: boolean; parentSectionId: string | null; stageId: string | null }[]>(Prisma.sql`
-						SELECT s."id", s."sectionCode", s."name", s."displayOrder", s."isEnabled", s."parentSectionId", s."stageId"
+					? database.$queryRaw<{ id: string; sectionCode: string; name: string; displayOrder: number; isEnabled: boolean; productionLineId: string | null; stageId: string | null }[]>(Prisma.sql`
+						SELECT s."id", s."sectionCode", s."name", s."displayOrder", s."isEnabled", s."productionLineId", s."stageId"
 						FROM "Section" s
 						WHERE s."name" % ${searchText} OR s."sectionCode" % ${searchText}
 						ORDER BY s."name" <-> ${searchText}, s."displayOrder" ASC, s."id" ASC
@@ -1813,9 +1927,21 @@ export function domainReadRouter(
 				return;
 			}
 			const status = query(req).status;
-			const where = {
+			const statusText = typeof status === "string" ? status.trim().toUpperCase() : "";
+			const statusFilter =
+				statusText === "OPEN" ||
+				statusText === "IN_PROGRESS" ||
+				statusText === "COMPLETED" ||
+				statusText === "CANCELLED"
+					? (statusText as QualityInspectionStatus)
+					: undefined;
+			if (typeof status === "string" && status.trim() && !statusFilter) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The quality inspection status filter is invalid.");
+				return;
+			}
+			const where: Prisma.QualityInspectionWhereInput = {
 				stageId: { in: allowedStageIds },
-				...(typeof status === "string" && status.trim() ? { status: status.trim() } : {}),
+				...(statusFilter ? { status: statusFilter } : {}),
 			};
 			// D-048 scale compliance: was unbounded with decisions included.
 			const [totalItems, inspections] = await Promise.all([
@@ -1927,7 +2053,7 @@ export function domainReadRouter(
 
 	router.get("/dashboard-summaries", requireCapability("dashboard.read"), async (req, res) => {
 		try {
-			const [projects, activeBatchRows, stageRows, openViolationRows, qualityHolds, inventoryTransactions] = await Promise.all([
+			const [projects, activeBatchRows, stageRows, openViolationRows, qualityHolds, inventoryTransactions, stationRows] = await Promise.all([
 				database.project.count(),
 				database.batch.findMany({
 					where: { status: "ACTIVE" },
@@ -1942,13 +2068,24 @@ export function domainReadRouter(
 								project: { select: { name: true, product: { select: { productName: true } } } },
 							},
 						},
-						positionProjection: { select: { stageId: true, quantityMagnitude: true } },
+						positionProjection: { select: { stageId: true, subStageId: true, quantityMagnitude: true } },
 					},
 				}),
 				database.stage.findMany({ select: { id: true, name: true, displayOrder: true }, orderBy: [{ displayOrder: "asc" }, { id: "asc" }] }),
 				database.routingViolation.findMany({ where: { status: "OPEN" }, select: { batchId: true, attemptedStageId: true } }),
 				database.qualityDecision.count({ where: { decision: "HOLD" } }),
 				database.inventoryTransaction.count(),
+				// NOTE: the Station model was renamed to Section, so this legacy
+				// `station` probe never resolves and always yields []. Kept as-is to
+				// preserve existing dashboard behavior; the cast goes through unknown
+				// because `station` is no longer a key of DomainReadDatabase.
+				typeof (database as unknown as { station?: { findMany?: unknown } }).station?.findMany === "function"
+					? (database as unknown as { station: { findMany: (args: unknown) => Promise<unknown[]> } }).station.findMany({
+							where: { isEnabled: true, NOT: { stageId: "STG-WAREHOUSE" } },
+							orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+							include: { boundSteps: true },
+						})
+					: Promise.resolve([]),
 			]);
 			const activeLots = new Set(activeBatchRows.map((row) => row.lot.id));
 			const activeProjects = new Set(activeBatchRows.map((row) => row.lot.projectId));
@@ -1961,7 +2098,18 @@ export function domainReadRouter(
 				openViolations: openViolationRows.length,
 				qualityHolds,
 				inventoryTransactions,
-				productionProgress: dashboardProgress(activeBatchRows, stageRows, openViolationRows),
+				productionProgress: dashboardProgress(
+					activeBatchRows,
+					stageRows,
+					openViolationRows,
+					stationRows as Array<{
+						id: string;
+						name: string;
+						stageId: string;
+						displayOrder: number;
+						boundSteps?: Array<{ stageId: string; subStageId: string | null }>;
+					}>,
+				),
 			});
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS dashboard data is unavailable.");

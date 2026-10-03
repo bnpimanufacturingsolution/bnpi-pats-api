@@ -73,14 +73,50 @@ const projectCreateSchema = z.object({
 	// suggested at creation). The lot name is the project name.
 	// Requirements may follow on the draft.
 	lotCode: z.string().trim().min(1).max(120).optional(),
+	// Planned production window. Optional and nullable on create: an unplanned
+	// project is a normal state and must not be blocked from being created.
+	// `isoDateTime` so the wire format is fixed server-side rather than trusted
+	// from the client; the pair is range-checked below.
+	plannedStartDate: z.string().datetime({ offset: true }).nullable().optional(),
+	plannedEndDate: z.string().datetime({ offset: true }).nullable().optional(),
 	modelRequirements: z.array(projectModelRequirementInputSchema).max(100).default([]),
 }).strict();
+
+/**
+ * A planned window must not end before it starts. Throws `never` so a handler can
+ * call it inline as a guard, matching the `malformed(...)` convention already used
+ * for every other command rejection in this router.
+ *
+ * Three states are accepted: both absent, both present and ordered, or one present
+ * on its own — a project with a start and no end is a real plan state (work due to
+ * begin, end not yet agreed), and demanding an end would invent a commitment.
+ */
+function requireOrderedPlannedWindow(
+	start: string | null | undefined,
+	end: string | null | undefined,
+): void {
+	if (!start || !end) return;
+	if (new Date(end) < new Date(start)) {
+		malformed("plannedEndDate must not be earlier than plannedStartDate.");
+	}
+}
+
+/** A stored date column as the wire string, or null. Lets the one range rule serve
+ *  both a create body and a patch body that may carry only half the window. */
+function isoStringOrNull(value: Date | null | undefined): string | null {
+	return value instanceof Date ? value.toISOString() : null;
+}
 
 const projectPatchSchema = z.object({
 	name: z.string().trim().min(1).max(240).optional(),
 	productId: z.string().trim().min(1).max(100).nullable().optional(),
 	batchSize: z.number().int().positive().max(1000000).optional(),
 	status: z.enum(["RELEASED", "COMPLETED"]).optional(),
+	// Nullable so a planned window can be CLEARED, not just set. Same rule as the
+	// stage-code patch contract: an explicit `null` is a real instruction and is
+	// distinct from omitting the field.
+	plannedStartDate: z.string().datetime({ offset: true }).nullable().optional(),
+	plannedEndDate: z.string().datetime({ offset: true }).nullable().optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, "At least one mutable field is required.");
 
 const projectModelRequirementsSchema = z.object({
@@ -214,7 +250,17 @@ const stageCreateSchema = z.object({
 	workflowGroupId: z.string().trim().min(1).max(100),
 	name: z.string().trim().min(1).max(160),
 	displayOrder: z.number().int().nonnegative(),
+	code: z.string().trim().max(40).nullable().optional(),
 }).strict();
+
+// Update accepts `code` alone; naming a field is how a caller asks for it to be
+// blanked (null), which is distinct from omitting it.
+const stageUpdateSchema = z.object({
+	name: z.string().trim().min(1).max(160).optional(),
+	code: z.string().trim().max(40).nullable().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, {
+	message: "At least one of name or code must be provided.",
+});
 
 const subStageCreateSchema = z.object({
 	name: z.string().trim().min(1).max(160),
@@ -223,7 +269,15 @@ const subStageCreateSchema = z.object({
 	isBuffer: z.boolean().optional(),
 	hasQualityCheckpoint: z.boolean().optional(),
 	 subProcessGroup: z.string().trim().max(120).nullable().optional(),
+	code: z.string().trim().max(40).nullable().optional(),
 }).strict();
+
+const subStageUpdateSchema = z.object({
+	name: z.string().trim().min(1).max(160).optional(),
+	code: z.string().trim().max(40).nullable().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, {
+	message: "At least one of name or code must be provided.",
+});
 
 const sectionCreateSchema = z.object({
 	name: z.string().trim().min(1).max(160),
@@ -352,7 +406,7 @@ function batchHeaders(id: string, rowVersion: number): Record<string, string> {
 	return { Location: `/api/v1/batches/${id}`, ETag: `"${rowVersion}"` };
 }
 
-function projectResponse(project: { id: string; projectCode: string; name: string; status: string; productId: string | null; rowVersion: number; completedAt?: Date | null; batchSize?: number }) {
+function projectResponse(project: { id: string; projectCode: string; name: string; status: string; productId: string | null; rowVersion: number; completedAt?: Date | null; batchSize?: number; plannedStartDate?: Date | null; plannedEndDate?: Date | null }) {
 	return {
 		projectId: project.id,
 		projectCode: project.projectCode,
@@ -362,6 +416,11 @@ function projectResponse(project: { id: string; projectCode: string; name: strin
 		productId: project.productId,
 		rowVersion: project.rowVersion,
 		completedAt: project.completedAt ? project.completedAt.toISOString() : null,
+		// Carried on every command response too, so a create/patch echoes back exactly
+		// what was stored instead of forcing the client to re-read to see whether its
+		// write landed.
+		plannedStartDate: project.plannedStartDate ? project.plannedStartDate.toISOString() : null,
+		plannedEndDate: project.plannedEndDate ? project.plannedEndDate.toISOString() : null,
 	};
 }
 
@@ -473,6 +532,10 @@ export function commandRouter(
 					const product = await transaction.product.findUnique({ where: { id: body.productId }, select: { id: true } });
 					if (!product) notFound("The requested catalog product was not found.");
 				}
+				// Range-checked before anything is written, so an inverted window fails
+				// the command outright rather than persisting a project nobody can plan
+				// against.
+				requireOrderedPlannedWindow(body.plannedStartDate, body.plannedEndDate);
 			const requirementInputs = body.modelRequirements ?? [];
 			const modelIds = requirementInputs.map((row) => row.modelId);
 			if (new Set(modelIds).size !== modelIds.length) conflict("Each model may appear only once in the requirements.");
@@ -490,6 +553,11 @@ export function commandRouter(
 						name: body.name,
 						status: ProjectLifecycleStatus.DRAFT,
 						productId: body.productId ?? null,
+						// `null` rather than `undefined`: an unplanned project is a real
+						// state, and writing nothing would leave the column to its implicit
+						// default instead of recording "not planned" deliberately.
+						plannedStartDate: body.plannedStartDate ? new Date(body.plannedStartDate) : null,
+						plannedEndDate: body.plannedEndDate ? new Date(body.plannedEndDate) : null,
 					},
 				});
 				await transaction.productSpecification.create({
@@ -739,6 +807,21 @@ export function commandRouter(
 					const product = await transaction.product.findUnique({ where: { id: body.productId }, select: { id: true } });
 					if (!product) notFound("The requested catalog product was not found.");
 				}
+				/*
+				 * The patched window is validated against the STORED value for whichever
+				 * half is NOT being sent. Checking only the two halves present in the body
+				 * would let a patch of just `plannedStartDate` slip past a stored end date
+				 * that is now earlier than it — the common case, since a planner normally
+				 * edits one end at a time.
+				 */
+				requireOrderedPlannedWindow(
+					body.plannedStartDate === undefined
+						? isoStringOrNull(current.plannedStartDate)
+						: body.plannedStartDate,
+					body.plannedEndDate === undefined
+						? isoStringOrNull(current.plannedEndDate)
+						: body.plannedEndDate,
+				);
 			if (body.batchSize !== undefined) {
 				await transaction.productSpecification.updateMany({
 					where: { projectId: current.id },
@@ -754,6 +837,15 @@ export function commandRouter(
 				data: {
 					...(body.name === undefined ? {} : { name: body.name }),
 					...(body.productId === undefined ? {} : { productId: body.productId }),
+					// Explicit `null` clears the window; omitting the field leaves it be.
+					// The `=== undefined` guard is what keeps those two distinct — the same
+					// contract the stage-code patch already follows.
+					...(body.plannedStartDate === undefined
+						? {}
+						: { plannedStartDate: body.plannedStartDate ? new Date(body.plannedStartDate) : null }),
+					...(body.plannedEndDate === undefined
+						? {}
+						: { plannedEndDate: body.plannedEndDate ? new Date(body.plannedEndDate) : null }),
 					rowVersion: { increment: 1 },
 				},
 			});
@@ -1581,7 +1673,7 @@ export function commandRouter(
 				if (!group) notFound("The requested workflow group was not found.");
 				const stage = await transaction.stage.create({ data: body });
 				await recordCommandSuccess(transaction, req, "STAGE_CREATED", "Stage", stage.id, { workflowGroupId: stage.workflowGroupId });
-				return { status: 201, body: { stageId: stage.id, name: stage.name, displayOrder: stage.displayOrder }, headers: { Location: `/api/v1/stages/${stage.id}` } };
+				return { status: 201, body: { stageId: stage.id, name: stage.name, code: stage.code, displayOrder: stage.displayOrder }, headers: { Location: `/api/v1/stages/${stage.id}` } };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
@@ -1593,7 +1685,45 @@ export function commandRouter(
 			const response = await executeCommand(database, req, "subStageCreate", body, async (transaction) => {
 				const subStage = await transaction.subStage.create({ data: body });
 				await recordCommandSuccess(transaction, req, "SUB_STAGE_CREATED", "SubStage", subStage.id, { name: subStage.name });
-				return { status: 201, body: { subStageId: subStage.id, name: subStage.name, displayOrder: subStage.displayOrder }, headers: { Location: `/api/v1/sub-stages/${subStage.id}` } };
+				return { status: 201, body: { subStageId: subStage.id, name: subStage.name, code: subStage.code, displayOrder: subStage.displayOrder }, headers: { Location: `/api/v1/sub-stages/${subStage.id}` } };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.patch("/stages/:stageId", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, stageUpdateSchema);
+			const stageId = req.params.stageId;
+			const response = await executeCommand(database, req, "stageUpdate", { stageId, body }, async (transaction) => {
+				const stage = await transaction.stage.findUnique({ where: { id: stageId }, select: { id: true, name: true } });
+				if (!stage) notFound("The requested stage was not found.");
+				const data: Record<string, unknown> = {};
+				if (body.name !== undefined) data.name = body.name;
+				if (body.code !== undefined) data.code = body.code;
+				const updated = await transaction.stage.update({ where: { id: stageId }, data });
+				await recordCommandSuccess(transaction, req, "STAGE_UPDATED", "Stage", stageId, { name: updated.name, code: updated.code });
+				// No ETag: Stage rows carry no rowVersion validator (last-writer-wins, N/A per standard §9).
+				return { status: 200, body: { stageId: updated.id, name: updated.name, code: updated.code, displayOrder: updated.displayOrder }, headers: {} };
+			});
+			respondCommand(res, response);
+		} catch (error) { commandError(error, req, res, next); }
+	});
+
+	router.patch("/sub-stages/:subStageId", requireCapability("operations.manage", requireCanonicalCapability), async (req, res, next) => {
+		try {
+			const body = parseCommandBody(req, subStageUpdateSchema);
+			const subStageId = req.params.subStageId;
+			const response = await executeCommand(database, req, "subStageUpdate", { subStageId, body }, async (transaction) => {
+				const subStage = await transaction.subStage.findUnique({ where: { id: subStageId }, select: { id: true, name: true } });
+				if (!subStage) notFound("The requested sub-stage was not found.");
+				const data: Record<string, unknown> = {};
+				if (body.name !== undefined) data.name = body.name;
+				if (body.code !== undefined) data.code = body.code;
+				const updated = await transaction.subStage.update({ where: { id: subStageId }, data });
+				await recordCommandSuccess(transaction, req, "SUB_STAGE_UPDATED", "SubStage", subStageId, { name: updated.name, code: updated.code });
+				// No ETag: SubStage rows carry no rowVersion validator (last-writer-wins, N/A per standard §9).
+				return { status: 200, body: { subStageId: updated.id, name: updated.name, code: updated.code, displayOrder: updated.displayOrder }, headers: {} };
 			});
 			respondCommand(res, response);
 		} catch (error) { commandError(error, req, res, next); }
