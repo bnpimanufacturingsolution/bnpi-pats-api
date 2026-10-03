@@ -323,6 +323,7 @@ describe("canonical PATS command contract", () => {
 	});
 
 	it("creates a new draft route version and validates server-owned route identity", async () => {
+		let lotCitation: unknown;
 		const database = {
 			idempotencyRecord: {
 				findUnique: async () => null,
@@ -335,28 +336,40 @@ describe("canonical PATS command contract", () => {
 				findUnique: async () => ({ id: "project-1", status: "DRAFT", rowVersion: 1 }),
 				update: async () => ({ id: "project-1", rowVersion: 2 }),
 			},
-			part: { findMany: async () => [{ id: "part-1" }] },
-			stage: { findMany: async () => [{ id: "stage-1" }] },
-			subStage: { findMany: async () => [] },
-			partsList: {
-				findFirst: async () => ({ version: 1 }),
-				create: async () => ({ id: "parts-list-2", version: 2 }),
+		part: { findMany: async () => [{ id: "part-1" }] },
+		stage: { findMany: async () => [{ id: "stage-1" }] },
+		subStage: { findMany: async () => [] },
+		lot: {
+			updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+				lotCitation = { where, data };
+				return { count: 1 };
 			},
-			auditRecord: { create: async () => undefined },
-			outboxMessage: { create: async () => undefined },
-		};
-		const app = appFor(database);
-		const response = await request(app)
-			.post("/api/v1/projects/plan-1/parts-list-versions")
-			.set("Authorization", "Bearer command-token")
-			.set("Idempotency-Key", "route-version-1")
-			.set("If-Match", '"1"')
-			.send({ steps: [{ partId: "part-1", stageId: "stage-1", stepOrder: 1 }] });
+		},
+		partsList: {
+			findFirst: async () => ({ version: 1 }),
+			create: async () => ({ id: "parts-list-2", version: 2 }),
+		},
+		auditRecord: { create: async () => undefined },
+		outboxMessage: { create: async () => undefined },
+	};
+	const app = appFor(database);
+	const response = await request(app)
+		.post("/api/v1/projects/plan-1/parts-list-versions")
+		.set("Authorization", "Bearer command-token")
+		.set("Idempotency-Key", "route-version-1")
+		.set("If-Match", '"1"')
+		.send({ steps: [{ partId: "part-1", stageId: "stage-1", stepOrder: 1 }] });
 
-		expect(response.status).to.equal(201);
-		expect(response.headers.etag).to.equal('"2"');
-		expect(response.body).to.deep.include({ partsListVersionId: "parts-list-2", version: 2, projectRowVersion: 2 });
+	expect(response.status).to.equal(201);
+	expect(response.headers.etag).to.equal('"2"');
+	expect(response.body).to.deep.include({ partsListVersionId: "parts-list-2", version: 2, projectRowVersion: 2 });
+	// The project-owned lot follows the new draft route — otherwise the
+	// saved steps persist a version no reader renders.
+	expect(lotCitation).to.deep.equal({
+		where: { projectId: "project-1" },
+		data: { partsListId: "parts-list-2", partsListVersion: 2 },
 	});
+});
 
 	it("fails command access closed without planning.manage", async () => {
 		const app = appFor({}, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
@@ -446,8 +459,11 @@ describe("canonical PATS command contract", () => {
 			},
 			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
 			batch: {
-				findUnique: async () => ({ id: "batch-1", lotId: "lot-1", partId: "part-1", lot: { id: "lot-1", partsListId: "route-1" }, positionProjection: null }),
+				findUnique: async () => ({ id: "batch-1", lotId: "lot-1", partId: "part-1", status: "ACTIVE", currentStageId: "STG-PROJECTS", currentSubStageId: null, plannedQuantity: 240, lot: { id: "lot-1", partsListId: "route-1" }, positionProjection: null }),
 				update: async () => undefined,
+			},
+			inventoryTransaction: {
+				create: async () => ({ id: "issuance-1" }),
 			},
 			partsList: {
 				findUnique: async () => ({ steps: [{ id: "step-1", partId: "part-1", stageId: "stage-1", subStageId: null, stepOrder: 1 }] }),
@@ -469,6 +485,158 @@ describe("canonical PATS command contract", () => {
 
 		expect(response.status).to.equal(201);
 		expect(response.body).to.deep.equal({ stageEventId: "event-1", status: "ACCEPTED", routingViolationId: null });
+	});
+
+	function scanDatabase(overrides: Record<string, unknown> = {}) {
+		return {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "idempotency-stage", ...data }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(scanDatabase(overrides)),
+			batch: {
+				findUnique: async () => ({
+					id: "batch-1",
+					lotId: "lot-1",
+					partId: "part-1",
+					status: "ACTIVE",
+					currentStageId: "stage-1",
+					currentSubStageId: null,
+					plannedQuantity: 240,
+					lot: { id: "lot-1", partsListId: "route-1" },
+					positionProjection: {
+						stageId: "stage-1",
+						subStageId: null,
+						routeStepId: "step-1",
+					},
+				}),
+				update: async () => undefined,
+			},
+			inventoryTransaction: {
+				create: async () => ({ id: "issuance-1" }),
+			},
+			partsList: {
+				findUnique: async () => ({
+					steps: [
+						{ id: "step-1", partId: "part-1", stageId: "stage-1", subStageId: null, stepOrder: 1 },
+						{ id: "step-2", partId: "part-1", stageId: "stage-2", subStageId: null, stepOrder: 2 },
+					],
+				}),
+			},
+			stageEvent: {
+				create: async () => ({ id: "event-1", batchId: "batch-1", status: "ACCEPTED" }),
+			},
+			batchPositionProjection: { update: async () => undefined },
+			qualityInspection: { findFirst: async () => null },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+			...overrides,
+		};
+	}
+
+	it("scan-out releases a pre-route pack with its issuance", async () => {
+		let issuance: Record<string, unknown> | null = null;
+		const database = scanDatabase({
+			batch: {
+				findUnique: async () => ({
+					id: "batch-1",
+					lotId: "lot-1",
+					partId: "part-1",
+					status: "ACTIVE",
+					currentStageId: "STG-PROJECTS",
+					currentSubStageId: null,
+					plannedQuantity: 240,
+					lot: { id: "lot-1", partsListId: "route-1" },
+					positionProjection: null,
+				}),
+				update: async () => undefined,
+			},
+			inventoryTransaction: {
+				create: async ({ data }: { data: Record<string, unknown> }) => {
+					issuance = data;
+					return { id: "issuance-1" };
+				},
+			},
+		});
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.post("/api/v1/stage-events")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "scan-out-1")
+			.send({ batchId: "batch-1", stageId: "stage-1", eventType: "STAGE_SCAN_RECORDED" });
+
+		expect(response.status).to.equal(201);
+		expect(issuance).to.include({
+			transactionType: "ISSUANCE",
+			batchId: "batch-1",
+			expectedQuantity: 240,
+			actualQuantity: 240,
+			status: "ACCEPTED",
+		});
+	});
+
+	it("refuses a downstream receive without a covering QC pass (409)", async () => {
+		const app = appFor(scanDatabase(), [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.post("/api/v1/stage-events")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "scan-gated-1")
+			.send({ batchId: "batch-1", stageId: "stage-2", eventType: "STAGE_SCAN_RECORDED" });
+
+		expect(response.status).to.equal(409);
+	});
+
+	it("receives downstream once the covering step reads PASSED", async () => {
+		const database = scanDatabase({
+			qualityInspection: {
+				findFirst: async () => ({
+					id: "inspection-1",
+					decisions: [{ decision: "PASSED" }],
+				}),
+			},
+		});
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+
+		const response = await request(app)
+			.post("/api/v1/stage-events")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "scan-gated-2")
+			.send({ batchId: "batch-1", stageId: "stage-2", eventType: "STAGE_SCAN_RECORDED" });
+
+		expect(response.status).to.equal(201);
+		expect(response.body.status).to.equal("ACCEPTED");
+	});
+
+	it("refuses scans on held and terminal batches (409)", async () => {
+		for (const status of ["HELD", "SCRAPPED", "CLOSED"]) {
+			const database = scanDatabase({
+				batch: {
+					findUnique: async () => ({
+						id: "batch-1",
+						lotId: "lot-1",
+						partId: "part-1",
+						status,
+						currentStageId: "stage-1",
+						currentSubStageId: null,
+						plannedQuantity: 240,
+						lot: { id: "lot-1", partsListId: "route-1" },
+						positionProjection: { stageId: "stage-1", subStageId: null, routeStepId: "step-1" },
+					}),
+					update: async () => undefined,
+				},
+			});
+			const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "operator", status: "ACTIVE" }]);
+			const response = await request(app)
+				.post("/api/v1/stage-events")
+				.set("Authorization", "Bearer command-token")
+				.set("Idempotency-Key", `scan-${status}`)
+				.send({ batchId: "batch-1", stageId: "stage-2", eventType: "STAGE_SCAN_RECORDED" });
+			expect(response.status, status).to.equal(409);
+		}
 	});
 
 	it("keeps quality commands behind the quality resolver capability", async () => {
@@ -1322,6 +1490,135 @@ describe("canonical PATS command contract", () => {
 		});
 		expect(batchUpdates).to.have.lengthOf(1);
 		expect(batchUpdates[0].data).to.deep.equal({ status: "ACTIVE" });
+	});
+
+	it("refuses release while a routed part step has no designed cycle time", async () => {
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-release-ct" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			project: {
+				findUnique: async () => ({ id: "proj-1", status: "DRAFT", rowVersion: 1 }),
+				update: async () => ({ id: "proj-1" }),
+			},
+			projectModelRequirement: {
+				findMany: async () => [{ id: "requirement-1", modelId: "model-1", requiredQuantity: 400 }],
+			},
+			part: {
+				findMany: async () => [
+					{
+						id: "part-1",
+						partCode: "PART-001",
+						projectModelRequirementId: "requirement-1",
+						plannedCycleTimes: { "stage-injection::": 25 },
+						plannedCycleTimesOverride: null,
+					},
+				],
+			},
+			lot: {
+				findUnique: async () => ({ id: "lot-1", lotCode: "MLT-001", partsListId: "list-1", batches: [] }),
+			},
+			routingStep: {
+				findMany: async () => [
+					{ partId: "part-1", stageId: "stage-injection", subStageId: null },
+					{ partId: "part-1", stageId: "stage-decoration", subStageId: "sub-1" },
+				],
+			},
+			productSpecification: { findUnique: async () => ({ trayQuantityStandard: 200 }) },
+			batch: {
+				count: async () => 0,
+				aggregate: async () => ({ _sum: { plannedQuantity: null } }),
+				create: async () => ({ id: "batch-mint-1" }),
+				updateMany: async () => ({ count: 0 }),
+			},
+			batchPositionProjection: { create: async () => undefined },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
+		const response = await request(app)
+			.patch("/api/v1/projects/proj-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "project-release-ct-block")
+			.set("If-Match", '"1"')
+			.send({ status: "RELEASED" });
+
+		expect(response.status).to.equal(409);
+		expect(response.body.detail).to.contain("PART-001");
+	});
+
+	it("releases when every routed step resolves a cycle time", async () => {
+		const batchUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
+		const database = {
+			idempotencyRecord: {
+				findUnique: async () => null,
+				create: async () => ({ id: "idempotency-release-ct-ok" }),
+				update: async () => undefined,
+				delete: async () => undefined,
+			},
+			$transaction: async (work: (transaction: Record<string, unknown>) => Promise<unknown>) => work(database),
+			project: {
+				findUnique: async () => ({ id: "proj-1", status: "DRAFT", rowVersion: 1 }),
+				update: async () => ({
+					id: "proj-1",
+					projectCode: "PRJ-001",
+					name: "CT run",
+					status: "RELEASED",
+					productId: null,
+					rowVersion: 2,
+				}),
+			},
+			projectModelRequirement: {
+				findMany: async () => [{ id: "requirement-1", modelId: "model-1", requiredQuantity: 400 }],
+			},
+			part: {
+				findMany: async () => [
+					{
+						id: "part-1",
+						partCode: "PART-001",
+						projectModelRequirementId: "requirement-1",
+						plannedCycleTimes: { "stage-injection::": 25, "stage-decoration::sub-1": 40 },
+						plannedCycleTimesOverride: null,
+					},
+				],
+			},
+			lot: {
+				findUnique: async () => ({ id: "lot-1", lotCode: "MLT-001", partsListId: "list-1", batches: [] }),
+			},
+			routingStep: {
+				findMany: async () => [
+					{ partId: "part-1", stageId: "stage-injection", subStageId: null },
+					{ partId: "part-1", stageId: "stage-decoration", subStageId: "sub-1" },
+				],
+			},
+			productSpecification: { findUnique: async () => ({ trayQuantityStandard: 200 }) },
+			batch: {
+				count: async () => 0,
+				aggregate: async () => ({ _sum: { plannedQuantity: null } }),
+				create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "batch-mint-1", ...data }),
+				updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+					batchUpdates.push({ where, data });
+					return { count: 1 };
+				},
+			},
+			batchPositionProjection: { create: async () => undefined },
+			auditRecord: { create: async () => undefined },
+			outboxMessage: { create: async () => undefined },
+		};
+		const app = appFor(database, [{ kind: "ROLE_BUNDLE", key: "admin", status: "ACTIVE" }]);
+		const response = await request(app)
+			.patch("/api/v1/projects/proj-1")
+			.set("Authorization", "Bearer command-token")
+			.set("Idempotency-Key", "project-release-ct-ok")
+			.set("If-Match", '"1"')
+			.send({ status: "RELEASED" });
+
+		expect(response.status).to.equal(200);
+		expect(response.body).to.include({ projectId: "proj-1", status: "RELEASED" });
 	});
 
 	it("creates a sub-stage", async () => {

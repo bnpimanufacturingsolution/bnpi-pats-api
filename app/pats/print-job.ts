@@ -34,15 +34,11 @@ export type PrintJobRecord = {
 	status: "SENT" | "SIMULATED" | "FAILED";
 	failureReason: string | null;
 	/**
-	 * Origin-hop stage event recorded by this print, if any. Set only when a
-	 * pre-route batch's first successful, route-aligned print advances it
-	 * through its origin hop (print is handoff); null otherwise.
+	 * Retired D-042 origin-hop link. Printing is label-only since D-045, so
+	 * this is always null; the field stays for response-shape stability.
 	 */
 	originStageEventId: string | null;
 };
-
-/** Pre-floor marker for freshly minted Series batches (no Stage row). */
-const PRE_ROUTE_STAGE_ID = "STG-PROJECTS";
 
 export type PrintJobStore = {
 	section: {
@@ -364,17 +360,6 @@ export async function recordPrintJob(
 	const fromStageId = batch.positionProjection?.stageId ?? batch.currentStageId;
 	const fromSubStageId = batch.positionProjection?.subStageId ?? batch.currentSubStageId;
 	const sequence = (await store.printJob.count({ where: { batchId: batch.id, sectionId: station.id } })) + 1;
-	// Counted BEFORE this print is recorded: first SUCCESSFUL print issues (one
-	// ISSUANCE per pack, ever). A FAILED attempt consumes a sequence but never
-	// blocks the pack's issuance — its retry is a fresh print (seq 2+) and posts
-	// the move then. Reprints (reprintOf set) never issue again.
-	const priorSuccessfulPrints = await store.printJob.count({
-		where: {
-			batchId: batch.id,
-			sectionId: station.id,
-			status: { not: "FAILED" },
-		},
-	});
 	const language = (station.printerLanguage ?? "ZPL").toUpperCase();
 	const binding = resolvePrinterBinding(station);
 	const ir = buildLabelIr({
@@ -418,94 +403,12 @@ export async function recordPrintJob(
 		},
 	});
 
-	// First SUCCESSFUL print issues (see priorSuccessfulPrints above).
-	const shouldIssue =
-		!input.reprintOf &&
-		delivered.status !== "FAILED" &&
-		nextStep &&
-		Boolean(batch.part.id) &&
-		priorSuccessfulPrints === 0;
-	if (shouldIssue && nextStep) {
-		// Plan vs reality on the ledger: expected = planned pack quantity,
-		// actual = the pcs the LL counted into the tray. Equal → ACCEPTED;
-		// different → RECORDED (variance surfaces in Reports via the part's
-		// varianceRule) — release is never blocked.
-		const hasVariance = labelQuantity !== plannedQuantity;
-		await store.inventoryTransaction.create({
-			data: {
-				transactionType: "ISSUANCE",
-				batchId: batch.id,
-				partId: batch.part.id,
-				lotId: batch.lot.id,
-				fromStageId,
-				fromSubStageId,
-				toStageId: nextStep.stageId,
-				toSubStageId: nextStep.subStageId,
-				expectedQuantity: plannedQuantity,
-				actualQuantity: labelQuantity,
-				recordedAt: new Date(),
-				recordedBy: input.actor,
-				recordedBySubjectId: input.actorSubjectId,
-				status: hasVariance ? "RECORDED" : "ACCEPTED",
-			},
-		});
-	}
-
-	// Origin handoff: a pre-route batch's first successful, route-aligned print
-	// also records its origin route hop. Freshly minted Series batches sit at
-	// the STG-PROJECTS pre-floor marker with next = step 1, and the origin desk
-	// has no scan loop (Injection has no Receiving), so no other writer can
-	// advance them — without this, downstream arrival queues would never see
-	// the work. The hop is always the expected next step, so it is ACCEPTED,
-	// never a violation; misaligned sections and mid-route batches print
-	// labels only. Atomic with the print job and issuance above.
-	let originStageEventId: string | null = null;
-	const preRouteStageId = batch.positionProjection?.stageId ?? batch.currentStageId;
-	if (shouldIssue && nextStep && preRouteStageId === PRE_ROUTE_STAGE_ID && station.stageId === nextStep.stageId) {
-		const originEvent = await store.stageEvent.create({
-			data: {
-				stageId: nextStep.stageId,
-				subStageId: nextStep.subStageId,
-				eventType: "STAGE_SCAN_RECORDED",
-				batchId: batch.id,
-				lotId: batch.lot.id,
-				partId: batch.part.id,
-				quantity: labelQuantity,
-				occurredAt: new Date(),
-				actor: input.actor,
-				isRoutingViolation: false,
-				status: "ACCEPTED",
-				routeStepId: nextStep.id,
-				actorSubjectId: input.actorSubjectId,
-				quantityMagnitude: String(labelQuantity),
-				quantityUom: "EA",
-				usageBasis: null,
-				sourceRepresentation: batch.barcodeValue,
-			},
-		});
-		originStageEventId = originEvent.id;
-		await store.batch.update({
-			where: { id: batch.id },
-			data: {
-				currentStageId: nextStep.stageId,
-				currentSubStageId: nextStep.subStageId,
-				rowVersion: { increment: 1 },
-			},
-		});
-		await store.batchPositionProjection.update({
-			where: { batchId: batch.id },
-			data: {
-				stageId: nextStep.stageId,
-				subStageId: nextStep.subStageId,
-				routeStepId: nextStep.id,
-				lastEventId: originEvent.id,
-				positionStatus: "ACCEPTED",
-				quantityMagnitude: String(labelQuantity),
-				quantityUom: "EA",
-			},
-		});
-	}
-
+	// D-045 reversal (2026-10-01): printing is label-only. A print creates
+	// the PENDING output — no issuance, no route advance. Release happens
+	// exclusively through the scan-out path (stage-event scan of a pre-route
+	// pack at its step-1 station), which posts the ISSUANCE and the origin
+	// hop. Reprints inherit the original row's quantity so the label face
+	// never drifts from what physically shipped.
 	return {
 		id: created.id,
 		batchId: batch.id,
@@ -517,6 +420,6 @@ export async function recordPrintJob(
 		language,
 		status: delivered.status,
 		failureReason: delivered.failureReason,
-		originStageEventId,
+		originStageEventId: null,
 	};
 }

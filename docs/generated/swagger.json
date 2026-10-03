@@ -1002,6 +1002,34 @@
           "minLength": 1
         }
       },
+      "LotId": {
+        "name": "lot_id",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "ProjectFilterId": {
+        "name": "project_id",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "BatchMode": {
+        "name": "batches",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "full",
+            "summary"
+          ],
+          "default": "full"
+        }
+      },
       "ProjectId": {
         "name": "projectId",
         "in": "path",
@@ -2161,7 +2189,7 @@
     "/api/pats/catalog/products/{productId}": {
       "get": {
         "summary": "Read a workspace-scoped PATS product catalog record",
-        "description": "Returns Product -> Model -> ModelPart data without legacy seed fallback. Optional private imageObjectKey metadata is resolved to a short-lived read URL and is never returned.",
+        "description": "Returns Product -> Model -> ModelPart data without legacy seed fallback. Optional private imageObjectKey metadata is resolved to a short-lived read URL and is never returned. A managed assetId handle is exposed for image replace/remove.",
         "tags": [
           "PATS Catalog"
         ],
@@ -2535,6 +2563,217 @@
           },
           "409": {
             "description": "Published part or project parts still reference it"
+          },
+          "412": {
+            "description": "Stale or missing If-Match"
+          }
+        }
+      }
+    },
+    "/api/v1/assets": {
+      "post": {
+        "operationId": "assetCreate",
+        "summary": "Register a model image asset for direct upload",
+        "tags": [
+          "PATS Assets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Asset metadata registered; no bytes stored yet"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "catalog.manage capability required"
+          },
+          "404": {
+            "description": "Owning model not found"
+          },
+          "409": {
+            "description": "Idempotency payload conflict"
+          },
+          "422": {
+            "description": "Invalid asset declaration"
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{assetId}/upload-requests": {
+      "post": {
+        "operationId": "assetUploadRequestCreate",
+        "summary": "Issue a short-lived direct-upload URL for an asset",
+        "tags": [
+          "PATS Assets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assetId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Short-lived upload URL issued; safe to retry"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "catalog.manage capability required"
+          },
+          "404": {
+            "description": "Asset not found"
+          },
+          "409": {
+            "description": "Asset already finalized, quarantined, or retired"
+          },
+          "503": {
+            "description": "Object storage unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{assetId}": {
+      "patch": {
+        "operationId": "assetFinalize",
+        "summary": "Verify uploaded bytes and link the asset to its model",
+        "tags": [
+          "PATS Assets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assetId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bytes verified; model image linked"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "catalog.manage capability required"
+          },
+          "404": {
+            "description": "Asset not found"
+          },
+          "409": {
+            "description": "Asset already finalized, quarantined, or retired"
+          },
+          "412": {
+            "description": "Stale or missing If-Match"
+          },
+          "422": {
+            "description": "Bytes missing or failed verification"
+          },
+          "503": {
+            "description": "Object storage unavailable"
+          }
+        }
+      },
+      "get": {
+        "operationId": "assetGet",
+        "summary": "Read asset metadata with a short-lived read URL",
+        "tags": [
+          "PATS Assets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assetId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Asset metadata; readUrl is null until available"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "catalog.read capability required"
+          },
+          "404": {
+            "description": "Asset not found"
+          },
+          "503": {
+            "description": "Object storage unavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "assetDelete",
+        "summary": "Retire an asset and unlink it from its model",
+        "tags": [
+          "PATS Assets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assetId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Asset retired; bytes retained under review"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "catalog.manage capability required"
+          },
+          "404": {
+            "description": "Asset not found"
           },
           "412": {
             "description": "Stale or missing If-Match"
@@ -3099,6 +3338,7 @@
       "get": {
         "operationId": "projectCollectionGet",
         "summary": "List project summaries",
+        "description": "Optional filters combine with AND and share the same predicate for count and page so tab counters reuse pagination.totalItems (e.g. status=draft with limit=1). status accepts all, general, draft, released, ongoing (alias of released), completed case-insensitively; all/general means no status filter. search is a trimmed case-insensitive partial match (max 100 chars) across projectCode, name, product.productName, and product.productCode. lot is a trimmed exact match (max 200 chars) against projectCode or name only.\n",
         "tags": [
           "PATS Planning"
         ],
@@ -3109,6 +3349,39 @@
           },
           {
             "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "general",
+                "draft",
+                "released",
+                "ongoing",
+                "completed"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "lot",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
           }
         ],
         "responses": {
@@ -3162,7 +3435,7 @@
       "get": {
         "operationId": "projectGet",
         "summary": "Read a project and its planning snapshot",
-        "description": "Returns the active Project snapshot, model quantities, Parts, Parts List versions, Lot, and execution lineage. Demand allocation, PMRS placeholder, and MaterialRequirement properties were removed by the user-approved 2026-09-25 v1 scope amendment.",
+        "description": "Returns the active Project snapshot, model quantities, Parts, Parts List versions, Lot, and execution lineage. Demand allocation, PMRS placeholder, and MaterialRequirement properties were removed by the user-approved 2026-09-25 v1 scope amendment. `?batches=summary` returns lot batch counts with no batch rows (large orders carry thousands of series); the terminal guard stays exact.",
         "tags": [
           "PATS Planning"
         ],
@@ -3170,6 +3443,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/BatchMode"
           }
         ],
         "responses": {
@@ -3190,7 +3466,7 @@
       "patch": {
         "operationId": "projectPatch",
         "summary": "Update a draft project, release it, or complete it",
-        "description": "Field edits (name, product) apply to DRAFT only. status=RELEASED releases a draft (mints per-part series batches, activates PLANNED→ACTIVE). status=COMPLETED closes a released project once every batch is terminally dispositioned. Status transitions cannot be combined with field edits.",
+        "description": "Field edits (name, product) apply to DRAFT only. status=RELEASED releases a draft (mints per-part series batches, activates PLANNED→ACTIVE). Release is refused with 409 while any routed part step lacks a designed cycle time. status=COMPLETED closes a released project once every batch is terminally dispositioned. Status transitions cannot be combined with field edits.",
         "tags": [
           "PATS Planning"
         ],
@@ -3232,6 +3508,7 @@
       "get": {
         "operationId": "batchCollectionGet",
         "summary": "List batches and their current positions",
+        "description": "Lot- or project-scoped reads order by part code then series number; each row carries the derived `qcDisposition` alongside the raw persistence shape.",
         "tags": [
           "PATS Execution"
         ],
@@ -3245,6 +3522,12 @@
           },
           {
             "$ref": "#/components/parameters/BatchId"
+          },
+          {
+            "$ref": "#/components/parameters/LotId"
+          },
+          {
+            "$ref": "#/components/parameters/ProjectFilterId"
           }
         ],
         "responses": {
@@ -3298,7 +3581,7 @@
       "get": {
         "operationId": "batchPositionCollectionGet",
         "summary": "Read rebuildable station-ready batch-position projections",
-        "description": "Returns current positions together with batch, lot, part, and ordered route-step identity needed by execution workstations. The projection is rebuildable from the execution ledger and is not a second source of truth.",
+        "description": "Returns current positions together with batch, lot, part, and ordered route-step identity needed by execution workstations. Each row carries qcGate for its next hop (RELEASE = pre-route scan-out pending, PASSED = receivable, PENDING = awaiting verdict, HELD = quarantined, COMPLETE = route done, BLOCKED = not receivable). The projection is rebuildable from the execution ledger and is not a second source of truth.",
         "tags": [
           "PATS Execution"
         ],
@@ -3576,8 +3859,8 @@
     "/subjects": {
       "get": {
         "operationId": "subjectCollectionGet",
-        "summary": "Read the subject directory for leader/operator pickers",
-        "description": "Admin-only identity read (identity.read) backing the line-screen management pickers: assigned/active leader selection and operator assignment. Returns opaque subject ids plus display/email snapshots; never provider identifiers.\n",
+        "summary": "Read the subject directory for leader/operator pickers and user management",
+        "description": "Admin-only identity read (identity.read) backing the line-screen management pickers (assigned/active leader selection and operator assignment) and the admin Users tab. Search matches display name, email snapshot, and login username. Each row carries the opaque subject id plus display/email snapshots, login username, active role bundle, and status; never provider identifiers or password hashes.\n",
         "tags": [
           "PATS Configuration"
         ],
@@ -3621,6 +3904,99 @@
           },
           "503": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      },
+      "post": {
+        "operationId": "subjectCreate",
+        "summary": "Create a local subject with credential and role bundle",
+        "description": "Admin user management (operations.manage). Creates a local Subject with its login credential (argon2-hashed) and a single ACTIVE role bundle (admin, qi, or operator). Usernames are unique and reusable input is rejected with 409, so client retries are safe without an Idempotency-Key. Returns 201 with a Location header. Every creation writes SUBJECT_CREATED audit evidence with the actor, time, and affected subject.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "operations.manage",
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "409": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422"
+          }
+        }
+      }
+    },
+    "/subjects/{subjectId}": {
+      "get": {
+        "operationId": "subjectGet",
+        "summary": "Read a single subject for admin user management",
+        "description": "Admin-only identity read (identity.read). Provider-safe projection: opaque id, login username, display/email snapshots, status, active role bundle, last login, and timestamps; never provider identifiers or password hashes. Unknown ids return 404 (soft-disabled subjects remain readable; there is no hard delete).\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "identity.read",
+        "parameters": [
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ResourceRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "503": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem503"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "subjectPatch",
+        "summary": "Update a subject (profile, status, role, or password)",
+        "description": "Admin user management (operations.manage). Field-replacement PATCH and idempotent: displayName, email (null clears), status (ACTIVE or DISABLED; no hard delete), roleBundle (replaces the single ACTIVE role bundle; prior bundles are REVOKED), and password (write-only credential reset, 12-1024 characters). The authenticated subject cannot disable itself or change its own role (403). Every update writes SUBJECT_UPDATED audit evidence. No If-Match: Subject carries no row version and admin directory edits are last-write-wins.\n",
+        "tags": [
+          "PATS Configuration"
+        ],
+        "x-required-capability": "operations.manage",
+        "parameters": [
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "422": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422"
           }
         }
       }
@@ -3876,6 +4252,7 @@
       "post": {
         "operationId": "projectPartsListVersionCreate",
         "summary": "Create an immutable draft parts-list route version",
+        "description": "Draft only. The project-owned lot citation follows the new version in the same transaction, so route add/remove edits render on the next read; the catalog masterlist is never written by project edits.",
         "tags": [
           "PATS Planning"
         ],
@@ -3963,8 +4340,8 @@
     "/quality-inspections/{inspectionId}/decisions": {
       "post": {
         "operationId": "qualityDecisionCreate",
-        "summary": "Record a quality decision and close or hold the inspection",
-        "description": "FAILED accepts failureDisposition REWORK or TRUE_NG; the batch becomes HELD (rework/hold), SCRAPPED (True-NG), or CLOSED (PASSED).",
+        "summary": "Record a verdict-only quality decision",
+        "description": "D-045 verdict-only QC. The decision carries PASSED/FAILED/HOLD and moves no batch; a non-pass quarantines the pack (HELD) until production records its defect analysis.",
         "tags": [
           "PATS Quality"
         ],
@@ -4000,6 +4377,77 @@
           },
           "412": {
             "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem412"
+          }
+        }
+      }
+    },
+    "/defect-analyses": {
+      "post": {
+        "operationId": "defectAnalysisCreate",
+        "summary": "Record the production defect analysis for a non-passing verdict",
+        "description": "D-045 production ownership. Carries reasonCode/reasonNote plus disposition REWORK (batch stays HELD), SCRAP (batch SCRAPPED, True NG terminal), or WAIVE (batch ACTIVE; a covering PASSED is still required for receivability). One analysis per inspection; terminal batches refuse.",
+        "tags": [
+          "PATS Quality"
+        ],
+        "x-required-capability": "execution.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem422"
+          }
+        }
+      }
+    },
+    "/batches/{batchId}/closure": {
+      "post": {
+        "operationId": "batchClose",
+        "summary": "Close a batch into Finish Goods",
+        "description": "D-045 FG close. Production terminal action guarded by route completion plus a covering PASSED for the final hop. Terminal batches refuse.",
+        "tags": [
+          "PATS Execution"
+        ],
+        "x-required-capability": "execution.write",
+        "parameters": [
+          {
+            "name": "batchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/CommandRead"
+          },
+          "403": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "./2026-07-14-pats-api-v1-common-components.yaml#/components/responses/Problem409"
           }
         }
       }

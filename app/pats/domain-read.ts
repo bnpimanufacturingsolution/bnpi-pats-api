@@ -1,5 +1,5 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
-import { Prisma, type PrismaClient as PatsPrismaClient } from "../../generated/pats-client";
+import { Prisma, type PrismaClient as PatsPrismaClient, type QualityInspectionStatus } from "../../generated/pats-client";
 import { buildOffsetPage, parseOffsetPagination } from "../canonical/collection";
 import { actorId, CommandProblem, sendCommandProblem } from "./command-support";
 import { parseBatchResolveCode, resolveBatchByCode } from "./batch-resolve";
@@ -28,6 +28,8 @@ type DomainReadDatabase = Pick<
 	| "lineOperatorAssignment"
 	| "machine"
 	| "subject"
+	| "subjectCredential"
+	| "subjectAssignment"
 	| "monitoringDailySheet"
 	| "monitoringStationBoard"
 	| "batch"
@@ -38,6 +40,7 @@ type DomainReadDatabase = Pick<
 	| "routingViolation"
 	| "qualityInspection"
 	| "qualityDecision"
+	| "defectAnalysis"
 	| "qualityStageAssignment"
 	| "printJob"
 	| "lot"
@@ -492,6 +495,15 @@ export function domainReadRouter(
 
 	router.get("/projects/:projectId", requireCapability("planning.read"), async (req, res) => {
 		const targetId = req.params.projectId;
+		// Batch payload mode: full lot batches by default; `?batches=summary`
+		// returns counts only (large orders carry thousands of series).
+		const batchesParam = query(req).batches;
+		const batchMode = Array.isArray(batchesParam) ? batchesParam[0] : batchesParam;
+		if (batchMode !== undefined && batchMode !== "full" && batchMode !== "summary") {
+			problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The batches mode is invalid.");
+			return;
+		}
+		const summary = batchMode === "summary";
 		try {
 			const project = await database.project.findUnique({
 				where: { id: targetId },
@@ -501,40 +513,99 @@ export function domainReadRouter(
 					modelRequirements: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { model: { select: { id: true, modelNumber: true, modelName: true } } } },
 					parts: { orderBy: [{ partCode: "asc" }, { id: "asc" }] },
 					partsLists: { orderBy: [{ version: "desc" }, { id: "asc" }], include: { steps: { orderBy: [{ stepOrder: "asc" }, { id: "asc" }], include: { part: { select: { partCode: true, partName: true } } } } } },
-					lot: {
-						include: {
-							batches: {
-								include: {
-									part: true,
-									positionProjection: true,
-									qualityInspections: {
-										orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-										include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] } },
+					lot: summary
+						? true
+						: {
+							include: {
+								batches: {
+									include: {
+										part: true,
+										positionProjection: true,
+										qualityInspections: {
+											orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+											include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] } },
+										},
+										defectAnalyses: {
+											orderBy: [{ decidedAt: "desc" }, { id: "desc" }],
+											take: 1,
+										},
 									},
+									orderBy: [{ createdAt: "asc" }, { id: "asc" }],
 								},
-								orderBy: [{ createdAt: "asc" }, { id: "asc" }],
 							},
 						},
-					},
 				},
 			});
 			if (!project) {
 				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested project was not found.");
 				return;
 			}
-			const projectBatches = project.lot?.batches ?? [];
+			// Summary mode skips the heavy per-batch includes but still loads
+			// narrow rows so the terminal guard stays exact.
+			const summaryBatches = summary && project.lot
+				? await database.batch.findMany({
+					where: { lotId: project.lot.id },
+					select: {
+						id: true,
+						status: true,
+						qualityInspections: {
+							orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+							take: 1,
+							select: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }], take: 1, select: { decision: true } } },
+						},
+						defectAnalyses: {
+							orderBy: [{ decidedAt: "desc" }, { id: "desc" }],
+							take: 1,
+							select: { disposition: true },
+						},
+					},
+					orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+				})
+				: [];
+			interface GuardBatch {
+				status: string;
+				qualityInspections: Array<{ decisions: Array<{ decision: string }> }>;
+				defectAnalyses: Array<{ disposition: string }>;
+			}
+			interface FullBatchRow {
+				id: string;
+				batchCode: string;
+				barcodeValue: string;
+				status: string;
+				plannedQuantity: number;
+				seriesNumber?: number | null;
+				seriesCount?: number | null;
+				projectModelRequirementId?: string | null;
+				part: { id: string; partCode: string; partName: string };
+				qualityInspections: Array<{ decisions: Array<{ decision: string }> }>;
+				defectAnalyses: Array<{ disposition: string }>;
+				positionProjection: unknown;
+			}
+			const fullBatches = (
+				project.lot as unknown as { batches?: FullBatchRow[] }
+			)?.batches;
+			// D-045 terminal rule (mirrors the completion guard): CLOSED, or
+			// SCRAPPED through a SCRAP analysis. Verdicts alone never terminate.
+			const batchTerminal = (batch: GuardBatch) => {
+				if (batch.status === "CLOSED") return true;
+				if (batch.status === "SCRAPPED" && batch.defectAnalyses[0]?.disposition === "SCRAP") return true;
+				return false;
+			};
+			const guardRows: GuardBatch[] = summary
+				? summaryBatches.map((row) => ({
+					status: row.status,
+					qualityInspections: row.qualityInspections.map((inspection) => ({
+						decisions: inspection.decisions.map((decision) => ({ decision: decision.decision ?? "" })),
+					})),
+					defectAnalyses: row.defectAnalyses.map((analysis) => ({
+						disposition: analysis.disposition ?? "",
+					})),
+				}))
+				: ((fullBatches ?? []) as GuardBatch[]);
 			const completionReady =
 				project.status === "RELEASED" &&
-				projectBatches.length > 0 &&
-				projectBatches.every((batch) => {
-					const latest = batch.qualityInspections[0]?.decisions[0];
-					return (
-						(batch.status === "CLOSED" && latest?.decision === "PASSED") ||
-						(batch.status === "SCRAPPED" &&
-							latest?.decision === "FAILED" &&
-							latest.failureDisposition === "TRUE_NG")
-					);
-				});
+				guardRows.length > 0 &&
+				guardRows.every(batchTerminal);
 			// Mutable project resources expose the optimistic-concurrency token as a strong ETag.
 			// Clients must send this value (or body.rowVersion) as If-Match on project commands.
 			res.setHeader("ETag", `"${project.rowVersion}"`);
@@ -579,7 +650,8 @@ export function domainReadRouter(
 					status: project.lot.status,
 					requiredProductionQuantity: project.lot.requiredProductionQuantity,
 					labelPackSize: project.lot.labelPackSize,
-					batches: project.lot.batches.map((batch) => ({
+					batchCount: guardRows.length,
+					batches: summary ? [] : (fullBatches ?? []).map((batch) => ({
 						batchId: batch.id,
 						batchCode: batch.batchCode,
 						barcodeValue: batch.barcodeValue,
@@ -591,9 +663,11 @@ export function domainReadRouter(
 						part: { partId: batch.part.id, partCode: batch.part.partCode, partName: batch.part.partName },
 						qcDisposition: (() => {
 							const latest = batch.qualityInspections[0]?.decisions[0];
+							const analysis = batch.defectAnalyses[0];
+							if (analysis) return analysis.disposition;
 							if (latest?.decision === "PASSED") return "PASSED";
 							if (latest?.decision === "HOLD") return "HOLD";
-							if (latest?.decision === "FAILED") return latest.failureDisposition ?? "FAILED";
+							if (latest?.decision === "FAILED") return "FAILED";
 							return null;
 						})(),
 						position: batch.positionProjection,
@@ -1374,7 +1448,9 @@ export function domainReadRouter(
 		}
 	});
 
-	// Subject directory for leader/operator pickers (admin identity.read).
+	// Subject directory for leader/operator pickers and the admin Users tab
+	// (admin identity.read). Adds email to search plus username/roleBundle so the
+	// Users tab can render and edit without extra round-trips.
 	router.get("/subjects", requireCapability("identity.read"), async (req, res) => {
 		const page = pagination(req, res, ["search", "status"]);
 		if (!page) return;
@@ -1386,10 +1462,27 @@ export function domainReadRouter(
 			};
 			const search = single("search")?.trim() ?? "";
 			const status = single("status")?.trim();
+			// Usernames live on SubjectCredential, so resolve matching credential
+			// rows first and fold them into the subject predicate.
+			const credentialSubjectIds =
+				search.length > 0
+					? (
+							await database.subjectCredential.findMany({
+								where: { username: { contains: search, mode: "insensitive" } },
+								select: { subjectId: true },
+							})
+						).map((row) => row.subjectId)
+					: [];
 			const where = {
 				...(status ? { status: status as "ACTIVE" | "DISABLED" } : {}),
 				...(search.length > 0
-					? { displayNameSnapshot: { contains: search, mode: "insensitive" as const } }
+					? {
+							OR: [
+								{ displayNameSnapshot: { contains: search, mode: "insensitive" as const } },
+								{ emailSnapshot: { contains: search, mode: "insensitive" as const } },
+								{ id: { in: credentialSubjectIds } },
+							],
+						}
 					: {}),
 			};
 			const [totalItems, subjects] = await Promise.all([
@@ -1407,7 +1500,37 @@ export function domainReadRouter(
 					},
 				}),
 			]);
-			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(subjects, page, totalItems));
+			const ids = subjects.map((subject) => subject.id);
+			const [credentials, assignments] =
+				ids.length === 0
+					? [[], []]
+					: await Promise.all([
+							database.subjectCredential.findMany({
+								where: { subjectId: { in: ids } },
+								select: { subjectId: true, username: true },
+							}),
+							database.subjectAssignment.findMany({
+								where: { subjectId: { in: ids }, kind: "ROLE_BUNDLE", status: "ACTIVE" },
+								select: { subjectId: true, key: true },
+								orderBy: [{ subjectId: "asc" }, { key: "asc" }],
+							}),
+						]);
+			const usernameBySubject = new Map(credentials.map((row) => [row.subjectId, row.username]));
+			const roleBySubject = new Map<string, string>();
+			for (const row of assignments) {
+				if (!roleBySubject.has(row.subjectId)) roleBySubject.set(row.subjectId, row.key);
+			}
+			res.setHeader("Cache-Control", "no-store").json(
+				buildOffsetPage(
+					subjects.map((subject) => ({
+						...subject,
+						username: usernameBySubject.get(subject.id) ?? null,
+						roleBundle: roleBySubject.get(subject.id) ?? null,
+					})),
+					page,
+					totalItems,
+				),
+			);
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS subject directory is unavailable.");
 		}
@@ -1479,16 +1602,49 @@ export function domainReadRouter(
 	});
 
 	router.get("/batches", requireCapability("execution.read"), async (req, res) => {
-		const page = pagination(req, res, ["batch_id"]);
+		const page = pagination(req, res, ["batch_id", "lot_id", "project_id"]);
 		if (!page) return;
 		try {
 			const batchId = query(req).batch_id;
-			const where = typeof batchId === "string" && batchId.trim() ? { id: batchId } : {};
+			const lotId = query(req).lot_id;
+			const projectId = query(req).project_id;
+			const where: Record<string, unknown> = {};
+			if (typeof batchId === "string" && batchId.trim()) where.id = batchId.trim();
+			if (typeof lotId === "string" && lotId.trim()) where.lotId = lotId.trim();
+			if (typeof projectId === "string" && projectId.trim()) where.lot = { projectId: projectId.trim() };
+			const scoped = where.lotId !== undefined || where.lot !== undefined;
 			const [totalItems, batches] = await Promise.all([
 				database.batch.count({ where }),
-				database.batch.findMany({ where, skip: (page.page - 1) * page.limit, take: page.limit, orderBy: [{ createdAt: "desc" }, { id: "asc" }], include: { lot: { select: { id: true, lotCode: true, projectId: true } }, part: { select: { id: true, partCode: true, partName: true } }, positionProjection: true } }),
+				database.batch.findMany({
+					where,
+					skip: (page.page - 1) * page.limit,
+					take: page.limit,
+					orderBy: scoped
+						? [{ part: { partCode: "asc" } }, { seriesNumber: "asc" }, { id: "asc" }]
+						: [{ createdAt: "desc" }, { id: "asc" }],
+					include: {
+						lot: { select: { id: true, lotCode: true, projectId: true } },
+						part: { select: { id: true, partCode: true, partName: true } },
+						positionProjection: true,
+						qualityInspections: {
+							orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+							take: 1,
+							include: { decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }], take: 1 } },
+						},
+						defectAnalyses: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }], take: 1 },
+					},
+				}),
 			]);
-			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(batches, page, totalItems));
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(batches.map((batch) => {
+				const latest = (batch.qualityInspections[0] as unknown as { decisions?: Array<{ decision?: string }> } | undefined)?.decisions?.[0];
+				const analysis = (batch.defectAnalyses[0] as unknown as { disposition?: string } | undefined);
+				let qcDisposition: string | null = null;
+				if (analysis?.disposition) qcDisposition = analysis.disposition;
+				else if (latest?.decision === "PASSED") qcDisposition = "PASSED";
+				else if (latest?.decision === "HOLD") qcDisposition = "HOLD";
+				else if (latest?.decision === "FAILED") qcDisposition = "FAILED";
+				return { ...batch, qcDisposition };
+			}), page, totalItems));
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS batch data is unavailable.");
 		}
@@ -1514,29 +1670,43 @@ export function domainReadRouter(
 	});
 
 	router.get("/print-jobs", requireCapability("execution.read"), async (req, res) => {
+		const page = pagination(req, res, ["batchId", "batch_id"]);
+		if (!page) return;
 		try {
 			const batchId = query(req).batchId ?? query(req).batch_id;
 			const where = typeof batchId === "string" && batchId.trim() ? { batchId } : {};
-			const jobs = await database.printJob.findMany({
-				where,
-				orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-				take: 50,
-			});
-			res.setHeader("Cache-Control", "no-store").json({
-				data: jobs.map((job) => ({
-					...job,
-					occurredAt: job.occurredAt.toISOString(),
-				})),
-			});
+			// D-048 scale compliance: was a fixed take-50 window with no
+			// envelope, silently hiding older rows once the ledger grew.
+			const [totalItems, jobs] = await Promise.all([
+				database.printJob.count({ where }),
+				database.printJob.findMany({
+					where,
+					orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+					skip: (page.page - 1) * page.limit,
+					take: page.limit,
+				}),
+			]);
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(jobs.map((job) => ({
+				...job,
+				occurredAt: job.occurredAt.toISOString(),
+			})), page, totalItems));
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS print jobs are unavailable.");
 		}
 	});
 
 	router.get("/batch-positions", requireCapability("execution.read"), async (req, res) => {
+		const page = pagination(req, res);
+		if (!page) return;
 		try {
-			const positions = await database.batchPositionProjection.findMany({
-				orderBy: [{ updatedAt: "desc" }, { batchId: "asc" }],
+			// Contract-promised pagination: the per-row route-step fan-out makes
+			// an unbounded dump unserializable at residue scale (RangeError).
+			const [totalItems, positions] = await Promise.all([
+				database.batchPositionProjection.count(),
+				database.batchPositionProjection.findMany({
+					skip: (page.page - 1) * page.limit,
+					take: page.limit,
+					orderBy: [{ updatedAt: "desc" }, { batchId: "asc" }],
 				include: {
 					batch: {
 						select: {
@@ -1569,11 +1739,11 @@ export function domainReadRouter(
 								project: { select: { id: true, name: true, projectCode: true, status: true } },
 								},
 							},
-											part: { select: { id: true, partCode: true, partName: true } },
-										},
+										part: { select: { id: true, partCode: true, partName: true } },
+									},
 					},
 				},
-			});
+				})]);
 			const partsListIds = [...new Set(positions.map((position) => position.batch.lot.partsListId))];
 			const routeSteps = partsListIds.length
 				? await database.routingStep.findMany({
@@ -1588,9 +1758,62 @@ export function domainReadRouter(
 				steps.push(routeStep);
 				routeStepsByPartsListId.set(routeStep.partsListId, steps);
 			}
-			res.setHeader("Cache-Control", "no-store").json({
-				data: positions.map((position) => ({
+			// D-045 QC gate state per pack (single batched read): the verdict
+			// covering the pack's current step decides whether its next hop
+			// is receivable. Keyed by batch + source step; latest decision wins.
+			const batchIds = positions.map((position) => position.batch.id);
+			const gateInspections = batchIds.length
+				? await database.qualityInspection.findMany({
+						where: { batchId: { in: batchIds } },
+						orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+						include: {
+							decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }], take: 1 },
+						},
+					})
+				: [];
+			const gateByBatchStep = new Map<string, { decision: string | null; decidedAt: string }>();
+			for (const inspection of gateInspections) {
+				const key = `${inspection.batchId}::${inspection.stageId}::${inspection.subStageId ?? ""}`;
+				if (gateByBatchStep.has(key)) continue;
+				const latest = inspection.decisions[0];
+				gateByBatchStep.set(key, {
+					decision: latest?.decision ?? null,
+					decidedAt: latest ? latest.decidedAt.toISOString() : inspection.createdAt.toISOString(),
+				});
+			}
+			// A pack traverses its own part's steps only. The per-row routeSteps
+			// carry that same scope (not the whole parts list): at residue
+			// scale the full-list fan-out is unserializable, and every
+			// consumer treats the row steps as the pack's own route.
+			const partRouteSteps = (position: (typeof positions)[number]) =>
+				(routeStepsByPartsListId.get(position.batch.lot.partsListId) ?? [])
+					.filter((step) => step.partId === position.batch.part.id)
+					.sort((a, b) => a.stepOrder - b.stepOrder || (a.id < b.id ? -1 : 1));
+			const qcGateFor = (position: (typeof positions)[number]): string => {
+				if (position.batch.status !== "ACTIVE") return "BLOCKED";
+				if (position.stageId === "STG-PROJECTS") return "RELEASE";
+				const steps = partRouteSteps(position);
+				if (steps.length === 0) return "BLOCKED";
+				const currentIndex = position.routeStepId
+					? steps.findIndex((step) => step.id === position.routeStepId)
+					: steps.findIndex(
+							(step) =>
+								step.stageId === position.stageId &&
+								(step.subStageId ?? null) === (position.subStageId ?? null),
+						);
+				if (currentIndex < 0) return "BLOCKED";
+				const current = steps[currentIndex];
+				const next = steps.find((step) => step.stepOrder > current.stepOrder);
+				if (!next) return "COMPLETE";
+				const gate = gateByBatchStep.get(
+					`${position.batch.id}::${current.stageId}::${current.subStageId ?? ""}`,
+				);
+				if (!gate || !gate.decision) return "PENDING";
+				return gate.decision === "PASSED" ? "PASSED" : "HELD";
+			};
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(positions.map((position) => ({
 					...position,
+					qcGate: qcGateFor(position),
 					quantityMagnitude: decimal(position.quantityMagnitude),
 					updatedAt: position.updatedAt.toISOString(),
 					batch: {
@@ -1617,7 +1840,7 @@ export function domainReadRouter(
 							partName: position.batch.part.partName,
 						},
 					},
-					routeSteps: (routeStepsByPartsListId.get(position.batch.lot.partsListId) ?? []).map((step) => ({
+					routeSteps: partRouteSteps(position).map((step) => ({
 						routeStepId: step.id,
 						partId: step.partId,
 						part: step.part,
@@ -1626,7 +1849,9 @@ export function domainReadRouter(
 						stepOrder: step.stepOrder,
 					})),
 				})),
-			});
+				page,
+				totalItems,
+			));
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS batch position data is unavailable.");
 		}
@@ -1693,15 +1918,39 @@ export function domainReadRouter(
 	});
 
 	router.get("/quality-inspections", requireCapability("quality.read"), async (req, res) => {
+		const page = pagination(req, res, ["status"]);
+		if (!page) return;
 		try {
 			const allowedStageIds = await listAllowedQualityStageIds(database, actorId(req));
 			if (allowedStageIds.length === 0) {
-				res.setHeader("Cache-Control", "no-store").json({ data: [] });
+				res.setHeader("Cache-Control", "no-store").json(buildOffsetPage([], page, 0));
 				return;
 			}
-			const inspections = await database.qualityInspection.findMany({
-				where: { stageId: { in: allowedStageIds } },
-				orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+			const status = query(req).status;
+			const statusText = typeof status === "string" ? status.trim().toUpperCase() : "";
+			const statusFilter =
+				statusText === "OPEN" ||
+				statusText === "IN_PROGRESS" ||
+				statusText === "COMPLETED" ||
+				statusText === "CANCELLED"
+					? (statusText as QualityInspectionStatus)
+					: undefined;
+			if (typeof status === "string" && status.trim() && !statusFilter) {
+				problem(req, res, 400, PROBLEM_TYPE.malformed, "Bad Request", "The quality inspection status filter is invalid.");
+				return;
+			}
+			const where: Prisma.QualityInspectionWhereInput = {
+				stageId: { in: allowedStageIds },
+				...(statusFilter ? { status: statusFilter } : {}),
+			};
+			// D-048 scale compliance: was unbounded with decisions included.
+			const [totalItems, inspections] = await Promise.all([
+				database.qualityInspection.count({ where }),
+				database.qualityInspection.findMany({
+					where,
+					orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+					skip: (page.page - 1) * page.limit,
+					take: page.limit,
 				include: {
 					decisions: { orderBy: [{ decidedAt: "desc" }, { id: "desc" }] },
 					batch: {
@@ -1719,9 +1968,8 @@ export function domainReadRouter(
 					},
 					},
 				},
-			});
-			res.setHeader("Cache-Control", "no-store").json({
-				data: inspections.map((inspection) => ({
+				})]);
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(inspections.map((inspection) => ({
 					...inspection,
 					inspectedQuantity: decimal(inspection.inspectedQuantity),
 					startedAt: inspection.startedAt.toISOString(),
@@ -1735,9 +1983,71 @@ export function domainReadRouter(
 						},
 					},
 				})),
-			});
+				page,
+				totalItems,
+			));
 		} catch {
 			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS quality inspection data is unavailable.");
+		}
+	});
+
+	router.get("/defect-analyses", requireCapability("quality.read"), async (req, res) => {
+		const page = pagination(req, res, ["batch_id", "inspection_id"]);
+		if (!page) return;
+		try {
+			const requestQuery = query(req);
+			const batchId = requestQuery.batch_id;
+			const inspectionId = requestQuery.inspection_id;
+			const where: { batchId?: string; inspectionId?: string } = {};
+			if (typeof batchId === "string" && batchId.trim()) where.batchId = batchId.trim();
+			if (typeof inspectionId === "string" && inspectionId.trim()) where.inspectionId = inspectionId.trim();
+			const [totalItems, analyses] = await Promise.all([
+				database.defectAnalysis.count({ where }),
+				database.defectAnalysis.findMany({
+					where,
+					skip: (page.page - 1) * page.limit,
+					take: page.limit,
+					orderBy: [{ decidedAt: "desc" }, { id: "desc" }],
+					include: {
+						decidedBySubject: { select: { id: true, displayNameSnapshot: true } },
+						batch: { select: { id: true, batchCode: true } },
+						inspection: { select: { id: true, stageId: true, subStageId: true } },
+					},
+				}),
+			]);
+			res.setHeader("Cache-Control", "no-store").json(buildOffsetPage(analyses.map((analysis) => ({
+				...analysis,
+				decidedAt: analysis.decidedAt.toISOString(),
+				createdAt: analysis.createdAt.toISOString(),
+				updatedAt: analysis.updatedAt.toISOString(),
+			})), page, totalItems));
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS defect analysis data is unavailable.");
+		}
+	});
+
+	router.get("/defect-analyses/:defectAnalysisId", requireCapability("quality.read"), async (req, res) => {
+		try {
+			const analysis = await database.defectAnalysis.findUnique({
+				where: { id: req.params.defectAnalysisId },
+				include: {
+					decidedBySubject: { select: { id: true, displayNameSnapshot: true } },
+					batch: { select: { id: true, batchCode: true } },
+					inspection: { select: { id: true, stageId: true, subStageId: true } },
+				},
+			});
+			if (!analysis) {
+				problem(req, res, 404, PROBLEM_TYPE.notFound, "Not Found", "The requested defect analysis was not found.");
+				return;
+			}
+			res.setHeader("Cache-Control", "no-store").json({
+				...analysis,
+				decidedAt: analysis.decidedAt.toISOString(),
+				createdAt: analysis.createdAt.toISOString(),
+				updatedAt: analysis.updatedAt.toISOString(),
+			});
+		} catch {
+			problem(req, res, 503, PROBLEM_TYPE.dependency, "Dependency Unavailable", "PATS defect analysis data is unavailable.");
 		}
 	});
 

@@ -77,6 +77,7 @@ model Batch {
   createdAt                 DateTime                 @default(now())
   positionProjection        BatchPositionProjection?
   qualityInspections        QualityInspection[]
+  defectAnalyses            DefectAnalysis[]
 
   @@index([lotId])
   @@index([partId])
@@ -256,6 +257,7 @@ model QualityInspection {
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
   decisions            QualityDecision[]
+  defectAnalysis       DefectAnalysis?
 
   @@index([batchId, createdAt])
   @@index([status, createdAt])
@@ -266,19 +268,45 @@ enum QualityFailureDisposition {
   TRUE_NG
 }
 
+/// Production-owned defect analysis (D-045, 2026-10-01). QC tags verdicts
+/// only; production records the reason and the disposition here. This record
+/// — never the QC tag — moves batch fate (REWORK returns the pack to the
+/// source step, SCRAP terminates it, WAIVE lifts the hold).
+enum DefectDisposition {
+  REWORK
+  SCRAP
+  WAIVE
+}
+
 model QualityDecision {
-  id                 String                     @id @default(uuid())
+  id                 String            @id @default(uuid())
   inspectionId       String
-  inspection         QualityInspection          @relation(fields: [inspectionId], references: [id])
+  inspection         QualityInspection @relation(fields: [inspectionId], references: [id])
   decision           QualityDecisionType
-  failureDisposition QualityFailureDisposition?
-  reasonCode         String?
-  reasonNote         String?
   decidedBySubjectId String?
-  decidedBySubject   Subject?                   @relation("QualityDecisionActor", fields: [decidedBySubjectId], references: [id])
-  decidedAt          DateTime                   @default(now())
+  decidedBySubject   Subject?          @relation("QualityDecisionActor", fields: [decidedBySubjectId], references: [id])
+  decidedAt          DateTime          @default(now())
 
   @@index([inspectionId, decidedAt])
+}
+
+model DefectAnalysis {
+  id                 String            @id @default(uuid())
+  inspectionId       String            @unique
+  inspection         QualityInspection @relation(fields: [inspectionId], references: [id])
+  batchId            String
+  batch              Batch             @relation(fields: [batchId], references: [id])
+  reasonCode         String
+  reasonNote         String?
+  disposition        DefectDisposition
+  decidedBySubjectId String?
+  decidedBySubject   Subject?          @relation("DefectAnalysisActor", fields: [decidedBySubjectId], references: [id])
+  decidedAt          DateTime          @default(now())
+  rowVersion         Int               @default(1)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([batchId, decidedAt])
 }
 
 enum QualityStageAssignmentStatus {
