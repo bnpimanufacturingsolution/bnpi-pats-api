@@ -3199,30 +3199,6 @@ async function seedProfile(tx) {
 		});
 	}
 
-<<<<<<< HEAD
-	// Completed inspections with decisions for history panel.
-	//
-	// `failureDisposition` is the floor's "what happens to the batch now" answer:
-	// TRUE_NG = scrapped as a no-good, REWORK = sent back for repair. It is a
-	// SEPARATE field from `reasonCode` (the defect category) and from
-	// `reasonNote` (the inspector's sentence) — the API keeps all three apart on
-	// purpose, so a repaint-scraped part records BOTH a disposition and a reason.
-	//
-	// The three FAILED rows below deliberately cover all three cases a reader
-	// asks about: a scrapped no-good, a repairable part, and a cosmetic defect
-	// (the "repaint" case). Without a disposition on a decision, the batch read
-	// derives `qcDisposition: "FAILED"` and any UI showing the reason has nothing
-	// to show for Disposition — so the two new rows carry one each.
-	const qcDoneDefs = [
-		["qi-b251-hold", "batch-av-dec", "B251-01-01", "Avocado Burger Upper Bun", tray, decorationStageId, subFullSprayId, "HOLD", null, "ROUTING_REVIEW", "Batch advanced without full decoration completion evidence.", 0, 6],
-		["qi-b251-pass-wh", "batch-av-wh", "B251-01-01", "Avocado Burger Upper Bun", 240, warehouseStageId, subMainPackingId, "PASSED", null, "VISUAL_OK", "Pack appearance and label match B251 tray standard.", 2, 4],
-		["qi-b251-fail-hd", "batch-hd-dec", "B251-01-10", "Cheese Hotdog", tray, decorationStageId, subLineSprayId, "FAILED", "REWORK", "PAINT_DEFECT", "Mask spray miss on Cheese Hotdog body — return to Decoration.", 1, 3],
-		["qi-b251-pass-fw", "batch-fw-dec", "B251-01-15", "Fries", 240, decorationStageId, subTampoId, "PASSED", null, "TAMPO_OK", "Tampo registration within tolerance for Potato Wedge fries.", 2, 2],
-		// Scrapped: a dimension failure the part cannot come back from.
-		["qi-b251-fail-ng-tc", "batch-tc-inj", "B251-01-11", "Tacos Shell", tray, injectionStageId, null, "FAILED", "TRUE_NG", "DIMENSION", "Flash gate out of tolerance — shell scrapped, no rework possible.", 1, 7],
-		// Repairable: a functional miss that goes back through the line.
-		["qi-b251-fail-rw-dr", "batch-dr-inj", "B251-01-22", "Cup", tray, injectionStageId, null, "FAILED", "REWORK", "FUNCTION", "Gate sensor intermittent — reseat the cup and re-run injection.", 2, 5],
-=======
 	// Completed inspections with verdict-only decisions for history panel
 	// (D-045: QC tags PASSED/FAILED/HOLD; reasons + dispositions live on the
 	// production defect analysis, seeded below for the FAILED row).
@@ -3231,7 +3207,6 @@ async function seedProfile(tx) {
 		["qi-b251-pass-wh", "batch-av-wh", "B251-01-01", "Avocado Burger Upper Bun", BATCH, warehouseStageId, subMainPackingId, "PASSED", "VISUAL_OK", "Pack appearance and label match B251 tray standard.", 2, 4],
 		["qi-b251-fail-hd", "batch-hd-dec", "B251-01-10", "Cheese Hotdog", BATCH, decorationStageId, subLineSprayId, "FAILED", "PAINT_DEFECT", "Mask spray miss on Cheese Hotdog body — return to Decoration.", 1, 3],
 		["qi-b251-pass-fw", "batch-fw-dec", "B251-01-15", "Fries", BATCH, decorationStageId, subTampoId, "PASSED", "TAMPO_OK", "Tampo registration within tolerance for Potato Wedge fries.", 2, 2],
->>>>>>> 76ed652ac1aa5d6f485757703432c98f0f5c59bd
 	];
 	for (const [key, batchKey, partCode, partName, qty, stageId, subStageId, decision, failureDisposition, reasonCode, reasonNote, day, hour] of qcDoneDefs) {
 		const inspectionId = stableId(key);
@@ -3291,12 +3266,6 @@ async function seedProfile(tx) {
 			update: {
 				inspectionId,
 				decision,
-<<<<<<< HEAD
-				failureDisposition,
-				reasonCode,
-				reasonNote,
-=======
->>>>>>> 76ed652ac1aa5d6f485757703432c98f0f5c59bd
 				decidedBySubjectId: quality.id,
 				decidedAt,
 			},
@@ -3304,12 +3273,6 @@ async function seedProfile(tx) {
 				id: stableId(`qd-${key}`),
 				inspectionId,
 				decision,
-<<<<<<< HEAD
-				failureDisposition,
-				reasonCode,
-				reasonNote,
-=======
->>>>>>> 76ed652ac1aa5d6f485757703432c98f0f5c59bd
 				decidedBySubjectId: quality.id,
 				decidedAt,
 			},
