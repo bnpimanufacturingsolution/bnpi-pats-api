@@ -2,7 +2,10 @@ import express from "express";
 import request from "supertest";
 import { expect } from "chai";
 import { canonicalRouter, requireCanonicalCapability } from "../app/canonical/router";
-import { domainReadRouter } from "../app/pats/domain-read";
+import {
+	__setDomainReadLoggerForTests,
+	domainReadRouter,
+} from "../app/pats/domain-read";
 import type { IdentityDependencies, SubjectAssignmentRecord } from "../app/identity/types";
 
 function identity(assignments: SubjectAssignmentRecord[]): IdentityDependencies {
@@ -1698,5 +1701,92 @@ describe("canonical PATS domain read contract", () => {
 			username: "e2euser1",
 			roleBundle: "operator",
 		}]);
+	});
+
+	// Regression: a read whose backing store throws answers 503 with a generic
+	// "Dependency Unavailable" problem, which is indistinguishable on the wire
+	// from Postgres being down. A stale generated Prisma client that does not
+	// know a queried field fails exactly this way — inside the query builder,
+	// before any SQL is sent — so the 503s reached the browser with no cause
+	// anywhere except a 5-30ms access row. These pin the wire contract and the
+	// server-side cause together, so the next drift is diagnosable from logs.
+	it("answers 503 with the client-safe problem when a project read throws", async () => {
+		const failure = Object.assign(new Error("Unknown field `defectAnalyses` for include statement on model `Batch`."), {
+			name: "PrismaClientValidationError",
+		});
+		const app = appFor({
+			project: { findUnique: async () => { throw failure; } },
+		});
+
+		const response = await request(app)
+			.get("/api/v1/projects/project-1")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(503);
+		// No Prisma text may reach the client; the detail stays the human sentence.
+		expect(response.body.detail).to.equal("PATS project data is unavailable.");
+		expect(response.body.type).to.equal("urn:bandai:pats:problem:dependency-unavailable");
+		expect(JSON.stringify(response.body)).to.not.contain("defectAnalyses");
+		expect(JSON.stringify(response.body)).to.not.contain("Prisma");
+	});
+
+	// The wire contract above is only half the obligation. The 503 exists so the
+	// client never sees a Prisma message, which means the cause has to reach the
+	// SERVER log or the failure is undiagnosable in production. That is not
+	// hypothetical: passing the Error as a winston meta field serialized to
+	// `"error":{}` in logs/error.log, so the log line named the failed read and
+	// omitted the only part worth reading. This pins the serialized shape.
+	it("logs the cause of a failed read in a serializable form", async () => {
+		const failure = Object.assign(
+			new Error("Unknown field `defectAnalyses` for include statement on model `Batch`."),
+			{ name: "PrismaClientValidationError" },
+		);
+		const app = appFor({
+			project: { findUnique: async () => { throw failure; } },
+		});
+
+		const logged: Array<{ message: unknown; meta: Record<string, unknown> }> = [];
+		const restore = __setDomainReadLoggerForTests({
+			error: (message: unknown, meta?: Record<string, unknown>) => {
+				logged.push({ message, meta: meta ?? {} });
+			},
+		} as unknown as Parameters<typeof __setDomainReadLoggerForTests>[0]);
+		try {
+			const response = await request(app)
+				.get("/api/v1/projects/project-1")
+				.set("Authorization", "Bearer read-contract-token");
+			expect(response.status).to.equal(503);
+		} finally {
+			restore();
+		}
+
+		expect(logged.length, "the failed read must be logged").to.be.greaterThan(0);
+		const { message, meta } = logged[logged.length - 1];
+		expect(message).to.equal("PATS domain read failed");
+		// The cause must survive JSON serialization — that is the whole point.
+		expect(meta.errorName).to.equal("PrismaClientValidationError");
+		expect(meta.errorMessage).to.contain("defectAnalyses");
+		expect(meta.errorStack).to.be.a("string").and.to.contain("PrismaClientValidationError");
+		expect(meta.path).to.equal("/api/v1/projects/project-1");
+		// Round-tripped, because a field that only looks right in memory is exactly
+		// the `"error":{}` bug again: winston drops an Error-valued meta field.
+		expect(JSON.parse(JSON.stringify(meta)).errorMessage).to.contain("defectAnalyses");
+	});
+
+	it("answers 503 with the client-safe problem when a batch collection read throws", async () => {
+		const app = appFor({
+			batch: {
+				count: async () => 0,
+				findMany: async () => { throw new Error("relation \"DefectAnalysis\" does not exist"); },
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/v1/batches")
+			.set("Authorization", "Bearer read-contract-token");
+
+		expect(response.status).to.equal(503);
+		expect(response.body.detail).to.equal("PATS batch data is unavailable.");
+		expect(JSON.stringify(response.body)).to.not.contain("DefectAnalysis");
 	});
 });
