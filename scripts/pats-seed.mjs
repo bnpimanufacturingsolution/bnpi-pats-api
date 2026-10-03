@@ -3208,7 +3208,7 @@ async function seedProfile(tx) {
 		["qi-b251-fail-hd", "batch-hd-dec", "B251-01-10", "Cheese Hotdog", BATCH, decorationStageId, subLineSprayId, "FAILED", "PAINT_DEFECT", "Mask spray miss on Cheese Hotdog body — return to Decoration.", 1, 3],
 		["qi-b251-pass-fw", "batch-fw-dec", "B251-01-15", "Fries", BATCH, decorationStageId, subTampoId, "PASSED", "TAMPO_OK", "Tampo registration within tolerance for Potato Wedge fries.", 2, 2],
 	];
-	for (const [key, batchKey, partCode, partName, qty, stageId, subStageId, decision, reasonCode, reasonNote, day, hour] of qcDoneDefs) {
+	for (const [key, batchKey, partCode, partName, qty, stageId, subStageId, decision, failureDisposition, reasonCode, reasonNote, day, hour] of qcDoneDefs) {
 		const inspectionId = stableId(key);
 		const decidedAt = atOffset({ days: day, hours: hour, minutes: 45 });
 		await tx.qualityInspection.upsert({
